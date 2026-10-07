@@ -32,6 +32,8 @@ export const auth = betterAuth({
   // Auth sets on purpose (replay-store keys), and replay checks never fire.
   advanced: { database: { generateId: () => crypto.randomUUID() } },
   emailAndPassword: { enabled: false },
+  // Name, email and username come only from Keycloak, on every sign-in.
+  disabledPaths: ["/update-user", "/change-email"],
   user: {
     additionalFields: {
       // Keycloak preferred_username: the lab account name, e.g. "zyx1121".

@@ -16,7 +16,6 @@ export default async function Home() {
       <div className="flex flex-col gap-12">
         <PageHeader title={member.name} />
         <FieldList>
-          <FieldRow label="姓名">{member.name}</FieldRow>
           <FieldRow label="實驗室帳號">{member.username ?? "未提供"}</FieldRow>
           <FieldRow label="信箱">{member.email}</FieldRow>
         </FieldList>
