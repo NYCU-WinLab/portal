@@ -43,7 +43,7 @@ jobs:
       - name: Probe
         run: |
           docker compose logs migrate | grep -q "migrations applied"
-          curl -sf localhost:3000/sign-in | grep -q "登入 WinLab Portal"
+          curl -sf localhost:3000/sign-in | grep -q ">登入<"
           test "$(curl -s -o /dev/null -w '%{http_code}' localhost:3000/)" = 307
           curl -sf localhost:3000/.well-known/oauth-protected-resource/mcp | grep -q '"resource":"http://localhost:3000/mcp"'
           curl -sf localhost:3000/.well-known/oauth-authorization-server/api/auth | grep -q '"client_id_metadata_document_supported":true'
