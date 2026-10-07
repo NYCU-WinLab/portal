@@ -13,14 +13,19 @@ export const dynamic = "force-dynamic"
 
 export default async function LeavePage() {
   const actor = await requireActor("/leave")
-  const { dates } = await runAction(listLeaves, actor, {})
+  const [{ dates }, { dates: past }] = await Promise.all([
+    runAction(listLeaves, actor, {}),
+    runAction(listLeaves, actor, { past: true }),
+  ])
   const mondays = upcomingMondays().map((date) => ({
     value: date,
     label: dateLabel(date),
   }))
 
   return (
-    <PortalShell page={{ label: "請假", href: "/leave", tip: "週一組會" }}>
+    <PortalShell
+      page={{ label: "請假", href: "/leave", tip: "週一實驗室會議" }}
+    >
       <div className="flex flex-col gap-12">
         <PageHeader title="請假" actions={<LeaveForm mondays={mondays} />} />
         {dates.length === 0 ? (
@@ -47,6 +52,29 @@ export default async function LeavePage() {
               </ul>
             </section>
           ))
+        )}
+        {past.length > 0 && (
+          <section className="flex flex-col gap-2">
+            <SectionHeader title="過去" />
+            <ul className="flex flex-col">
+              {past.flatMap(({ date, members }) =>
+                members.map((member) => (
+                  <li
+                    key={`${date}-${member.userId}`}
+                    className="flex min-h-14 items-center gap-4 border-b border-border py-2"
+                  >
+                    <span className="w-24 shrink-0 text-muted-foreground tabular-nums">
+                      {dateLabel(date)}
+                    </span>
+                    <span className="shrink-0 font-medium">{member.name}</span>
+                    <span className="min-w-0 flex-1 truncate text-muted-foreground">
+                      {member.reason}
+                    </span>
+                  </li>
+                ))
+              )}
+            </ul>
+          </section>
         )}
       </div>
     </PortalShell>
