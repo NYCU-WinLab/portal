@@ -9,8 +9,8 @@ export async function PortalShell({
   layout,
   children,
 }: {
-  page?: { label: string; href: string }
-  nav?: { label: string; href: string; tip?: string }[]
+  page?: { label: string; href: string; tip: string }
+  nav?: { label: string; href: string; tip: string }[]
   layout?: "column" | "spotlight" | "wide"
   children: React.ReactNode
 }) {
@@ -25,8 +25,8 @@ export async function PortalShell({
       nav={nav}
       account={
         session
-          ? { label: session.user.name, href: "/" }
-          : { label: "登入", href: "/sign-in" }
+          ? { label: session.user.name, href: "/", tip: session.user.email }
+          : { label: "登入", href: "/sign-in", tip: "auth.winlab.tw" }
       }
     >
       {children}

@@ -12,10 +12,11 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 
-// A tip says what the label leaves out (where a link goes, what a page
-// holds); it never repeats the label.
-type Crumb = { label: string; href: string; tip?: string }
-type NavItem = { label: string; href: string; tip?: string }
+// Every corner item has a tip, required so none is forgotten. It says what
+// the label leaves out (where a link goes, what a page holds, whose account
+// it is); it never repeats the label.
+type Crumb = { label: string; href: string; tip: string }
+type NavItem = { label: string; href: string; tip: string }
 
 // The chrome of every WinLab app is its four corners. By default each corner
 // has one job, filled from the props below; an app that needs something else
