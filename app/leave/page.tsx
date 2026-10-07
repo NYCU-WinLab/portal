@@ -1,0 +1,54 @@
+import { EmptyState } from "@/components/empty-state"
+import { PageHeader, SectionHeader } from "@/components/page-header"
+import { PortalShell } from "@/components/portal-shell"
+import { runAction } from "@/lib/actions/define"
+import { listLeaves } from "@/lib/actions/leave"
+import { requireActor } from "@/lib/auth/session"
+import { dateLabel, upcomingMondays } from "@/lib/leave-dates"
+
+import { LeaveForm } from "./leave-form"
+import { WithdrawButton } from "./withdraw-button"
+
+export const dynamic = "force-dynamic"
+
+export default async function LeavePage() {
+  const actor = await requireActor("/leave")
+  const { dates } = await runAction(listLeaves, actor, {})
+  const mondays = upcomingMondays().map((date) => ({
+    value: date,
+    label: dateLabel(date),
+  }))
+
+  return (
+    <PortalShell page={{ label: "請假", href: "/leave", tip: "週一組會" }}>
+      <div className="flex flex-col gap-12">
+        <PageHeader title="請假" actions={<LeaveForm mondays={mondays} />} />
+        {dates.length === 0 ? (
+          <EmptyState noun="請假" />
+        ) : (
+          dates.map(({ date, members }) => (
+            <section key={date} className="flex flex-col gap-2">
+              <SectionHeader title={dateLabel(date)} />
+              <ul className="flex flex-col">
+                {members.map((member) => (
+                  <li
+                    key={member.userId}
+                    className="flex min-h-14 items-center gap-4 border-b border-border py-2"
+                  >
+                    <span className="shrink-0 font-medium">{member.name}</span>
+                    <span className="min-w-0 flex-1 truncate text-muted-foreground">
+                      {member.reason}
+                    </span>
+                    {member.userId === actor.userId && (
+                      <WithdrawButton date={date} label={dateLabel(date)} />
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ))
+        )}
+      </div>
+    </PortalShell>
+  )
+}

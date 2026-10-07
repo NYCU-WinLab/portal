@@ -1,4 +1,4 @@
-import type { z } from "zod"
+import { z } from "zod"
 
 import { traced } from "@/lib/otel"
 
@@ -54,4 +54,12 @@ export async function runAction<Input extends z.ZodObject, Output>(
     { "action.name": action.name, "action.kind": action.kind, via: actor.via },
     () => action.run(actor, action.input.parse(input))
   )
+}
+
+/** What to tell a member when an action fails: the first input problem, or
+ * the action's own message. */
+export function errorMessage(error: unknown) {
+  if (error instanceof z.ZodError) return error.issues[0]?.message ?? "輸入有誤"
+  if (error instanceof Error) return error.message
+  return "失敗了"
 }

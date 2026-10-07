@@ -1,11 +1,16 @@
+import Link from "next/link"
+
 import { FieldList, FieldRow } from "@/components/field-list"
-import { PageHeader } from "@/components/page-header"
+import { PageHeader, SectionHeader } from "@/components/page-header"
 import { PortalShell } from "@/components/portal-shell"
 import { runAction } from "@/lib/actions/define"
 import { whoami } from "@/lib/actions/users"
 import { requireActor } from "@/lib/auth/session"
 
 export const dynamic = "force-dynamic"
+
+// Apps as they move over from portal.winlab.tw.
+const apps = [{ label: "請假", href: "/leave" }]
 
 export default async function Home() {
   const actor = await requireActor("/")
@@ -19,6 +24,21 @@ export default async function Home() {
           <FieldRow label="實驗室帳號">{member.username ?? "未提供"}</FieldRow>
           <FieldRow label="信箱">{member.email}</FieldRow>
         </FieldList>
+        <section className="flex flex-col gap-2">
+          <SectionHeader title="服務" />
+          <ul className="flex flex-col">
+            {apps.map((app) => (
+              <li key={app.href} className="border-b border-border">
+                <Link
+                  href={app.href}
+                  className="flex min-h-14 items-center transition-colors duration-state hover:text-muted-foreground"
+                >
+                  {app.label}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
       </div>
     </PortalShell>
   )

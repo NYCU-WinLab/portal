@@ -63,9 +63,9 @@ const pagePatterns = [
     regex: /(?<![-\w])border(?:-[xy])?(?![-\w])/g,
   },
 ]
-// Components (installed from ui.winlab.tw or our own) may draw layer 2;
-// pages under app/ may not.
-const componentRoot = "components"
+// Pages under app/ may not draw layer 2; components and the libraries
+// installed from ui.winlab.tw (lib/field.ts) may.
+const pageRoot = "app"
 
 async function* files(dir: string): AsyncGenerator<string> {
   const entries = await readdir(dir, { withFileTypes: true }).catch(() => [])
@@ -82,7 +82,7 @@ for (const root of roots) {
     // globals.css defines the tokens themselves.
     if (path === join("app", "globals.css")) continue
     const lines = (await readFile(path, "utf8")).split("\n")
-    const isComponent = path.startsWith(componentRoot)
+    const isComponent = !path.startsWith(pageRoot)
     const rules = isComponent ? patterns : [...patterns, ...pagePatterns]
     lines.forEach((line, index) => {
       for (const { name, regex } of rules) {
