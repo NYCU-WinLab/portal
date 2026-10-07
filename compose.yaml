@@ -1,0 +1,49 @@
+name: ${COMPOSE_PROJECT_NAME:-portal}
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: portal
+      POSTGRES_USER: portal
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+    volumes:
+      - postgres:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "portal", "-d", "portal"]
+      interval: 5s
+      retries: 20
+
+  # One-shot: applies drizzle/*.sql, then web starts.
+  migrate:
+    image: ghcr.io/nycu-winlab/portal:${PORTAL_VERSION:-main}
+    command: ["node", "migrate.mjs"]
+    environment:
+      DATABASE_URL: postgres://portal:${POSTGRES_PASSWORD}@postgres:5432/portal
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  web:
+    image: ghcr.io/nycu-winlab/portal:${PORTAL_VERSION:-main}
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://portal:${POSTGRES_PASSWORD}@postgres:5432/portal
+    ports:
+      - ${PORTAL_BIND:-127.0.0.1}:${PORTAL_PORT:-3000}:3000
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - fetch('http://localhost:3000/.well-known/oauth-protected-resource').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))
+      interval: 10s
+      retries: 10
+
+volumes:
+  postgres:
