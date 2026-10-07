@@ -18,13 +18,13 @@ export function SignInButton({ next }: { next: string }) {
     })
     if (error) {
       setPending(false)
-      toast.error(error.message ?? "登入沒有成功，請再試一次")
+      toast.error(error.message ?? "登入失敗")
     }
   }
 
   return (
     <Button onClick={signIn} disabled={pending}>
-      {pending ? "前往登入中…" : "以實驗室帳號登入"}
+      {pending ? "登入中…" : "登入"}
     </Button>
   )
 }

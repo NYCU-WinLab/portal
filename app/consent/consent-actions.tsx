@@ -14,7 +14,7 @@ export function ConsentActions() {
     const { data, error } = await authClient.oauth2.consent({ accept })
     if (error || !data?.url) {
       setPending(null)
-      toast.error(error?.message ?? "沒有回應，請再試一次")
+      toast.error(error?.message ?? "沒有回應")
       return
     }
     window.location.href = data.url

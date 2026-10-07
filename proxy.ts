@@ -15,6 +15,6 @@ export const config = {
   // MCP endpoints (they answer with OAuth errors, not redirects), discovery
   // documents and static files.
   matcher: [
-    "/((?!sign-in|consent|api/auth|mcp|\\.well-known|_next/static|_next/image|favicon.ico|icon.svg).*)",
+    "/((?!(?:sign-in|consent|api/auth|mcp|\\.well-known|_next/static|_next/image)(?:/|$)|favicon.ico$|icon.svg$).*)",
   ],
 }

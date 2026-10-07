@@ -19,11 +19,7 @@ export default async function SignIn({ searchParams }: PageProps<"/sign-in">) {
 
   return (
     <PortalShell layout="spotlight">
-      <StatusPage
-        title="登入 WinLab Portal"
-        description="用實驗室帳號登入，就是 auth.winlab.tw 那一組。"
-        action={<SignInButton next={next} />}
-      />
+      <StatusPage title="登入" action={<SignInButton next={next} />} />
     </PortalShell>
   )
 }

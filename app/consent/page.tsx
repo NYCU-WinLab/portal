@@ -10,7 +10,8 @@ export const dynamic = "force-dynamic"
 export default async function Consent({ searchParams }: PageProps<"/consent">) {
   const params = new URLSearchParams()
   for (const [key, value] of Object.entries(await searchParams)) {
-    for (const item of [value].flat()) if (item) params.append(key, item)
+    for (const item of [value].flat())
+      if (item !== undefined) params.append(key, item)
   }
   const query = params.toString()
   await requireActor(`/consent?${query}`)
@@ -19,10 +20,7 @@ export default async function Consent({ searchParams }: PageProps<"/consent">) {
   if (!request) {
     return (
       <PortalShell layout="spotlight">
-        <StatusPage
-          title="這個授權連結已經失效"
-          description="回到要連線的程式重新連線一次。"
-        />
+        <StatusPage title="授權連結已失效" />
       </PortalShell>
     )
   }
@@ -30,8 +28,7 @@ export default async function Consent({ searchParams }: PageProps<"/consent">) {
   return (
     <PortalShell layout="spotlight">
       <StatusPage
-        title={`允許 ${request.name} 使用 WinLab Portal？`}
-        description="它會以你的身分操作，網頁上你能做的事它都能做，包括你的管理權限。"
+        title={`允許 ${request.name}${request.host ? `（${request.host}）` : ""} 以你的身分操作？`}
         action={<ConsentActions />}
       />
     </PortalShell>

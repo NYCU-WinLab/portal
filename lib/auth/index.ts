@@ -28,12 +28,15 @@ export const auth = betterAuth({
   baseURL,
   secret: process.env.BETTER_AUTH_SECRET,
   database: drizzleAdapter(db, { provider: "pg", schema }),
-  advanced: { database: { generateId: "uuid" } },
+  // A function, not "uuid": with "uuid" the adapter swaps out ids Better
+  // Auth sets on purpose (replay-store keys), and replay checks never fire.
+  advanced: { database: { generateId: () => crypto.randomUUID() } },
   emailAndPassword: { enabled: false },
   user: {
     additionalFields: {
       // Keycloak preferred_username: the lab account name, e.g. "zyx1121".
-      username: { type: "string", required: false, input: false },
+      // Not input: false, which also drops it from the mapped profile.
+      username: { type: "string", required: false },
     },
   },
   session: { cookieCache: { enabled: true, maxAge: 5 * 60 } },

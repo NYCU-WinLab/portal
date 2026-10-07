@@ -14,10 +14,7 @@ export default async function Home() {
   return (
     <PortalShell>
       <div className="flex flex-col gap-12">
-        <PageHeader
-          title={`${member.name}，你好`}
-          description="WinLab Portal 正在搬家，功能會一個一個回來。"
-        />
+        <PageHeader title={member.name} />
         <FieldList>
           <FieldRow label="姓名">{member.name}</FieldRow>
           <FieldRow label="實驗室帳號">{member.username ?? "未提供"}</FieldRow>

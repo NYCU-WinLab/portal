@@ -16,13 +16,24 @@ export async function getConsentRequest(query: string) {
   const clientId = params.get("client_id")
   if (!clientId) return null
   const [client] = await db
-    .select({ name: oauthClient.name, uri: oauthClient.uri })
+    .select({ name: oauthClient.name, redirectUris: oauthClient.redirectUris })
     .from(oauthClient)
     .where(eq(oauthClient.clientId, clientId))
+  // The name is whatever the client registered, so show where the token
+  // goes too: the CIMD client_id host, or else its redirect host.
+  const redirect = (client?.redirectUris as string[] | undefined)?.[0]
   return {
     clientId,
     name: client?.name || clientId,
-    uri: client?.uri ?? null,
-    scopes: (params.get("scope") ?? "").split(" ").filter(Boolean),
+    host: hostOf(clientId) ?? (redirect ? hostOf(redirect) : null),
+  }
+}
+
+function hostOf(url: string) {
+  try {
+    const { protocol, host } = new URL(url)
+    return protocol === "https:" || protocol === "http:" ? host : null
+  } catch {
+    return null
   }
 }

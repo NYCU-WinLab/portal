@@ -1,8 +1,8 @@
 import { AppShell } from "@/components/app-shell"
 import { getSession } from "@/lib/auth/session"
 
-// The portal's corners: the lab in the breadcrumb, the member and build at
-// the bottom left. Apps add their own page and nav as they move over.
+// The portal's corners: the lab in the breadcrumb, the app's pages and the
+// account (登入, or the member's name) in the top right.
 export async function PortalShell({
   page,
   nav,
@@ -23,15 +23,10 @@ export async function PortalShell({
         ...(page ? [page] : []),
       ]}
       nav={nav}
-      user={
+      account={
         session
-          ? {
-              name: session.user.name,
-              href: "/",
-              image: session.user.image ?? undefined,
-              tip: session.user.email,
-            }
-          : undefined
+          ? { label: session.user.name, href: "/" }
+          : { label: "登入", href: "/sign-in" }
       }
     >
       {children}

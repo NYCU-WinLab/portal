@@ -5,7 +5,6 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
 
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
   Tooltip,
   TooltipContent,
@@ -17,16 +16,15 @@ import {
 // holds); it never repeats the label.
 type Crumb = { label: string; href: string; tip?: string }
 type NavItem = { label: string; href: string; tip?: string }
-type User = { name: string; href: string; image?: string; tip?: string }
 
 // The chrome of every WinLab app is its four corners. By default each corner
 // has one job, filled from the props below; an app that needs something else
 // in a corner passes it in `corners`, built from CornerLink and CornerTip so
 // it keeps the corner's look.
 //   top left     where you are: breadcrumb back to the lab and the app
-//   top right    where you can go: this app's pages
-//   bottom left  who you are and which build: the signed-in member, then the
-//                commit this build came from (the theme follows the system)
+//   top right    where you can go: this app's pages, then the account (登入
+//                when signed out, the member's name when signed in)
+//   bottom left  which build: the commit this build came from
 //   bottom right the copyright year; the tip names the owner
 // Every item can carry a tip, opening toward the page and lined up with the
 // corner's outer edge so it never leaves the viewport.
@@ -39,14 +37,16 @@ type User = { name: string; href: string; image?: string; tip?: string }
 function AppShell({
   breadcrumb = [],
   nav = [],
-  user,
+  account,
   layout = "column",
   corners,
   children,
 }: {
   breadcrumb?: Crumb[]
   nav?: NavItem[]
-  user?: User
+  /** Last in the top right: { label: "登入", href: "/sign-in" } signed out,
+   * the member's name linking to their page signed in. */
+  account?: NavItem
   corners?: Partial<
     Record<
       "topLeft" | "topRight" | "bottomLeft" | "bottomRight",
@@ -102,9 +102,9 @@ function AppShell({
 
       <div className="fixed top-6 right-6 z-50 flex items-center gap-4">
         {corners?.topRight ??
-          (nav.length > 0 && (
+          ((nav.length > 0 || account) && (
             <nav aria-label="頁面" className="flex items-center gap-4">
-              {nav.map((item) => (
+              {[...nav, ...(account ? [account] : [])].map((item) => (
                 <CornerTip key={item.href} tip={item.tip} corner="top-right">
                   <Link
                     href={item.href}
@@ -123,22 +123,7 @@ function AppShell({
       </div>
 
       <div className="fixed bottom-6 left-6 z-50 flex items-center gap-4">
-        {corners?.bottomLeft ?? (
-          <>
-            {user && (
-              <CornerTip tip={user.tip ?? "個人頁面"} corner="bottom-left">
-                <Link href={user.href} className={cn(cornerLink, "gap-2")}>
-                  <Avatar className="size-6">
-                    {user.image && <AvatarImage src={user.image} alt="" />}
-                    <AvatarFallback>{user.name.slice(0, 1)}</AvatarFallback>
-                  </Avatar>
-                  {user.name}
-                </Link>
-              </CornerTip>
-            )}
-            <BuildVersion />
-          </>
-        )}
+        {corners?.bottomLeft ?? <BuildVersion />}
       </div>
 
       <div className="fixed right-6 bottom-6 z-50 flex items-center gap-4">

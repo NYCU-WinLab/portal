@@ -8,17 +8,26 @@ import { mcpHandler } from "@/lib/mcp/server"
 // the member every tool acts as.
 export const POST = requireMcpAuth(
   auth,
-  (request, claims) =>
-    mcpHandler.fetch(request, {
+  (request, claims) => {
+    // A client_credentials token names the client, not a member.
+    const clientId = String(claims.azp ?? claims.client_id ?? "")
+    if (!claims.sub || claims.sub === clientId) {
+      return Response.json(
+        { error: "invalid_token", error_description: "not a member token" },
+        { status: 403 }
+      )
+    }
+    return mcpHandler.fetch(request, {
       authInfo: {
         token: "",
-        clientId: String(claims.azp ?? claims.client_id ?? ""),
+        clientId,
         scopes: String(claims.scope ?? "")
           .split(" ")
           .filter(Boolean),
         expiresAt: claims.exp,
         extra: { userId: claims.sub },
       },
-    }),
+    })
+  },
   { resource: mcpResource }
 )

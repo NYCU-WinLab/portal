@@ -86,10 +86,13 @@ export const account = pgTable(
   ]
 )
 
+// Text ids here and on oauth_client_assertions: the replay stores for DPoP
+// proofs and client assertions use a hash of the proof as the id, and the
+// check only works if that id is kept.
 export const verification = pgTable(
   "verifications",
   {
-    id: uuid().defaultRandom().primaryKey().notNull(),
+    id: text().primaryKey().notNull(),
     identifier: text().notNull(),
     value: text().notNull(),
     expiresAt: timestamp({ withTimezone: true, mode: "date" }).notNull(),
@@ -253,7 +256,7 @@ export const oauthRefreshToken = pgTable(
 )
 
 export const oauthClientAssertion = pgTable("oauth_client_assertions", {
-  id: uuid().defaultRandom().primaryKey().notNull(),
+  id: text().primaryKey().notNull(),
   expiresAt: timestamp({ withTimezone: true, mode: "date" }).notNull(),
 })
 
