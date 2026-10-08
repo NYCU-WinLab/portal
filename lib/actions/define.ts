@@ -47,7 +47,8 @@ export function defineAction<Input extends z.ZodObject, Output>(
 export async function runAction<Input extends z.ZodObject, Output>(
   action: Action<Input, Output>,
   actor: Actor,
-  input: z.input<Input>
+  /** Untrusted input from a page or an MCP client; parsed here either way. */
+  input: unknown
 ): Promise<Output> {
   return traced(
     `action ${action.name}`,

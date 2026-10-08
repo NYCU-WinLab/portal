@@ -13,6 +13,7 @@ export const dynamic = "force-dynamic"
 const apps = [
   { label: "請假", href: "/leave" },
   { label: "我的資料", href: "/profile" },
+  { label: "管理員", href: "/admins" },
 ]
 
 export default async function Home() {
