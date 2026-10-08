@@ -1,7 +1,7 @@
 import { and, asc, eq, ne } from "drizzle-orm"
 import { z } from "zod"
 
-import { isAdmin, requireAdmin } from "@/lib/actions/authz"
+import { requireAdmin } from "@/lib/actions/authz"
 import { defineAction } from "@/lib/actions/define"
 import { adminAppKeys, adminApps } from "@/lib/apps"
 import { db } from "@/lib/db"
@@ -64,23 +64,34 @@ export const grantAdmin = defineAction({
   input: grantInput,
   run: async (actor, { userId, app }) => {
     await requireAdmin(actor, "portal")
-    if (
-      app !== "portal" &&
-      (await isAdmin({ userId, via: actor.via }, "portal"))
-    )
-      throw new Error("他是全站管理員，已經管得到每個 app")
-    const [added] = await db
-      .insert(admins)
-      .values({ userId, app, grantedBy: actor.userId })
-      .onConflictDoNothing()
-      .returning({ app: admins.app })
-    if (!added) throw new Error(`已經是${adminApps[app]}管理員了`)
-    // A portal admin already runs every app; drop their app-level rows.
-    if (app === "portal")
-      await db
-        .delete(admins)
-        .where(and(eq(admins.userId, userId), ne(admins.app, "portal")))
-    return { userId, app }
+    return db.transaction(async (tx) => {
+      // Locking the member serializes every grant for them, so a portal
+      // grant and an app grant at once cannot leave a stray app row.
+      const [member] = await tx
+        .select({ id: user.id })
+        .from(user)
+        .where(eq(user.id, userId))
+        .for("update")
+      if (!member) throw new Error("找不到成員")
+      const [portalRow] = await tx
+        .select({ app: admins.app })
+        .from(admins)
+        .where(and(eq(admins.userId, userId), eq(admins.app, "portal")))
+      if (app !== "portal" && portalRow)
+        throw new Error("他是全站管理員，已經管得到每個 app")
+      const [added] = await tx
+        .insert(admins)
+        .values({ userId, app, grantedBy: actor.userId })
+        .onConflictDoNothing()
+        .returning({ app: admins.app })
+      if (!added) throw new Error(`已經是${adminApps[app]}管理員了`)
+      // A portal admin already runs every app; drop their app-level rows.
+      if (app === "portal")
+        await tx
+          .delete(admins)
+          .where(and(eq(admins.userId, userId), ne(admins.app, "portal")))
+      return { userId, app }
+    })
   },
 })
 
@@ -101,6 +112,8 @@ export const revokeAdmin = defineAction({
           .from(admins)
           .where(eq(admins.app, "portal"))
           .for("update")
+        if (!portalAdmins.some((row) => row.userId === userId))
+          throw new Error("他不是全站管理員")
         if (portalAdmins.length <= 1) throw new Error("至少要留 1 位全站管理員")
       }
       const removed = await tx

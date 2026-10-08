@@ -49,7 +49,14 @@ This starts Postgres, runs the migrations once, then serves the portal from `ghc
 
 1. In your Keycloak realm, create a confidential OpenID Connect client with the redirect URI `<BETTER_AUTH_URL>/api/auth/callback/keycloak`, and put its ID and secret in `.env`.
 2. Open `BETTER_AUTH_URL` and sign in.
-3. Add the MCP server to a client, for example `claude mcp add --transport http portal <BETTER_AUTH_URL>/mcp`, approve it on the consent page, then ask it to call `whoami`.
+3. Make the first portal admin, once, after that member has signed in (later admins are added on /admins):
+
+   ```sh
+   docker compose exec postgres psql -U portal -d portal -c \
+     "insert into admins (user_id, app) select id, 'portal' from users where username = '<their account>'"
+   ```
+
+4. Add the MCP server to a client, for example `claude mcp add --transport http portal <BETTER_AUTH_URL>/mcp`, approve it on the consent page, then ask it to call `whoami`.
 
 ## Configure
 
