@@ -1,3 +1,9 @@
+import {
+  grantAdmin,
+  listAdmins,
+  listMembers,
+  revokeAdmin,
+} from "@/lib/actions/admins"
 import type { Action } from "@/lib/actions/define"
 import { createLeave, deleteLeave, listLeaves } from "@/lib/actions/leave"
 import { getProfile } from "@/lib/actions/profile"
@@ -10,4 +16,8 @@ export const actions: Action[] = [
   listLeaves,
   createLeave,
   deleteLeave,
+  listMembers,
+  listAdmins,
+  grantAdmin,
+  revokeAdmin,
 ]
