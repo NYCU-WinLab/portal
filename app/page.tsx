@@ -5,6 +5,7 @@ import { PortalShell } from "@/components/portal-shell"
 import { runAction } from "@/lib/actions/define"
 import { whoami } from "@/lib/actions/users"
 import { requireActor } from "@/lib/auth/session"
+import { givenName } from "@/lib/names"
 
 export const dynamic = "force-dynamic"
 
@@ -21,7 +22,7 @@ export default async function Home() {
   return (
     <PortalShell>
       <div className="flex flex-col gap-12">
-        <PageHeader title={member.name} />
+        <PageHeader title={`Hi, ${givenName(member.name)}`} />
         <section className="flex flex-col gap-2">
           <SectionHeader title="服務" />
           <ul className="flex flex-col">
