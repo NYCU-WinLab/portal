@@ -25,7 +25,11 @@ export async function PortalShell({
       nav={nav}
       account={
         session
-          ? { label: session.user.name, href: "/", tip: session.user.email }
+          ? {
+              label: session.user.name,
+              href: "/profile",
+              tip: session.user.email,
+            }
           : { label: "登入", href: "/sign-in", tip: "auth.winlab.tw" }
       }
     >
