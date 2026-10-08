@@ -3,6 +3,7 @@
 // them. Members change their account in Keycloak's account console.
 
 const issuer = () => process.env.KEYCLOAK_ISSUER!
+const timeout = () => AbortSignal.timeout(5000)
 let cached: { token: string; expires: number } | null = null
 
 async function adminToken() {
@@ -16,6 +17,7 @@ async function adminToken() {
       client_secret: process.env.KEYCLOAK_CLIENT_SECRET!,
     }),
     cache: "no-store",
+    signal: timeout(),
   })
   if (!response.ok) throw new Error(`Keycloak token ${response.status}`)
   const body = (await response.json()) as {
@@ -39,11 +41,19 @@ export type KeycloakUser = {
 
 /** One member's Keycloak record, by their Keycloak id (the OIDC sub). */
 export async function getKeycloakUser(sub: string): Promise<KeycloakUser> {
-  const admin = issuer().replace("/realms/", "/admin/realms/")
-  const response = await fetch(`${admin}/users/${encodeURIComponent(sub)}`, {
-    headers: { authorization: `Bearer ${await adminToken()}` },
-    cache: "no-store",
-  })
+  const url = `${issuer().replace("/realms/", "/admin/realms/")}/users/${encodeURIComponent(sub)}`
+  const get = async () =>
+    fetch(url, {
+      headers: { authorization: `Bearer ${await adminToken()}` },
+      cache: "no-store",
+      signal: timeout(),
+    })
+  let response = await get()
+  // A token Keycloak dropped early (restart, revocation): fetch a new one once.
+  if (response.status === 401) {
+    cached = null
+    response = await get()
+  }
   if (!response.ok) throw new Error(`Keycloak user ${response.status}`)
   return (await response.json()) as KeycloakUser
 }

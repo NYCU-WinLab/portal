@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm"
+import { and, desc, eq } from "drizzle-orm"
 import { z } from "zod"
 
 import { defineAction } from "@/lib/actions/define"
@@ -23,6 +23,8 @@ export const getProfile = defineAction({
           eq(account.providerId, "keycloak")
         )
       )
+      .orderBy(desc(account.updatedAt))
+      .limit(1)
     if (!link) throw new Error("這個帳號沒有連到 Keycloak")
     const user = await getKeycloakUser(link.sub)
     const attribute = (key: string) => user.attributes?.[key]?.[0] ?? null

@@ -34,6 +34,9 @@ export const auth = betterAuth({
   emailAndPassword: { enabled: false },
   // Name, email and username come only from Keycloak, on every sign-in.
   disabledPaths: ["/update-user", "/change-email"],
+  // Keycloak is the only way in, so a new Keycloak account is a new member
+  // even if it reuses an email: never merge it into an existing one.
+  account: { accountLinking: { disableImplicitLinking: true } },
   user: {
     additionalFields: {
       // Keycloak preferred_username: the lab account name, e.g. "zyx1121".
