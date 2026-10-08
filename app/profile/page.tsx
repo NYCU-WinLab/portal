@@ -18,11 +18,6 @@ const fields = [
   ["username", "帳號"],
   ["email", "信箱"],
   ["studentId", "學號"],
-  ["admissionYear", "入學年"],
-  ["position", "職稱"],
-  ["role", "身分"],
-  ["phone", "電話"],
-  ["gitlabUsername", "GitLab"],
 ] as const
 
 export default async function ProfilePage() {

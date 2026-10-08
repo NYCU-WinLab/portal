@@ -10,7 +10,7 @@ export const getProfile = defineAction({
   name: "get_profile",
   title: "我的資料",
   description:
-    "The signed-in member's lab account from Keycloak: Chinese name, English family and given names, account name, email, student id, admission year, position, role, phone and GitLab username. Read only; members change these in Keycloak's account console.",
+    "The signed-in member's lab account from Keycloak: Chinese name, English family and given names, account name, email and student id. Read only; members change these in Keycloak's account console.",
   kind: "query",
   input: z.object({}),
   run: async (actor) => {
@@ -35,11 +35,6 @@ export const getProfile = defineAction({
       username: user.username,
       email: user.email ?? null,
       studentId: attribute("student_id"),
-      admissionYear: attribute("admissionYear"),
-      position: attribute("position"),
-      role: attribute("role"),
-      phone: attribute("phone"),
-      gitlabUsername: attribute("gitlabUsername"),
     }
   },
 })
