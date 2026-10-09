@@ -17,6 +17,7 @@ const apps = [
   { label: "Meetings", href: "/meetings" },
   { label: "Leave", href: "/leave" },
   { label: "Bento", href: "/bento" },
+  { label: "Reimburse", href: "/reimburse" },
   { label: "Profile", href: "/profile" },
   { label: "Admins", href: "/admins" },
 ]

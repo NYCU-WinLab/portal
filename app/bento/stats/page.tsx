@@ -4,7 +4,7 @@ import { PortalShell } from "@/components/portal-shell"
 import { getBentoStats } from "@/lib/actions/bento"
 import { runAction } from "@/lib/actions/define"
 import { requireActor } from "@/lib/auth/session"
-import { ntd } from "@/lib/bento"
+import { ntd } from "@/lib/money"
 
 import { bentoNav, bentoPage } from "../nav"
 

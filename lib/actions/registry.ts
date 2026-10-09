@@ -60,6 +60,17 @@ import {
   removePresenter,
 } from "@/lib/actions/presenters"
 import { getProfile } from "@/lib/actions/profile"
+import {
+  addReimburseEgress,
+  addReimburseIngress,
+  deleteReimburseEgress,
+  deleteReimburseIngress,
+  getReimburseBalance,
+  getReimburseStats,
+  listReimburseEntries,
+  updateReimburseEgress,
+  updateReimburseIngress,
+} from "@/lib/actions/reimburse"
 import { listMeetingStats } from "@/lib/actions/stats"
 import { whoami } from "@/lib/actions/users"
 
@@ -112,6 +123,15 @@ export const actions: Action[] = [
   setBentoMenu,
   setBentoOptionGroups,
   setBentoMenuImage,
+  listReimburseEntries,
+  getReimburseBalance,
+  getReimburseStats,
+  addReimburseEgress,
+  updateReimburseEgress,
+  deleteReimburseEgress,
+  addReimburseIngress,
+  updateReimburseIngress,
+  deleteReimburseIngress,
   listMembers,
   listAdmins,
   grantAdmin,
