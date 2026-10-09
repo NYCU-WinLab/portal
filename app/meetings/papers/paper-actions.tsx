@@ -22,7 +22,7 @@ import {
   tagDelete,
   tagRename,
 } from "../actions"
-import { report } from "../report"
+import { report } from "@/lib/report"
 
 export type Tag = { id: string; name: string; papers?: number }
 export type Paper = {

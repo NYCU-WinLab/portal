@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 
 import { presenterAdd, presenterMove, presenterRemove } from "../actions"
-import { report } from "../report"
+import { report } from "@/lib/report"
 
 export function AddPresenter({ members }: { members: Member[] }) {
   const [userId, setUserId] = React.useState<string | null>(null)

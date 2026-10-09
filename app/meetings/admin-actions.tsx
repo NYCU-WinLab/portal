@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/select"
 
 import { add, fill, generate, swap } from "./actions"
-import { report } from "./report"
+import { report } from "@/lib/report"
 
 type Option = { value: string; label: string }
 
