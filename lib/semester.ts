@@ -60,3 +60,24 @@ export function weekLabel(
   if (week > semester.weeks) return autumn ? "寒假" : "暑假"
   return `第 ${week} 週`
 }
+
+const numerals = ["一", "二", "三", "四", "五", "六", "七", "八", "九"]
+
+/**
+ * 博三, 碩二: a student's year in their programme, counted from their
+ * cohort (民國 admission year) to the academic year of today, which starts
+ * on August 1. null for anyone who is not a doctoral or master's student or
+ * has no cohort.
+ */
+export function gradeLabel(
+  status: string | null,
+  cohort: number | null,
+  today: string
+) {
+  const programme =
+    status === "doctoral" ? "博" : status === "master" ? "碩" : null
+  if (!programme || cohort === null) return null
+  const academicYear = Number(semesterOf(today).start.slice(0, 4)) - 1911
+  const year = academicYear - cohort + 1
+  return year >= 1 && year <= 9 ? `${programme}${numerals[year - 1]}` : null
+}
