@@ -100,6 +100,7 @@ function AppShell({
                   <CornerTip tip={crumb.tip} corner="top-left">
                     <Link
                       href={crumb.href}
+                      prefetch
                       aria-current={last ? "page" : undefined}
                       className={cn(cornerLink, last && "text-foreground")}
                     >
@@ -121,6 +122,11 @@ function AppShell({
                 <CornerTip key={item.href} tip={item.tip} corner="top-right">
                   <Link
                     href={item.href}
+                    // Pages are per member and dynamic, so Next only prefetches
+                    // them when asked; then switching between them needs no
+                    // round trip. The account link can be /sign-in, a route
+                    // that starts a sign-in, so it is never prefetched.
+                    prefetch={item !== account}
                     aria-current={isCurrent(item.href) ? "page" : undefined}
                     className={cn(
                       cornerLink,
