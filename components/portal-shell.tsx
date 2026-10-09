@@ -1,4 +1,5 @@
 import { AppShell } from "@/components/app-shell"
+import { LiveRefresh } from "@/components/live-refresh"
 import { getSession } from "@/lib/auth/session"
 
 // The portal's corners: the lab in the breadcrumb, the app's pages in the
@@ -37,6 +38,7 @@ export async function PortalShell({
             : { label: "登入", href: "/sign-in", tip: "auth.winlab.tw" }
       }
     >
+      <LiveRefresh />
       {children}
     </AppShell>
   )

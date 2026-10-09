@@ -1,5 +1,6 @@
 import { z } from "zod"
 
+import { announceChange } from "@/lib/actions/changes"
 import { traced } from "@/lib/otel"
 
 /**
@@ -53,7 +54,14 @@ export async function runAction<Input extends z.ZodObject, Output>(
   return traced(
     `action ${action.name}`,
     { "action.name": action.name, "action.kind": action.kind, via: actor.via },
-    () => action.run(actor, action.input.parse(input))
+    async () => {
+      const result = await action.run(actor, action.input.parse(input))
+      // Open pages refresh on this; a failed announcement never fails the
+      // change itself.
+      if (action.kind === "mutation")
+        await announceChange(action.name).catch(() => {})
+      return result
+    }
   )
 }
 
