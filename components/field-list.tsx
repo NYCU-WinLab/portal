@@ -2,10 +2,10 @@ import * as React from "react"
 
 // One record's fields: the name in a muted column on the left, the value
 // beside it; on a phone the value drops under its name. Rows are split by
-// dividers, like any list.
+// dividers and arrive one after another, like any list.
 function FieldList({ children }: { children: React.ReactNode }) {
   return (
-    <dl data-slot="field-list" className="flex flex-col">
+    <dl data-slot="field-list" className="flex stagger-rise flex-col">
       {children}
     </dl>
   )

@@ -46,7 +46,7 @@ export default async function PresentersPage() {
         {presenters.length === 0 ? (
           <EmptyState noun="報告人" />
         ) : (
-          <ol className="flex flex-col">
+          <ol className="flex stagger-rise flex-col">
             {presenters.map((row, index) => (
               <li
                 key={row.userId}
