@@ -71,3 +71,60 @@ export async function findKeycloakUser(
 
 /** Where a member edits their own Keycloak account. */
 export const accountConsoleUrl = () => `${issuer()}/account`
+
+export const labStatuses = [
+  "teacher",
+  "assistant",
+  "doctoral",
+  "master",
+  "undergrad",
+  "alumni",
+] as const
+export type LabStatus = (typeof labStatuses)[number]
+export type LabMember = { status?: LabStatus; cohort?: number }
+
+const LAB_DIRECTORY_TTL_MS = 10 * 60 * 1000
+let directory: { members: Map<string, LabMember>; at: number } | null = null
+
+async function adminGet<T>(path: string): Promise<T> {
+  const url = `${issuer().replace("/realms/", "/admin/realms/")}${path}`
+  const response = await fetch(url, {
+    headers: { authorization: `Bearer ${await adminToken()}` },
+    cache: "no-store",
+    signal: timeout(),
+  })
+  if (!response.ok) throw new Error(`Keycloak ${path} ${response.status}`)
+  return (await response.json()) as T
+}
+
+/**
+ * Status and cohort of everyone in the realm's /lab-member groups, by
+ * Keycloak id: /lab-member/master gives the status, /lab-member/114 the
+ * cohort (民國 admission year). Read live, cached for 10 minutes, so
+ * nothing copies these into the database to drift.
+ */
+export async function labDirectory(): Promise<Map<string, LabMember>> {
+  if (directory && Date.now() - directory.at < LAB_DIRECTORY_TTL_MS)
+    return directory.members
+  const root = await adminGet<{ id: string }>("/group-by-path/lab-member")
+  const groups = await adminGet<{ id: string; name: string }[]>(
+    `/groups/${root.id}/children?max=200&briefRepresentation=true`
+  )
+  const members = new Map<string, LabMember>()
+  for (const group of groups) {
+    const status = labStatuses.find((name) => name === group.name)
+    const cohort = /^\d{3}$/.test(group.name) ? Number(group.name) : undefined
+    if (!status && cohort === undefined) continue
+    const people = await adminGet<{ id: string }[]>(
+      `/groups/${group.id}/members?max=1000&briefRepresentation=true`
+    )
+    for (const { id } of people) {
+      const member = members.get(id) ?? {}
+      if (status) member.status = status
+      if (cohort !== undefined) member.cohort = cohort
+      members.set(id, member)
+    }
+  }
+  directory = { members, at: Date.now() }
+  return members
+}

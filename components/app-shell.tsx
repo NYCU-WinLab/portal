@@ -58,8 +58,20 @@ function AppShell({
   children: React.ReactNode
 }) {
   const pathname = usePathname()
+  const matches = (href: string) =>
+    href === "/"
+      ? pathname === "/"
+      : pathname === href || pathname.startsWith(`${href}/`)
+  // Of nav links that nest (/meetings, /meetings/papers), only the deepest
+  // match is the current page.
+  const navCurrent = nav
+    ?.map((item) => item.href)
+    .filter(matches)
+    .sort((a, b) => b.length - a.length)[0]
   const isCurrent = (href: string) =>
-    href === "/" ? pathname === "/" : pathname.startsWith(href)
+    nav?.some((item) => item.href === href)
+      ? href === navCurrent
+      : matches(href)
 
   return (
     <TooltipProvider>

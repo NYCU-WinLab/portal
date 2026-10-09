@@ -11,6 +11,7 @@ export const dynamic = "force-dynamic"
 
 // Apps as they move over from portal.winlab.tw.
 const apps = [
+  { label: "實驗室會議", href: "/meetings" },
   { label: "請假", href: "/leave" },
   { label: "我的資料", href: "/profile" },
   { label: "管理員", href: "/admins" },
