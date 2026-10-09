@@ -36,6 +36,13 @@
       "when": 1791550424289,
       "tag": "0004_meetings",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1791554059366,
+      "tag": "0005_paper_tags",
+      "breakpoints": true
     }
   ]
 }

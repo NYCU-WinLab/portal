@@ -22,8 +22,12 @@ import {
 } from "@/lib/actions/meetings-admin"
 import {
   addPaper,
+  addPaperTag,
   deletePaper,
+  deletePaperTag,
   listPapers,
+  listPaperTags,
+  renamePaperTag,
   updatePaper,
 } from "@/lib/actions/papers"
 import {
@@ -46,6 +50,7 @@ export const actions: Action[] = [
   getNextMeeting,
   updateMyMeeting,
   listPapers,
+  listPaperTags,
   listPresenters,
   generateSemester,
   addMeeting,
@@ -57,6 +62,9 @@ export const actions: Action[] = [
   addPaper,
   updatePaper,
   deletePaper,
+  addPaperTag,
+  renamePaperTag,
+  deletePaperTag,
   addPresenter,
   removePresenter,
   movePresenter,
