@@ -33,6 +33,7 @@ async function adminToken() {
 
 export type KeycloakUser = {
   username: string
+  enabled?: boolean
   email?: string
   firstName?: string
   lastName?: string
@@ -41,6 +42,15 @@ export type KeycloakUser = {
 
 /** One member's Keycloak record, by their Keycloak id (the OIDC sub). */
 export async function getKeycloakUser(sub: string): Promise<KeycloakUser> {
+  const user = await findKeycloakUser(sub)
+  if (!user) throw new Error("Keycloak user 404")
+  return user
+}
+
+/** Like getKeycloakUser, but null when Keycloak no longer has the account. */
+export async function findKeycloakUser(
+  sub: string
+): Promise<KeycloakUser | null> {
   const url = `${issuer().replace("/realms/", "/admin/realms/")}/users/${encodeURIComponent(sub)}`
   const get = async () =>
     fetch(url, {
@@ -54,6 +64,7 @@ export async function getKeycloakUser(sub: string): Promise<KeycloakUser> {
     cached = null
     response = await get()
   }
+  if (response.status === 404) return null
   if (!response.ok) throw new Error(`Keycloak user ${response.status}`)
   return (await response.json()) as KeycloakUser
 }
