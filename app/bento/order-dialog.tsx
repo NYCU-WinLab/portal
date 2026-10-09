@@ -18,7 +18,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import type { OptionGroup } from "@/lib/actions/bento-restaurants"
-import { ntd } from "@/lib/bento"
+import { dishLabel, ntd } from "@/lib/bento"
 import { report } from "@/lib/report"
 import { cn } from "@/lib/utils"
 
@@ -33,6 +33,7 @@ export function OrderDialog({
   restaurant,
   menu,
   optionGroups,
+  mine,
   members,
   me,
   trigger = <Button>點餐</Button>,
@@ -41,6 +42,13 @@ export function OrderDialog({
   restaurant: string
   menu: Dish[]
   optionGroups: OptionGroup[]
+  /** What the member already has on this order. */
+  mine: {
+    id: string
+    name: string
+    options: { label: string }[]
+    price: number
+  }[]
   /** Given to bento admins only: who they can order for. */
   members?: Member[]
   me: string
@@ -215,6 +223,26 @@ export function OrderDialog({
           </fieldset>
         ) : (
           <div className="flex min-w-0 flex-col gap-4">
+            {mine.length > 0 && (
+              <section className="flex flex-col border-b border-border pb-4">
+                <h3 className="pb-1 text-muted-foreground">
+                  你點了 {ntd(mine.reduce((sum, line) => sum + line.price, 0))}
+                </h3>
+                <ul className="flex flex-col">
+                  {mine.map((line) => (
+                    <li
+                      key={line.id}
+                      className="flex min-h-10 items-center gap-4"
+                    >
+                      <span className="min-w-0 flex-1">{dishLabel(line)}</span>
+                      <span className="shrink-0 text-muted-foreground tabular-nums">
+                        {line.price}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
             <Input
               type="search"
               placeholder="搜尋菜名"

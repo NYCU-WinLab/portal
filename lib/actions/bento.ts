@@ -114,7 +114,7 @@ export const listBentoOrders = defineAction({
   },
 })
 
-/** "2 × 半糖、少冰" — the options a line was ordered with, by label. */
+/** "半糖、少冰": the options a line was ordered with, by label. */
 const comboKey = (options: BentoLineOption[]) =>
   options.map((option) => option.label).join("、")
 

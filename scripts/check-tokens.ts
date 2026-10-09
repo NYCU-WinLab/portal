@@ -53,6 +53,8 @@ const patterns = [
   },
   { name: "inline style", regex: /\bstyle=\{/g },
   { name: "CSS font-size", regex: /\bfont-size\s*:/g },
+  // Copy separates with ，、。 or a line break, never a middle dot or a dash.
+  { name: "middle dot or dash in copy (use ，、。)", regex: /[·•—–]/g },
 ]
 
 // Layer 1 (the page) groups by spacing and dividers only.

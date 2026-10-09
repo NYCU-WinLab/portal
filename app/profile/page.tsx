@@ -94,7 +94,7 @@ export default async function ProfilePage() {
               </FieldRow>
               <FieldRow label="花了">{ntd(lunch.spent)}</FieldRow>
               {lunch.favorite && (
-                <FieldRow label="本命">
+                <FieldRow label="最常點">
                   {lunch.favorite.name} × {lunch.favorite.count}
                 </FieldRow>
               )}
