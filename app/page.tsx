@@ -3,9 +3,12 @@ import Link from "next/link"
 import { PageHeader, SectionHeader } from "@/components/page-header"
 import { PortalShell } from "@/components/portal-shell"
 import { runAction } from "@/lib/actions/define"
+import { getNextMeeting } from "@/lib/actions/meetings"
 import { whoami } from "@/lib/actions/users"
 import { requireActor } from "@/lib/auth/session"
 import { givenName } from "@/lib/names"
+
+import { NextMeeting } from "./meetings/next-meeting"
 
 export const dynamic = "force-dynamic"
 
@@ -19,15 +22,19 @@ const apps = [
 
 export default async function Home() {
   const actor = await requireActor("/")
-  const member = await runAction(whoami, actor, {})
+  const [member, { meeting }] = await Promise.all([
+    runAction(whoami, actor, {}),
+    runAction(getNextMeeting, actor, {}),
+  ])
 
   return (
     <PortalShell>
       <div className="flex flex-col gap-12">
         <PageHeader title={`Hi, ${givenName(member.name)}`} />
+        <NextMeeting meeting={meeting} />
         <section className="flex flex-col gap-2">
           <SectionHeader title="服務" />
-          <ul className="flex flex-col">
+          <ul className="flex stagger-rise flex-col">
             {apps.map((app) => (
               <li key={app.href} className="border-b border-border">
                 <Link

@@ -1,4 +1,13 @@
+import { AvatarStack } from "@/components/avatar-stack"
 import { EmptyState } from "@/components/empty-state"
+import {
+  Focus,
+  FocusHighlight,
+  FocusLabel,
+  FocusMeta,
+  FocusTitle,
+} from "@/components/focus"
+import { NumberTicker } from "@/components/ui/number-ticker"
 import { PageHeader, SectionHeader } from "@/components/page-header"
 import { PortalShell } from "@/components/portal-shell"
 import { runAction } from "@/lib/actions/define"
@@ -17,6 +26,8 @@ export default async function LeavePage() {
     runAction(listLeaves, actor, {}),
     runAction(listLeaves, actor, { past: true }),
   ])
+  const nextMonday = upcomingMondays()[0]
+  const away = dates.find((row) => row.date === nextMonday)?.members ?? []
   const mondays = upcomingMondays().map((date) => ({
     value: date,
     label: dateLabel(date),
@@ -28,13 +39,41 @@ export default async function LeavePage() {
     >
       <div className="flex flex-col gap-12">
         <PageHeader title="請假" actions={<LeaveForm mondays={mondays} />} />
+        <Focus>
+          <FocusLabel>{dateLabel(nextMonday)}的實驗室會議</FocusLabel>
+          <FocusTitle>
+            {away.length === 0 ? (
+              "沒有人請假"
+            ) : (
+              <>
+                <FocusHighlight>
+                  <NumberTicker value={away.length} />
+                </FocusHighlight>{" "}
+                人請假
+              </>
+            )}
+          </FocusTitle>
+          {away.length > 0 && (
+            <FocusMeta>
+              <AvatarStack
+                people={away.map((member) => ({
+                  id: member.userId,
+                  name: member.name,
+                }))}
+              />
+              {away.some((member) => member.userId === actor.userId) && (
+                <span>包括你</span>
+              )}
+            </FocusMeta>
+          )}
+        </Focus>
         {dates.length === 0 ? (
           <EmptyState noun="請假" />
         ) : (
           dates.map(({ date, members }) => (
             <section key={date} className="flex flex-col gap-2">
               <SectionHeader title={dateLabel(date)} />
-              <ul className="flex flex-col">
+              <ul className="flex stagger-rise flex-col">
                 {members.map((member) => (
                   <li
                     key={member.userId}
@@ -56,7 +95,7 @@ export default async function LeavePage() {
         {past.length > 0 && (
           <section className="flex flex-col gap-2">
             <SectionHeader title="過去" />
-            <ul className="flex flex-col">
+            <ul className="flex stagger-rise flex-col">
               {past.flatMap(({ date, members }) =>
                 members.map((member) => (
                   <li
