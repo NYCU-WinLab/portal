@@ -28,7 +28,7 @@ export default async function ProfilePage() {
 
   return (
     <PortalShell
-      page={{ label: "我的資料", href: "/profile", tip: "Keycloak 帳號" }}
+      page={{ label: "Profile", href: "/profile", tip: "Keycloak 帳號" }}
     >
       <div className="flex flex-col gap-12">
         <PageHeader

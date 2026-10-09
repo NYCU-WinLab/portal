@@ -35,7 +35,7 @@ export default async function LeavePage() {
 
   return (
     <PortalShell
-      page={{ label: "請假", href: "/leave", tip: "週一實驗室會議" }}
+      page={{ label: "Leave", href: "/leave", tip: "週一實驗室會議" }}
     >
       <div className="flex flex-col gap-12">
         <PageHeader title="請假" actions={<LeaveForm mondays={mondays} />} />
