@@ -23,9 +23,9 @@ const kindLabel = { holiday: "放假", speaker: "演講", thesis: "碩論" } as 
 
 function When({ meeting }: { meeting: ScheduledMeeting }) {
   return (
-    <span className="flex w-44 shrink-0 gap-2 whitespace-nowrap tabular-nums">
-      <span>{dateLabel(meeting.date)}</span>
-      <span className="text-muted-foreground">{meeting.label}</span>
+    <span className="flex shrink-0 whitespace-nowrap tabular-nums">
+      <span className="w-14">{dateLabel(meeting.date)}</span>
+      <span className="w-20 text-muted-foreground">{meeting.label}</span>
     </span>
   )
 }
@@ -79,7 +79,7 @@ function MeetingRow({
         </span>
       }
     >
-      <div className="flex flex-wrap items-center gap-x-6 gap-y-3 text-muted-foreground sm:pl-48">
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-3 text-muted-foreground sm:pl-38">
         {meeting.questioners.length > 0 && (
           <AvatarStack people={meeting.questioners} />
         )}

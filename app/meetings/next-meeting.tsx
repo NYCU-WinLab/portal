@@ -32,7 +32,7 @@ export function NextMeeting({ meeting }: { meeting: ScheduledMeeting | null }) {
   return (
     <Focus>
       <FocusLabel>
-        下一場 · {dateLabel(meeting.date)}
+        下一場 {dateLabel(meeting.date)}
         {meeting.label && ` ${meeting.label}`}
       </FocusLabel>
       <FocusTitle>

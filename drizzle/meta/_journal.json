@@ -50,6 +50,13 @@
       "when": 1791554254403,
       "tag": "0006_ec411",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1791554526073,
+      "tag": "0007_semesters",
+      "breakpoints": true
     }
   ]
 }

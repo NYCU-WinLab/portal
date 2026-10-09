@@ -83,9 +83,8 @@ export function PaperList({
                   ))}
                   {paper.uses.map((use) => (
                     <span key={use.date}>
-                      {use.presenter ?? "未排"} {use.date.slice(0, 4)} 年{" "}
-                      {dateLabel(use.date)}
-                      {use.past ? "報告過" : "已選"}
+                      {use.presenter ?? "未排"} {use.date.slice(0, 4)}/
+                      {dateLabel(use.date)} {use.past ? "報告過" : "已選"}
                     </span>
                   ))}
                 </div>

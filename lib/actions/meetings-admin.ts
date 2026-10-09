@@ -7,6 +7,7 @@ import {
   inArray,
   isNotNull,
   isNull,
+  lte,
 } from "drizzle-orm"
 import { z } from "zod"
 
@@ -24,7 +25,12 @@ import {
   presenterRoster,
   QUESTIONERS_PER_WEEK,
 } from "@/lib/actions/meetings-shared"
-import { meetingKinds, meetingQuestioners, meetings } from "@/lib/db/schema"
+import {
+  meetingKinds,
+  meetingQuestioners,
+  meetings,
+  semesters,
+} from "@/lib/db/schema"
 import { taipeiToday } from "@/lib/leave-dates"
 import { addDays, semesterOf } from "@/lib/semester"
 
@@ -41,7 +47,7 @@ export const generateSemester = defineAction({
   name: "generate_semester",
   title: "產生學期排程",
   description:
-    "Admins only. Adds one meeting a week for a semester: weeks rows starting at start (the first week of classes), 7 days apart, labelled 第 1 週, 第 2 週 and so on, skipping dates that already have one. Dates listed in holidays become holiday weeks with that reason. Presenters are not assigned; use fill_presenters after.",
+    "Admins only. Sets up a semester: start is its first week of classes, and weeks how many weeks of classes it has; every week's label is counted from them (第 1 週 to 第 <weeks> 週, 寒假 or 暑假 before and after); running it again for the same semester moves that start. Also adds one meeting a week, weeks rows from start, 7 days apart, skipping dates that already have one. Dates listed in holidays become holiday weeks with that reason. Presenters are not assigned; use fill_presenters after.",
   kind: "mutation",
   input: z.object({
     start: isoDate,
@@ -63,13 +69,22 @@ export const generateSemester = defineAction({
     const off = new Map(holidays.map(({ date, reason }) => [date, reason]))
     for (const date of off.keys())
       if (!dates.includes(date)) throw new Error(`${date} 不在這學期的週次裡`)
+    const window = semesterOf(start)
     return changeSchedule(async (tx) => {
+      await tx
+        .delete(semesters)
+        .where(
+          and(
+            gte(semesters.start, window.start),
+            lte(semesters.start, window.end)
+          )
+        )
+      await tx.insert(semesters).values({ start, weeks })
       const added = await tx
         .insert(meetings)
         .values(
-          dates.map((date, week) => ({
+          dates.map((date) => ({
             date,
-            label: `第 ${week + 1} 週`,
             kind: off.has(date) ? ("holiday" as const) : ("regular" as const),
             holiday: off.get(date) ?? null,
           }))
@@ -84,16 +99,15 @@ export const generateSemester = defineAction({
 export const addMeeting = defineAction({
   name: "add_meeting",
   title: "新增一週",
-  description: `Admins only. Adds one meeting on date. label is what the lab calls the week (e.g. 寒假); kind is regular (default), thesis, speaker or holiday; holiday says why there is no meeting.`,
+  description: `Admins only. Adds one meeting on date; its week label comes from the semester (generate_semester). kind is regular (default), thesis, speaker or holiday; holiday says why there is no meeting.`,
   kind: "mutation",
   input: z.object({
     date: isoDate,
-    label: optionalText(50),
     kind: kind.default("regular"),
     holiday: optionalText(50),
     title: optionalText(300),
   }),
-  run: async (actor, { date, label, kind, holiday, title }) => {
+  run: async (actor, { date, kind, holiday, title }) => {
     await requireAdmin(actor, "meetings")
     if (kind === "holiday" && !holiday) throw new Error("請填放假原因")
     return changeSchedule(async (tx) => {
@@ -101,7 +115,6 @@ export const addMeeting = defineAction({
         .insert(meetings)
         .values({
           date,
-          label,
           kind,
           holiday: kind === "holiday" ? holiday : null,
           title: kind === "regular" || kind === "holiday" ? null : title,
@@ -118,12 +131,11 @@ export const updateMeeting = defineAction({
   name: "update_meeting",
   title: "編輯會議",
   description:
-    "Admins only. Changes any part of one week: moves it to newDate, changes its label, kind, holiday reason, presenterId (a member id, or null to open the week), paperId (from list_papers, regular weeks only), title (thesis and speaker weeks), slides and recording links, notes, location and startsAt (HH:MM). Leave a field out to keep it.",
+    "Admins only. Changes any part of one week: moves it to newDate, changes its kind, holiday reason, presenterId (a member id, or null to open the week), paperId (from list_papers, regular weeks only), title (thesis and speaker weeks), slides and recording links, notes, location and startsAt (HH:MM). Leave a field out to keep it.",
   kind: "mutation",
   input: z.object({
     date: isoDate,
     newDate: isoDate.optional(),
-    label: optionalText(50),
     kind: kind.optional(),
     holiday: optionalText(50),
     presenterId: z.uuid().nullish(),

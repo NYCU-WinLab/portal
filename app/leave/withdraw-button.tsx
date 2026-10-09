@@ -39,7 +39,7 @@ export function WithdrawButton({
             <Undo2Icon />
           </TooltipTrigger>
         }
-        title={`撤回 ${label}的請假？`}
+        title={`撤回 ${label} 的請假？`}
         confirmLabel="撤回"
         onConfirm={withdraw}
       />

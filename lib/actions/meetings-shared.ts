@@ -10,11 +10,12 @@ import {
   meetings,
   papers,
   presenters,
+  semesters,
   user,
 } from "@/lib/db/schema"
 import { type LabMember, labDirectory } from "@/lib/keycloak"
 import { taipeiToday } from "@/lib/leave-dates"
-import { semesterOf, spaceDigits } from "@/lib/semester"
+import { semesterOf, weekLabel } from "@/lib/semester"
 
 export type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0]
 
@@ -213,7 +214,6 @@ export async function readSchedule(where?: { fromDate?: string }) {
     .select({
       id: meetings.id,
       date: meetings.date,
-      label: meetings.label,
       kind: meetings.kind,
       holiday: meetings.holiday,
       presenterId: meetings.presenterId,
@@ -234,6 +234,9 @@ export async function readSchedule(where?: { fromDate?: string }) {
     .leftJoin(papers, eq(papers.id, meetings.paperId))
     .where(where?.fromDate ? gt(meetings.date, where.fromDate) : undefined)
     .orderBy(asc(meetings.date))
+  const terms = await db
+    .select({ start: semesters.start, weeks: semesters.weeks })
+    .from(semesters)
   const questioners = await db
     .select({
       meetingId: meetingQuestioners.meetingId,
@@ -246,7 +249,7 @@ export async function readSchedule(where?: { fromDate?: string }) {
     .orderBy(asc(user.name))
   return rows.map((row) => ({
     date: row.date,
-    label: row.label && spaceDigits(row.label),
+    label: weekLabel(row.date, terms),
     semester: semesterOf(row.date).label,
     kind: row.kind,
     holiday: row.holiday,
