@@ -59,6 +59,15 @@ export const paperTagLinks = pgTable(
   (table) => [primaryKey({ columns: [table.paperId, table.tagId] })]
 )
 
+// The first week of classes of each semester, one per semester window
+// (lib/semester.ts), and how many weeks of classes it has, both as the admin
+// set them when generating it. Week labels are counted from them: 第 1 週 to
+// 第 <weeks> 週, 寒假 or 暑假 before and after.
+export const semesters = pgTable("semesters", {
+  start: date({ mode: "string" }).primaryKey(),
+  weeks: integer().notNull().default(16),
+})
+
 // One row per Monday lab meeting; the date is the key members use.
 // kind replaces the old holiday / speaker / thesis flags, so they cannot
 // clash. title is free text for a speaker or thesis week (and for weeks
@@ -68,9 +77,6 @@ export const meetings = pgTable(
   {
     id: uuid().defaultRandom().primaryKey(),
     date: date({ mode: "string" }).notNull().unique(),
-    /** What the lab calls the week: "第 3 週", "寒假". Set when a semester is
-     * generated; admins may change it. */
-    label: text(),
     kind: text({ enum: meetingKinds }).notNull().default("regular"),
     /** Why a holiday week has no meeting, e.g. "國慶日". */
     holiday: text(),

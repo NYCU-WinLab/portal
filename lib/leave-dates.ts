@@ -20,8 +20,8 @@ export function upcomingMondays(today: string = taipeiToday()) {
   })
 }
 
-/** 2026-10-13 → "10 月 13 日". */
+/** 2026-10-13 → "10/13". */
 export function dateLabel(isoDate: string) {
   const [, month, day] = isoDate.split("-").map(Number)
-  return `${month} 月 ${day} 日`
+  return `${month}/${day}`
 }

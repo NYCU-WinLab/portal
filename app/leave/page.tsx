@@ -40,7 +40,7 @@ export default async function LeavePage() {
       <div className="flex flex-col gap-12">
         <PageHeader title="請假" actions={<LeaveForm mondays={mondays} />} />
         <Focus>
-          <FocusLabel>{dateLabel(nextMonday)}的實驗室會議</FocusLabel>
+          <FocusLabel>{dateLabel(nextMonday)} 的實驗室會議</FocusLabel>
           <FocusTitle>
             {away.length === 0 ? (
               "沒有人請假"

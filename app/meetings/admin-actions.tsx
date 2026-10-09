@@ -102,17 +102,11 @@ export function AdminActions({ dates }: { dates: Option[] }) {
         title="新增一週"
         submitLabel="新增"
         onSubmit={(data) =>
-          report(
-            add({ date: value(data, "date"), label: value(data, "label") }),
-            "已新增"
-          )
+          report(add({ date: value(data, "date") }), "已新增")
         }
       >
         <FormField label="日期" required>
           <Input name="date" type="date" />
-        </FormField>
-        <FormField label="週次">
-          <Input name="label" maxLength={50} placeholder="第 17 週" />
         </FormField>
       </FormDialog>
       <FormDialog

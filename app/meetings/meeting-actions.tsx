@@ -22,6 +22,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import type { ScheduledMeeting } from "@/lib/actions/meetings-shared"
+import { dateLabel } from "@/lib/leave-dates"
 
 import { questioners, remove, update, updateMine } from "./actions"
 import { report } from "./report"
@@ -134,7 +135,6 @@ export function MeetingActions({
       update({
         date,
         newDate: newDate !== date ? newDate : undefined,
-        label: text(data, "label"),
         kind,
         holiday: kind === "holiday" ? text(data, "holiday") : undefined,
         presenterId:
@@ -170,25 +170,16 @@ export function MeetingActions({
             <PencilIcon />
           </IconAction>
         }
-        title={`編輯 ${meeting.label ?? date}`}
+        title={`編輯 ${dateLabel(date)}`}
         size="wide"
         submitLabel="儲存"
         onSubmit={submitEdit}
       >
         {admin && (
           <>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <FormField label="日期" required>
-                <Input name="date" type="date" defaultValue={date} />
-              </FormField>
-              <FormField label="週次">
-                <Input
-                  name="label"
-                  defaultValue={meeting.label ?? ""}
-                  maxLength={50}
-                />
-              </FormField>
-            </div>
+            <FormField label="日期" required>
+              <Input name="date" type="date" defaultValue={date} />
+            </FormField>
             <div className="flex flex-col gap-2">
               <Label htmlFor="meeting-kind">類型</Label>
               <Select
@@ -311,7 +302,7 @@ export function MeetingActions({
               <Trash2Icon />
             </IconAction>
           }
-          title={`刪除 ${meeting.label ?? date}？`}
+          title={`刪除 ${dateLabel(date)}？`}
           confirmLabel="刪除"
           onConfirm={() => report(remove({ date }), "已刪除")}
         />

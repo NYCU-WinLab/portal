@@ -37,7 +37,7 @@ const kindDescription =
 export const listMeetings = defineAction({
   name: "list_meetings",
   title: "實驗室會議排程",
-  description: `The Monday lab meeting schedule: for each week its date, label (what the lab calls the week, e.g. 第 3 週), semester, kind, presenter, paper or title, slides and recording links, notes, place, start time and questioners. ${kindDescription} past=false (default) gives today in Taipei onward, soonest first; past=true gives earlier weeks, latest first.`,
+  description: `The Monday lab meeting schedule: for each week its date, label (the week counted from the semester's first week of classes: 第 3 週, or 寒假 / 暑假; null before the semester is set up), semester, kind, presenter, paper or title, slides and recording links, notes, place, start time and questioners. ${kindDescription} past=false (default) gives today in Taipei onward, soonest first; past=true gives earlier weeks, latest first.`,
   kind: "query",
   input: z.object({ past: z.boolean().default(false) }),
   run: async (_actor, { past }) => {
