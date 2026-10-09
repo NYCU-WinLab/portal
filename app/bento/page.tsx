@@ -138,13 +138,13 @@ export default async function BentoPage() {
               </div>
               <div className="relative z-10">
                 <OrderDialog
-                orderId={focus.order.id}
-                restaurant={focus.restaurant.name}
-                menu={focus.menu}
-                optionGroups={focus.optionGroups}
-                mine={mine?.lines ?? []}
-                members={members}
-                me={actor.userId}
+                  orderId={focus.order.id}
+                  restaurant={focus.restaurant.name}
+                  menu={focus.menu}
+                  optionGroups={focus.optionGroups}
+                  mine={mine?.lines ?? []}
+                  members={members}
+                  me={actor.userId}
                 />
               </div>
             </div>
