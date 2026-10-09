@@ -1,9 +1,10 @@
 import { FieldList, FieldRow } from "@/components/field-list"
-import { PageHeader } from "@/components/page-header"
+import { PageHeader, SectionHeader } from "@/components/page-header"
 import { PortalShell } from "@/components/portal-shell"
 import { buttonVariants } from "@/components/ui/button"
 import { errorMessage, runAction } from "@/lib/actions/define"
 import { getProfile } from "@/lib/actions/profile"
+import { listMeetingStats } from "@/lib/actions/stats"
 import { requireActor } from "@/lib/auth/session"
 import { accountConsoleUrl } from "@/lib/keycloak"
 
@@ -22,9 +23,15 @@ const fields = [
 
 export default async function ProfilePage() {
   const actor = await requireActor("/profile")
-  const profile = await runAction(getProfile, actor, {}).catch(
-    (error: unknown) => ({ error: errorMessage(error) })
-  )
+  const [profile, stats] = await Promise.all([
+    runAction(getProfile, actor, {}).catch((error: unknown) => ({
+      error: errorMessage(error),
+    })),
+    runAction(listMeetingStats, actor, {}),
+  ])
+  const mine = stats.members.find((row) => row.userId === actor.userId)
+  const count = (done: number, next: number) =>
+    `${done} 次${next ? `，之後排了 ${next} 次` : ""}`
 
   return (
     <PortalShell
@@ -57,6 +64,22 @@ export default async function ProfilePage() {
               </FieldRow>
             ))}
           </FieldList>
+        )}
+        {mine && (
+          <section className="flex flex-col gap-6">
+            <SectionHeader title="實驗室會議" />
+            <FieldList>
+              <FieldRow label="報告">
+                {count(mine.presented, mine.presentScheduled)}
+              </FieldRow>
+              <FieldRow label="提問">
+                {count(mine.asked, mine.askScheduled)}
+              </FieldRow>
+              <FieldRow label="請假">
+                {count(mine.leaves, mine.leaveScheduled)}
+              </FieldRow>
+            </FieldList>
+          </section>
         )}
       </div>
     </PortalShell>

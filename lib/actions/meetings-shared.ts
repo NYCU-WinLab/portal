@@ -15,7 +15,7 @@ import {
 } from "@/lib/db/schema"
 import { type LabMember, labDirectory } from "@/lib/keycloak"
 import { taipeiToday } from "@/lib/leave-dates"
-import { semesterOf, weekLabel } from "@/lib/semester"
+import { gradeLabel, semesterOf, weekLabel } from "@/lib/semester"
 
 export type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0]
 
@@ -68,6 +68,11 @@ export async function presenterRoster(tx: Tx | typeof db = db) {
         ...row,
         status: member?.status ?? null,
         cohort: member?.cohort ?? null,
+        grade: gradeLabel(
+          member?.status ?? null,
+          member?.cohort ?? null,
+          taipeiToday()
+        ),
         inRotation: inRotation(member),
       }
     })

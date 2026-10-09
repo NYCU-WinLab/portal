@@ -37,6 +37,7 @@ import {
   removePresenter,
 } from "@/lib/actions/presenters"
 import { getProfile } from "@/lib/actions/profile"
+import { listMeetingStats } from "@/lib/actions/stats"
 import { whoami } from "@/lib/actions/users"
 
 /** Every action, in the order MCP lists them. */
@@ -52,6 +53,7 @@ export const actions: Action[] = [
   listPapers,
   listPaperTags,
   listPresenters,
+  listMeetingStats,
   generateSemester,
   addMeeting,
   updateMeeting,
