@@ -16,6 +16,7 @@ export const dynamic = "force-dynamic"
 const apps = [
   { label: "Meetings", href: "/meetings" },
   { label: "Leave", href: "/leave" },
+  { label: "Bento", href: "/bento" },
   { label: "Profile", href: "/profile" },
   { label: "Admins", href: "/admins" },
 ]

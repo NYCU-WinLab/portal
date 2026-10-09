@@ -57,6 +57,13 @@
       "when": 1791554526073,
       "tag": "0007_semesters",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1791558433830,
+      "tag": "0008_bento",
+      "breakpoints": true
     }
   ]
 }

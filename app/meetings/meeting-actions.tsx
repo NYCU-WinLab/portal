@@ -25,7 +25,7 @@ import type { ScheduledMeeting } from "@/lib/actions/meetings-shared"
 import { dateLabel } from "@/lib/leave-dates"
 
 import { questioners, remove, update, updateMine } from "./actions"
-import { report } from "./report"
+import { report } from "@/lib/report"
 
 type Option = { value: string; label: string }
 
