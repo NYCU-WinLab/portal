@@ -26,6 +26,14 @@ export function semesterOf(isoDate: string): Semester {
   }
 }
 
+/** "第6週" → "第 6 週": a space between digits and Chinese, as the lab
+ * writes week labels. */
+export function spaceDigits(text: string) {
+  return text
+    .replace(/(\p{Script=Han})(\d)/gu, "$1 $2")
+    .replace(/(\d)(\p{Script=Han})/gu, "$1 $2")
+}
+
 /** isoDate plus days, as "YYYY-MM-DD". */
 export function addDays(isoDate: string, days: number) {
   const day = new Date(`${isoDate}T00:00:00Z`)
