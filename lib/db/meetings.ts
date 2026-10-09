@@ -80,7 +80,7 @@ export const meetings = pgTable(
     slidesUrl: text(),
     recordingUrl: text(),
     notes: text(),
-    location: text().notNull().default("EC 411"),
+    location: text().notNull().default("EC411"),
     startsAt: time().notNull().default("15:30"),
     createdAt: timestamp({ withTimezone: true }).defaultNow().notNull(),
   },

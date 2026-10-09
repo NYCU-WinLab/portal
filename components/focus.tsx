@@ -3,15 +3,15 @@ import * as React from "react"
 import { cn } from "@/lib/utils"
 
 // The one loud thing on a page: what the member came to see first (the next
-// meeting, today's order, what waits on them). It rises in on the spring and
-// is the only place a page uses the primary color for text. Everything
+// meeting, today's order, what waits on them). Its lines arrive top to bottom, like a
+// list, and it is the only place a page uses the primary color for text. Everything
 // below it stays quiet. One per page, right under the page header.
 function Focus({ className, ...props }: React.ComponentProps<"section">) {
   return (
     <section
       data-slot="focus"
       className={cn(
-        "flex animate-rise flex-col gap-3 border-b border-border pb-6",
+        "flex stagger-rise flex-col gap-3 border-b border-border pb-6",
         className
       )}
       {...props}

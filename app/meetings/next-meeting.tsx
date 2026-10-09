@@ -57,10 +57,7 @@ export function NextMeeting({ meeting }: { meeting: ScheduledMeeting | null }) {
         ))}
       <FocusMeta>
         {meeting.questioners.length > 0 && (
-          <>
-            <AvatarStack people={meeting.questioners} />
-            <span>提問</span>
-          </>
+          <AvatarStack people={meeting.questioners} />
         )}
         <span>
           {meeting.location}　{meeting.startsAt}

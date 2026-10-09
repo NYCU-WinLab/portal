@@ -14,7 +14,7 @@ import {
 } from "@/lib/db/schema"
 import { type LabMember, labDirectory } from "@/lib/keycloak"
 import { taipeiToday } from "@/lib/leave-dates"
-import { semesterOf } from "@/lib/semester"
+import { semesterOf, spaceDigits } from "@/lib/semester"
 
 export type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0]
 
@@ -246,7 +246,7 @@ export async function readSchedule(where?: { fromDate?: string }) {
     .orderBy(asc(user.name))
   return rows.map((row) => ({
     date: row.date,
-    label: row.label,
+    label: row.label && spaceDigits(row.label),
     semester: semesterOf(row.date).label,
     kind: row.kind,
     holiday: row.holiday,

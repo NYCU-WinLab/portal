@@ -81,10 +81,7 @@ function MeetingRow({
     >
       <div className="flex flex-wrap items-center gap-x-6 gap-y-3 text-muted-foreground sm:pl-48">
         {meeting.questioners.length > 0 && (
-          <span className="flex items-center gap-3">
-            <AvatarStack people={meeting.questioners} />
-            提問
-          </span>
+          <AvatarStack people={meeting.questioners} />
         )}
         {meeting.paper?.url && (
           <a
