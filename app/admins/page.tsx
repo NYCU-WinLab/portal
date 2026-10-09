@@ -21,7 +21,7 @@ export default async function AdminsPage() {
 
   return (
     <PortalShell
-      page={{ label: "管理員", href: "/admins", tip: "各 app 的管理員" }}
+      page={{ label: "Admins", href: "/admins", tip: "各 app 的管理員" }}
     >
       <div className="flex flex-col gap-12">
         <PageHeader

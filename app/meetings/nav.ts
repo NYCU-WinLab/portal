@@ -1,5 +1,5 @@
 export const meetingsPage = {
-  label: "實驗室會議",
+  label: "Meetings",
   href: "/meetings",
   tip: "週一實驗室會議",
 }
