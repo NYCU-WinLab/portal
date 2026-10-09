@@ -1,4 +1,6 @@
+import { AvatarStack } from "@/components/avatar-stack"
 import { EmptyState } from "@/components/empty-state"
+import { ExpandRow } from "@/components/expand-row"
 import { PageHeader, SectionHeader } from "@/components/page-header"
 import { PortalShell } from "@/components/portal-shell"
 import { listMembers } from "@/lib/actions/admins"
@@ -13,11 +15,24 @@ import { dateLabel, taipeiToday } from "@/lib/leave-dates"
 import { AdminActions } from "./admin-actions"
 import { MeetingActions } from "./meeting-actions"
 import { meetingsNav, meetingsPage } from "./nav"
+import { NextMeeting } from "./next-meeting"
 
 export const dynamic = "force-dynamic"
 
 const kindLabel = { holiday: "放假", speaker: "演講", thesis: "碩論" } as const
 
+function When({ meeting }: { meeting: ScheduledMeeting }) {
+  return (
+    <span className="flex w-44 shrink-0 gap-2 whitespace-nowrap tabular-nums">
+      <span>{dateLabel(meeting.date)}</span>
+      <span className="text-muted-foreground">{meeting.label}</span>
+    </span>
+  )
+}
+
+const link = "underline-offset-4 hover:underline"
+
+// A week in the list: quiet on its own line, opening in place for the rest.
 function MeetingRow({
   meeting,
   actions,
@@ -25,80 +40,88 @@ function MeetingRow({
   meeting: ScheduledMeeting
   actions?: React.ReactNode
 }) {
-  const what =
-    meeting.kind === "holiday"
-      ? meeting.holiday
-      : meeting.paper?.url
-        ? null
-        : meeting.title
+  if (meeting.kind === "holiday")
+    return (
+      <li className="flex min-h-14 items-center gap-4 border-b border-border py-3 text-muted-foreground">
+        <When meeting={meeting} />
+        <span className="min-w-0 flex-1">{meeting.holiday ?? "放假"}</span>
+        {actions}
+      </li>
+    )
   return (
-    <li className="flex min-h-14 flex-col gap-1 border-b border-border py-3 sm:flex-row sm:items-start sm:gap-4">
-      <div className="flex w-44 shrink-0 gap-2 whitespace-nowrap tabular-nums">
-        <span>{dateLabel(meeting.date)}</span>
-        <span className="text-muted-foreground">{meeting.label}</span>
-      </div>
-      <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <div className="flex flex-wrap items-baseline gap-x-3">
-          {meeting.kind !== "regular" && (
-            <span className="text-muted-foreground">
-              {kindLabel[meeting.kind]}
-            </span>
-          )}
-          {meeting.presenter && (
-            <span className="font-medium">{meeting.presenter.name}</span>
-          )}
-          {meeting.paper?.url ? (
-            <a
-              href={meeting.paper.url}
-              target="_blank"
-              rel="noreferrer"
-              className="min-w-0 underline-offset-4 hover:underline"
-            >
-              {meeting.paper.title}
-            </a>
-          ) : (
-            what && <span className="min-w-0">{what}</span>
-          )}
-          {meeting.kind === "regular" && !meeting.presenter && (
-            <span className="text-muted-foreground">未排</span>
-          )}
-        </div>
-        {(meeting.questioners.length > 0 ||
-          meeting.slidesUrl ||
-          meeting.recordingUrl ||
-          meeting.notes) && (
-          <div className="flex flex-wrap gap-x-4 text-muted-foreground">
-            {meeting.questioners.length > 0 && (
-              <span>
-                提問 {meeting.questioners.map((seat) => seat.name).join("、")}
+    <ExpandRow
+      actions={actions}
+      summary={
+        <span className="flex flex-col gap-1 sm:flex-row sm:gap-4">
+          <When meeting={meeting} />
+          <span className="flex min-w-0 flex-1 gap-3">
+            {meeting.kind !== "regular" && (
+              <span className="shrink-0 text-muted-foreground">
+                {kindLabel[meeting.kind]}
               </span>
             )}
-            {meeting.slidesUrl && (
-              <a
-                href={meeting.slidesUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="underline-offset-4 hover:underline"
-              >
-                投影片
-              </a>
+            <span
+              className={
+                meeting.presenter
+                  ? "shrink-0 font-medium"
+                  : "shrink-0 text-muted-foreground"
+              }
+            >
+              {meeting.presenter?.name ??
+                (meeting.kind === "speaker" ? "" : "未排")}
+            </span>
+            {meeting.title && (
+              <span className="min-w-0 truncate text-muted-foreground">
+                {meeting.title}
+              </span>
             )}
-            {meeting.recordingUrl && (
-              <a
-                href={meeting.recordingUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="underline-offset-4 hover:underline"
-              >
-                錄影
-              </a>
-            )}
-            {meeting.notes && <span>{meeting.notes}</span>}
-          </div>
+          </span>
+        </span>
+      }
+    >
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-3 text-muted-foreground sm:pl-48">
+        {meeting.questioners.length > 0 && (
+          <span className="flex items-center gap-3">
+            <AvatarStack people={meeting.questioners} />
+            提問
+          </span>
         )}
+        {meeting.paper?.url && (
+          <a
+            href={meeting.paper.url}
+            target="_blank"
+            rel="noreferrer"
+            className={link}
+          >
+            論文
+          </a>
+        )}
+        {meeting.slidesUrl && (
+          <a
+            href={meeting.slidesUrl}
+            target="_blank"
+            rel="noreferrer"
+            className={link}
+          >
+            投影片
+          </a>
+        )}
+        {meeting.recordingUrl && (
+          <a
+            href={meeting.recordingUrl}
+            target="_blank"
+            rel="noreferrer"
+            className={link}
+          >
+            錄影
+          </a>
+        )}
+        <span>
+          {meeting.location}　{meeting.startsAt}
+        </span>
+        {meeting.notes && <span>{meeting.notes}</span>}
       </div>
-      {actions}
-    </li>
+    </ExpandRow>
   )
 }
 
@@ -150,13 +173,16 @@ export default async function MeetingsPage() {
             )
           }
         />
+        <NextMeeting
+          meeting={meetings.find((row) => row.kind !== "holiday") ?? null}
+        />
         {meetings.length === 0 ? (
           <EmptyState noun="會議" />
         ) : (
           semesters.map((semester) => (
             <section key={semester} className="flex flex-col gap-2">
               <SectionHeader title={`${semester}學期`} />
-              <ul className="flex flex-col">
+              <ul className="flex stagger-rise flex-col">
                 {meetings
                   .filter((row) => row.semester === semester)
                   .map((meeting) => (
@@ -173,7 +199,7 @@ export default async function MeetingsPage() {
         {past.length > 0 && (
           <section className="flex flex-col gap-2">
             <SectionHeader title="過去" />
-            <ul className="flex flex-col">
+            <ul className="flex stagger-rise flex-col">
               {past.map((meeting) => (
                 <MeetingRow
                   key={meeting.date}
