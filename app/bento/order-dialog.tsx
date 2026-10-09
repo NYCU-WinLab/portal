@@ -18,7 +18,8 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import type { OptionGroup } from "@/lib/actions/bento-restaurants"
-import { dishLabel, ntd } from "@/lib/bento"
+import { dishLabel } from "@/lib/bento"
+import { ntd } from "@/lib/money"
 import { report } from "@/lib/report"
 
 import { order } from "./actions"

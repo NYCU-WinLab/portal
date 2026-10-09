@@ -10,11 +10,6 @@ export function overBudget(userId: string, total: number) {
   return total > BENTO_BUDGET && userId !== PROFESSOR_ID
 }
 
-/** "NT$ 1,234" */
-export function ntd(amount: number) {
-  return `NT$ ${amount.toLocaleString("en-US")}`
-}
-
 /** "雞腿飯（半糖、少冰）" */
 export function dishLabel(line: {
   name: string

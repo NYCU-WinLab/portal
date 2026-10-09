@@ -5,9 +5,10 @@ import { buttonVariants } from "@/components/ui/button"
 import { errorMessage, runAction } from "@/lib/actions/define"
 import { getBentoStats } from "@/lib/actions/bento"
 import { getProfile } from "@/lib/actions/profile"
+import { getReimburseStats } from "@/lib/actions/reimburse"
 import { listMeetingStats } from "@/lib/actions/stats"
 import { requireActor } from "@/lib/auth/session"
-import { ntd } from "@/lib/bento"
+import { ntd } from "@/lib/money"
 import { accountConsoleUrl } from "@/lib/keycloak"
 
 import { SignOutButton } from "./sign-out-button"
@@ -25,13 +26,15 @@ const fields = [
 
 export default async function ProfilePage() {
   const actor = await requireActor("/profile")
-  const [profile, stats, bento] = await Promise.all([
+  const [profile, stats, bento, ledger] = await Promise.all([
     runAction(getProfile, actor, {}).catch((error: unknown) => ({
       error: errorMessage(error),
     })),
     runAction(listMeetingStats, actor, {}),
     runAction(getBentoStats, actor, {}),
+    runAction(getReimburseStats, actor, {}),
   ])
+  const paid = ledger.applicants.find((row) => row.applicantId === actor.userId)
   const lunch = bento.members.find((row) => row.userId === actor.userId)
   const mine = stats.members.find((row) => row.userId === actor.userId)
   const count = (done: number, next: number) =>
@@ -97,6 +100,19 @@ export default async function ProfilePage() {
                 <FieldRow label="最常點">
                   {lunch.favorite.name} × {lunch.favorite.count}
                 </FieldRow>
+              )}
+            </FieldList>
+          </section>
+        )}
+        {paid && (
+          <section className="flex flex-col gap-6">
+            <SectionHeader title="記帳" />
+            <FieldList>
+              <FieldRow label="報帳">
+                {paid.entries} 筆，{ntd(paid.total)}
+              </FieldRow>
+              {paid.owed > 0 && (
+                <FieldRow label="未轉帳">{ntd(paid.owed)}</FieldRow>
               )}
             </FieldList>
           </section>
