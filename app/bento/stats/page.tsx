@@ -32,10 +32,10 @@ export default async function BentoStatsPage() {
                 <span className="w-24 shrink-0 font-medium">{member.name}</span>
                 <span className="min-w-0 flex-1 truncate text-muted-foreground">
                   {member.favorite &&
-                    `本命 ${member.favorite.name} × ${member.favorite.count}`}
+                    `${member.favorite.name} × ${member.favorite.count}`}
                 </span>
                 <span className="shrink-0 text-muted-foreground tabular-nums">
-                  {member.dishes} 份 · {member.kinds} 種 · {ntd(member.spent)}
+                  {member.dishes} 份，{member.kinds} 種，{ntd(member.spent)}
                 </span>
               </li>
             ))}

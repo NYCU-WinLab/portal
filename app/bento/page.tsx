@@ -18,12 +18,13 @@ import { getBentoOrder, listBentoOrders } from "@/lib/actions/bento"
 import { listBentoRestaurants } from "@/lib/actions/bento-restaurants"
 import { runAction } from "@/lib/actions/define"
 import { requireActor } from "@/lib/auth/session"
-import { ntd } from "@/lib/bento"
+import { dishLabel, ntd } from "@/lib/bento"
 import { dateLabel, taipeiToday } from "@/lib/leave-dates"
 
 import { CreateOrder } from "./create-order"
 import { bentoNav, bentoPage } from "./nav"
 import { OrderDialog } from "./order-dialog"
+import { RestaurantLinks } from "./restaurant-links"
 
 export const dynamic = "force-dynamic"
 
@@ -45,7 +46,7 @@ function OrderRow({ order }: { order: Listed }) {
         </span>
         <span className="min-w-0 flex-1 truncate">{order.restaurant}</span>
         <span className="shrink-0 text-muted-foreground tabular-nums">
-          {order.people} 人 · {ntd(order.total)}
+          {order.people} 人，{ntd(order.total)}
         </span>
       </Link>
     </li>
@@ -88,47 +89,55 @@ export default async function BentoPage() {
         />
         {focus ? (
           <Focus>
-            <FocusLabel>{when(focus.order)} 開放點餐</FocusLabel>
-            <FocusTitle>
-              <Link
-                href={`/bento/orders/${focus.order.id}`}
-                prefetch
-                className="underline-offset-4 hover:underline"
-              >
-                {focus.restaurant.name}
-              </Link>
-            </FocusTitle>
-            <FocusMeta>
-              <span>
-                <FocusHighlight>
-                  <NumberTicker value={focus.totals.people} />
-                </FocusHighlight>{" "}
-                人點了{" "}
-                <FocusHighlight>
-                  <NumberTicker value={focus.totals.dishes} />
-                </FocusHighlight>{" "}
-                份
-              </span>
-              {focus.people.length > 0 && (
-                <AvatarStack
-                  people={focus.people.map((person) => ({
-                    id: person.userId,
-                    name: person.name,
-                  }))}
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+              <div className="flex min-w-0 stagger-rise flex-col gap-3">
+                <FocusLabel>{when(focus.order)}，開放點餐</FocusLabel>
+                <FocusTitle>
+                  <Link
+                    href={`/bento/orders/${focus.order.id}`}
+                    prefetch
+                    className="underline-offset-4 hover:underline"
+                  >
+                    {focus.restaurant.name}
+                  </Link>
+                </FocusTitle>
+                <FocusMeta>
+                  <span>
+                    <FocusHighlight>
+                      <NumberTicker value={focus.totals.people} />
+                    </FocusHighlight>{" "}
+                    人點了{" "}
+                    <FocusHighlight>
+                      <NumberTicker value={focus.totals.dishes} />
+                    </FocusHighlight>{" "}
+                    份
+                  </span>
+                  {focus.people.length > 0 && (
+                    <AvatarStack
+                      people={focus.people.map((person) => ({
+                        id: person.userId,
+                        name: person.name,
+                      }))}
+                    />
+                  )}
+                  <span>
+                    {mine
+                      ? `你點了 ${mine.lines.map(dishLabel).join("、")}`
+                      : "你還沒點"}
+                  </span>
+                </FocusMeta>
+                <RestaurantLinks
+                  restaurant={focus.restaurant}
+                  menu={focus.menu}
+                  optionGroups={focus.optionGroups}
                 />
-              )}
-              <span>
-                {mine
-                  ? `你點了 ${mine.lines.map((line) => line.name).join("、")}`
-                  : "你還沒點"}
-              </span>
-            </FocusMeta>
-            <div>
+              </div>
               <OrderDialog
                 orderId={focus.order.id}
                 restaurant={focus.restaurant.name}
                 menu={focus.menu}
                 optionGroups={focus.optionGroups}
+                mine={mine?.lines ?? []}
                 members={members}
                 me={actor.userId}
               />
