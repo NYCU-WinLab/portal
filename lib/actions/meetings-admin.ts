@@ -223,7 +223,7 @@ export const fillPresenters = defineAction({
   name: "fill_presenters",
   title: "自動排報告人",
   description:
-    "Admins only. Fills every open regular week from today on with presenters from the presenter list (list_presenters), in turn, starting after the last member already scheduled. Weeks someone already holds are left alone.",
+    "Admins only. Fills every regular week from today on that has no presenter yet with presenters from the presenter list (list_presenters), in turn, starting after the last member already scheduled. Weeks someone already holds are left alone.",
   kind: "mutation",
   input: z.object({}),
   run: async (actor) => {

@@ -77,56 +77,6 @@ export async function requirePaper(tx: Tx, paperId: string) {
   if (!paper) throw new Error("這篇不在論文清單裡")
 }
 
-export const claimMeeting = defineAction({
-  name: "claim_meeting",
-  title: "認領報告",
-  description:
-    "Signs the signed-in member up to present at an open regular week: today or later, nobody presenting yet. paperId, from list_papers, is the paper they will present; a regular week's paper must come from that list, and can be set later with update_my_meeting.",
-  kind: "mutation",
-  input: z.object({ date: isoDate, paperId: z.uuid().nullish() }),
-  run: async (actor, { date, paperId }) =>
-    changeSchedule(async (tx) => {
-      const meeting = await meetingOn(tx, date)
-      if (meeting.kind !== "regular") throw new Error(`${date} 不開放認領`)
-      if (date < taipeiToday()) throw new Error(`${date} 已經過了`)
-      if (meeting.presenterId === actor.userId) return { date }
-      if (meeting.presenterId) throw new Error(`${date} 已經有人報告`)
-      if (paperId) await requirePaper(tx, paperId)
-      await tx
-        .update(meetings)
-        .set({ presenterId: actor.userId, paperId: paperId ?? null })
-        .where(eq(meetings.id, meeting.id))
-      return { date }
-    }),
-})
-
-export const releaseMeeting = defineAction({
-  name: "release_meeting",
-  title: "取消認領",
-  description:
-    "Gives back a week the signed-in member is presenting, today or later, leaving it open with its paper and links cleared. Only their own week.",
-  kind: "mutation",
-  input: z.object({ date: isoDate }),
-  run: async (actor, { date }) =>
-    changeSchedule(async (tx) => {
-      const meeting = await meetingOn(tx, date)
-      if (meeting.presenterId !== actor.userId)
-        throw new Error(`${date} 不是你報告`)
-      if (date < taipeiToday()) throw new Error(`${date} 已經過了`)
-      await tx
-        .update(meetings)
-        .set({
-          presenterId: null,
-          paperId: null,
-          title: null,
-          slidesUrl: null,
-          recordingUrl: null,
-        })
-        .where(eq(meetings.id, meeting.id))
-      return { date }
-    }),
-})
-
 export const updateMyMeeting = defineAction({
   name: "update_my_meeting",
   title: "編輯我的報告",

@@ -60,7 +60,7 @@ function MeetingRow({
             what && <span className="min-w-0">{what}</span>
           )}
           {meeting.kind === "regular" && !meeting.presenter && (
-            <span className="text-muted-foreground">待認領</span>
+            <span className="text-muted-foreground">未排</span>
           )}
         </div>
         {(meeting.questioners.length > 0 ||

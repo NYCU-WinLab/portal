@@ -1,5 +1,6 @@
 "use client"
 
+import { PencilIcon, Trash2Icon } from "lucide-react"
 import * as React from "react"
 
 import { ConfirmDialog } from "@/components/confirm-dialog"
@@ -15,19 +16,37 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 import type { ScheduledMeeting } from "@/lib/actions/meetings-shared"
 
-import {
-  claim,
-  questioners,
-  release,
-  remove,
-  update,
-  updateMine,
-} from "./actions"
+import { questioners, remove, update, updateMine } from "./actions"
 import { report } from "./report"
 
 type Option = { value: string; label: string }
+
+// A row action: a ghost icon button named by its tooltip (DESIGN.md Lists).
+function IconAction({
+  label,
+  children,
+  ...props
+}: React.ComponentProps<"button"> & { label: string }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Button variant="ghost" size="icon" aria-label={label} {...props} />
+        }
+      >
+        {children}
+      </TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
+  )
+}
 
 const kinds: Option[] = [
   { value: "regular", label: "一般報告" },
@@ -92,16 +111,7 @@ export function MeetingActions({
   const seated = meeting.questioners.map((seat) => seat.id)
   const [askers, setAskers] = React.useState(seated)
   const date = meeting.date
-  const canClaim = upcoming && meeting.kind === "regular" && !meeting.presenter
-  const canEdit = admin || mine
-  if (!canClaim && !canEdit) return null
-
-  async function submitClaim(data: FormData) {
-    await report(
-      claim({ date, paperId: text(data, "paperId") || null }),
-      "已認領"
-    )
-  }
+  if (!admin && !mine) return null
 
   async function submitEdit(data: FormData) {
     const links = {
@@ -153,166 +163,154 @@ export function MeetingActions({
   }
 
   return (
-    <div className="flex shrink-0 gap-2">
-      {canClaim && (
-        <FormDialog
-          trigger={<Button variant="outline">認領</Button>}
-          title={`認領 ${meeting.label ?? date}`}
-          submitLabel="認領"
-          onSubmit={submitClaim}
-        >
-          <PaperSelect papers={papers} />
-        </FormDialog>
-      )}
-      {canEdit && (
-        <FormDialog
-          trigger={<Button variant="ghost">編輯</Button>}
-          title={`編輯 ${meeting.label ?? date}`}
-          size="wide"
-          submitLabel="儲存"
-          onSubmit={submitEdit}
-        >
-          {admin && (
-            <>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <FormField label="日期" required>
-                  <Input name="date" type="date" defaultValue={date} />
-                </FormField>
-                <FormField label="週次">
-                  <Input
-                    name="label"
-                    defaultValue={meeting.label ?? ""}
-                    maxLength={50}
-                  />
-                </FormField>
-              </div>
+    <div className="flex shrink-0 gap-1">
+      <FormDialog
+        trigger={
+          <IconAction label="編輯">
+            <PencilIcon />
+          </IconAction>
+        }
+        title={`編輯 ${meeting.label ?? date}`}
+        size="wide"
+        submitLabel="儲存"
+        onSubmit={submitEdit}
+      >
+        {admin && (
+          <>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <FormField label="日期" required>
+                <Input name="date" type="date" defaultValue={date} />
+              </FormField>
+              <FormField label="週次">
+                <Input
+                  name="label"
+                  defaultValue={meeting.label ?? ""}
+                  maxLength={50}
+                />
+              </FormField>
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="meeting-kind">類型</Label>
+              <Select
+                items={kinds}
+                value={kind}
+                onValueChange={(value) => setKind(String(value))}
+              >
+                <SelectTrigger id="meeting-kind" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {kinds.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {kind === "holiday" && (
+              <FormField label="放假原因" required>
+                <Input
+                  name="holiday"
+                  defaultValue={meeting.holiday ?? ""}
+                  maxLength={50}
+                />
+              </FormField>
+            )}
+            {(kind === "regular" || kind === "thesis") && (
               <div className="flex flex-col gap-2">
-                <Label htmlFor="meeting-kind">類型</Label>
-                <Select
-                  items={kinds}
-                  value={kind}
-                  onValueChange={(value) => setKind(String(value))}
-                >
-                  <SelectTrigger id="meeting-kind" className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {kinds.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Label htmlFor="meeting-presenter">報告人</Label>
+                <MemberCombobox
+                  id="meeting-presenter"
+                  members={members}
+                  value={presenterId}
+                  onValueChange={setPresenterId}
+                  placeholder="未排"
+                  className="w-full"
+                />
               </div>
-              {kind === "holiday" && (
-                <FormField label="放假原因" required>
-                  <Input
-                    name="holiday"
-                    defaultValue={meeting.holiday ?? ""}
-                    maxLength={50}
-                  />
-                </FormField>
-              )}
-              {(kind === "regular" || kind === "thesis") && (
-                <div className="flex flex-col gap-2">
-                  <Label htmlFor="meeting-presenter">報告人</Label>
-                  <MemberCombobox
-                    id="meeting-presenter"
-                    members={members}
-                    value={presenterId}
-                    onValueChange={setPresenterId}
-                    placeholder="待認領"
-                    className="w-full"
-                  />
-                </div>
-              )}
-            </>
-          )}
-          {kind === "regular" && (
-            <PaperSelect papers={papers} defaultValue={meeting.paper?.id} />
-          )}
-          {(kind === "thesis" || kind === "speaker") && (
-            <FormField label="題目">
-              <Input
-                name="title"
-                defaultValue={meeting.title ?? ""}
-                maxLength={300}
-              />
-            </FormField>
-          )}
-          {kind !== "holiday" && (
-            <>
-              <FormField label="投影片連結">
-                <Input
-                  name="slidesUrl"
-                  type="url"
-                  defaultValue={meeting.slidesUrl ?? ""}
-                />
-              </FormField>
-              <FormField label="錄影連結">
-                <Input
-                  name="recordingUrl"
-                  type="url"
-                  defaultValue={meeting.recordingUrl ?? ""}
-                />
-              </FormField>
-            </>
-          )}
-          <FormField label="備註">
+            )}
+          </>
+        )}
+        {kind === "regular" && (
+          <PaperSelect papers={papers} defaultValue={meeting.paper?.id} />
+        )}
+        {(kind === "thesis" || kind === "speaker") && (
+          <FormField label="題目">
             <Input
-              name="notes"
-              defaultValue={meeting.notes ?? ""}
-              maxLength={1000}
+              name="title"
+              defaultValue={meeting.title ?? ""}
+              maxLength={300}
             />
           </FormField>
-          {admin && (
-            <>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <FormField label="地點" required>
-                  <Input
-                    name="location"
-                    defaultValue={meeting.location}
-                    maxLength={100}
-                  />
-                </FormField>
-                <FormField label="時間" required>
-                  <Input
-                    name="startsAt"
-                    type="time"
-                    defaultValue={meeting.startsAt}
-                  />
-                </FormField>
+        )}
+        {kind !== "holiday" && (
+          <>
+            <FormField label="投影片連結">
+              <Input
+                name="slidesUrl"
+                type="url"
+                defaultValue={meeting.slidesUrl ?? ""}
+              />
+            </FormField>
+            <FormField label="錄影連結">
+              <Input
+                name="recordingUrl"
+                type="url"
+                defaultValue={meeting.recordingUrl ?? ""}
+              />
+            </FormField>
+          </>
+        )}
+        <FormField label="備註">
+          <Input
+            name="notes"
+            defaultValue={meeting.notes ?? ""}
+            maxLength={1000}
+          />
+        </FormField>
+        {admin && (
+          <>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <FormField label="地點" required>
+                <Input
+                  name="location"
+                  defaultValue={meeting.location}
+                  maxLength={100}
+                />
+              </FormField>
+              <FormField label="時間" required>
+                <Input
+                  name="startsAt"
+                  type="time"
+                  defaultValue={meeting.startsAt}
+                />
+              </FormField>
+            </div>
+            {upcoming && (kind === "regular" || kind === "thesis") && (
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="meeting-askers">指定提問人</Label>
+                <MemberCombobox
+                  id="meeting-askers"
+                  members={members}
+                  multiple
+                  value={askers}
+                  onValueChange={(ids) => setAskers(ids.slice(0, 3))}
+                  placeholder="自動排"
+                  className="w-full"
+                />
               </div>
-              {upcoming && (kind === "regular" || kind === "thesis") && (
-                <div className="flex flex-col gap-2">
-                  <Label htmlFor="meeting-askers">指定提問人</Label>
-                  <MemberCombobox
-                    id="meeting-askers"
-                    members={members}
-                    multiple
-                    value={askers}
-                    onValueChange={(ids) => setAskers(ids.slice(0, 3))}
-                    placeholder="自動排"
-                    className="w-full"
-                  />
-                </div>
-              )}
-            </>
-          )}
-        </FormDialog>
-      )}
-      {mine && upcoming && (
-        <ConfirmDialog
-          trigger={<Button variant="ghost">取消認領</Button>}
-          title={`取消認領 ${meeting.label ?? date}？`}
-          confirmLabel="取消認領"
-          onConfirm={() => report(release({ date }), "已取消認領")}
-        />
-      )}
+            )}
+          </>
+        )}
+      </FormDialog>
       {admin && (
         <ConfirmDialog
-          trigger={<Button variant="ghost">刪除</Button>}
+          trigger={
+            <IconAction label="刪除">
+              <Trash2Icon />
+            </IconAction>
+          }
           title={`刪除 ${meeting.label ?? date}？`}
           confirmLabel="刪除"
           onConfirm={() => report(remove({ date }), "已刪除")}

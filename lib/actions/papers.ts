@@ -11,7 +11,7 @@ export const listPapers = defineAction({
   name: "list_papers",
   title: "論文清單",
   description:
-    "The papers a presenter may choose from: id, title, link, venue, and the last meeting date it was presented (null if never). A regular week's paper must be one of these; pass its id to claim_meeting or update_my_meeting.",
+    "The papers a presenter may choose from: id, title, link, venue, and the last meeting date it was presented (null if never). A regular week's paper must be one of these; pass its id to update_my_meeting (the presenter) or update_meeting (an admin).",
   kind: "query",
   input: z.object({}),
   run: async () => ({

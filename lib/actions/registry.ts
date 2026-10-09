@@ -7,10 +7,8 @@ import {
 import type { Action } from "@/lib/actions/define"
 import { createLeave, deleteLeave, listLeaves } from "@/lib/actions/leave"
 import {
-  claimMeeting,
   getNextMeeting,
   listMeetings,
-  releaseMeeting,
   updateMyMeeting,
 } from "@/lib/actions/meetings"
 import {
@@ -46,8 +44,6 @@ export const actions: Action[] = [
   deleteLeave,
   listMeetings,
   getNextMeeting,
-  claimMeeting,
-  releaseMeeting,
   updateMyMeeting,
   listPapers,
   listPresenters,
