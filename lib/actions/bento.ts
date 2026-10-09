@@ -257,73 +257,75 @@ export const addBentoOrderItem = defineAction({
   name: "add_bento_order_item",
   title: "點餐",
   description:
-    "Orders a dish on an open order for the signed-in member: menuItemId from the order's menu (get_bento_order), optionValueIds picking one value in every required group and at most one in a group that is not multiple, and quantity (1 to 10 lines). A bento admin may order for another member with userId. Confirm the dish and options with the member first.",
+    "Orders one or more dishes on an open order for the signed-in member, all or nothing. Each item has menuItemId from the order's menu (get_bento_order), optionValueIds picking one value in every required group and at most one in a group that is not multiple, and quantity (1 to 10 lines). A bento admin may order for another member with userId. Confirm the dishes and options with the member first.",
   kind: "mutation",
   input: z.object({
     orderId: id,
-    menuItemId: id,
-    optionValueIds: z.array(id).max(30).default([]),
-    quantity: z
-      .number()
-      .int()
-      .min(1, "至少 1 份")
-      .max(10, "最多 10 份")
-      .default(1),
+    items: z
+      .array(
+        z.object({
+          menuItemId: id,
+          optionValueIds: z.array(id).max(30).default([]),
+          quantity: z
+            .number()
+            .int()
+            .min(1, "至少 1 份")
+            .max(10, "最多 10 份")
+            .default(1),
+        })
+      )
+      .min(1, "至少點一道")
+      .max(20, "一次最多 20 道"),
     userId: id.optional(),
   }),
-  run: async (
-    actor,
-    { orderId, menuItemId, optionValueIds, quantity, userId }
-  ) => {
+  run: async (actor, { orderId, items, userId }) => {
     const forUser = userId ?? actor.userId
     if (forUser !== actor.userId) await requireAdmin(actor, "bento")
     return db.transaction(async (tx) => {
       const order = await lockOrder(tx, orderId)
-      const [dish] = await tx
+      const groups = await loadOptionGroups(order.restaurantId)
+      const dishes = await tx
         .select()
         .from(bentoMenuItems)
-        .where(
-          and(
-            eq(bentoMenuItems.id, menuItemId),
-            eq(bentoMenuItems.restaurantId, order.restaurantId)
-          )
-        )
-      if (!dish) throw new Error("這道菜不在這家餐廳的菜單上")
-      const groups = await loadOptionGroups(order.restaurantId)
-      const picked = new Set(optionValueIds)
-      const options: BentoLineOption[] = []
-      let price = dish.price
-      for (const group of groups) {
-        const values = group.values.filter((value) => picked.has(value.id))
-        if (group.required && values.length === 0)
-          throw new Error(`請選${group.name}`)
-        if (!group.multiple && values.length > 1)
-          throw new Error(`${group.name}只能選一個`)
-        for (const value of values) {
-          picked.delete(value.id)
-          options.push({ group: group.name, label: value.label })
-          price += value.priceDelta
+        .where(eq(bentoMenuItems.restaurantId, order.restaurantId))
+      const ordered = []
+      for (const item of items) {
+        const dish = dishes.find((row) => row.id === item.menuItemId)
+        if (!dish) throw new Error("有菜不在這家餐廳的菜單上")
+        const picked = new Set(item.optionValueIds)
+        const options: BentoLineOption[] = []
+        let price = dish.price
+        for (const group of groups) {
+          const values = group.values.filter((value) => picked.has(value.id))
+          if (group.required && values.length === 0)
+            throw new Error(`${dish.name}請選${group.name}`)
+          if (!group.multiple && values.length > 1)
+            throw new Error(`${dish.name}的${group.name}只能選一個`)
+          for (const value of values) {
+            picked.delete(value.id)
+            options.push({ group: group.name, label: value.label })
+            price += value.priceDelta
+          }
         }
-      }
-      if (picked.size > 0) throw new Error("有選項不屬於這家餐廳")
-      const lines = await tx
-        .insert(bentoOrderItems)
-        .values(
-          Array.from({ length: quantity }, () => ({
+        if (picked.size > 0) throw new Error("有選項不屬於這家餐廳")
+        for (let n = 0; n < item.quantity; n++)
+          ordered.push({
             orderId,
             userId: forUser,
-            menuItemId,
+            menuItemId: dish.id,
             name: dish.name,
             options,
             price,
-          }))
-        )
-        .returning({ id: bentoOrderItems.id })
+          })
+      }
+      const lines = await tx.insert(bentoOrderItems).values(ordered).returning({
+        id: bentoOrderItems.id,
+        name: bentoOrderItems.name,
+        price: bentoOrderItems.price,
+      })
       return {
-        lineIds: lines.map((line) => line.id),
-        name: dish.name,
-        options: options.map((option) => option.label),
-        price,
+        lines,
+        total: lines.reduce((sum, line) => sum + line.price, 0),
       }
     })
   },
