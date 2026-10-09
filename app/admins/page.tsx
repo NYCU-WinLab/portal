@@ -41,7 +41,7 @@ export default async function AdminsPage() {
         {apps.map(({ app, label, admins }) => (
           <section key={app} className="flex flex-col gap-2">
             <SectionHeader title={label} />
-            <ul className="flex flex-col">
+            <ul className="flex stagger-rise flex-col">
               {admins.length === 0 && (
                 <li className="flex min-h-14 items-center border-b border-border text-muted-foreground">
                   無

@@ -26,7 +26,7 @@ export default async function PapersPage() {
         {papers.length === 0 ? (
           <EmptyState noun="論文" />
         ) : (
-          <ul className="flex flex-col">
+          <ul className="flex stagger-rise flex-col">
             {papers.map((paper) => (
               <li
                 key={paper.id}
