@@ -1,6 +1,5 @@
 import { notFound } from "next/navigation"
 
-import { AvatarStack } from "@/components/avatar-stack"
 import { EmptyState } from "@/components/empty-state"
 import {
   Focus,
@@ -74,30 +73,30 @@ export default async function OrderPage({
             {open ? "開放點餐" : "已關單"}
           </FocusLabel>
           <FocusTitle>
-            <FocusHighlight>
-              <NumberTicker value={totals.people} />
-            </FocusHighlight>{" "}
-            人點了{" "}
-            <FocusHighlight>
-              <NumberTicker value={totals.dishes} />
-            </FocusHighlight>{" "}
-            份，共 {ntd(totals.total)}
-          </FocusTitle>
-          <FocusMeta>
-            {people.length > 0 && (
-              <AvatarStack
-                people={people.map((person) => ({
-                  id: person.userId,
-                  name: person.name,
-                }))}
-              />
+            {mine ? (
+              <>
+                你點了{" "}
+                <FocusHighlight>
+                  <NumberTicker value={mine.lines.length} />
+                </FocusHighlight>{" "}
+                份，共{" "}
+                <span
+                  className={cn(
+                    overBudget(actor.userId, mine.total) && "text-destructive"
+                  )}
+                >
+                  {ntd(mine.total)}
+                </span>
+              </>
+            ) : (
+              "你還沒點"
             )}
-            <span>
-              {mine
-                ? `你點了 ${mine.lines.map(dishLabel).join("、")}`
-                : "你還沒點"}
-            </span>
-          </FocusMeta>
+          </FocusTitle>
+          {mine && (
+            <FocusMeta>
+              <span>{mine.lines.map(dishLabel).join("、")}</span>
+            </FocusMeta>
+          )}
           <RestaurantLinks
             restaurant={restaurant}
             menu={data.menu}
@@ -140,7 +139,15 @@ export default async function OrderPage({
           </section>
         )}
         <section className="flex flex-col gap-2">
-          <SectionHeader title="每個人" />
+          <SectionHeader
+            title="每個人"
+            actions={
+              <span className="text-muted-foreground tabular-nums">
+                {totals.people} 人點了 {totals.dishes} 份，共{" "}
+                {ntd(totals.total)}
+              </span>
+            }
+          />
           {people.length === 0 ? (
             <EmptyState noun="人點餐" />
           ) : (

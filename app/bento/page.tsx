@@ -89,14 +89,16 @@ export default async function BentoPage() {
         />
         {focus ? (
           <Focus>
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-              <div className="flex min-w-0 stagger-rise flex-col gap-3">
+            {/* The whole block opens the order: the title's link covers it,
+                and the links and button inside sit above that cover. */}
+            <div className="group/focus relative flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+              <div className="flex min-w-0 flex-col gap-3">
                 <FocusLabel>{when(focus.order)}，開放點餐</FocusLabel>
                 <FocusTitle>
                   <Link
                     href={`/bento/orders/${focus.order.id}`}
                     prefetch
-                    className="underline-offset-4 hover:underline"
+                    className="underline-offset-4 outline-none group-hover/focus:underline after:absolute after:inset-0 focus-visible:underline"
                   >
                     {focus.restaurant.name}
                   </Link>
@@ -110,7 +112,7 @@ export default async function BentoPage() {
                     <FocusHighlight>
                       <NumberTicker value={focus.totals.dishes} />
                     </FocusHighlight>{" "}
-                    份
+                    份，共 {ntd(focus.totals.total)}
                   </span>
                   {focus.people.length > 0 && (
                     <AvatarStack
@@ -126,13 +128,16 @@ export default async function BentoPage() {
                       : "你還沒點"}
                   </span>
                 </FocusMeta>
-                <RestaurantLinks
-                  restaurant={focus.restaurant}
-                  menu={focus.menu}
-                  optionGroups={focus.optionGroups}
-                />
+                <div className="relative z-10 w-fit">
+                  <RestaurantLinks
+                    restaurant={focus.restaurant}
+                    menu={focus.menu}
+                    optionGroups={focus.optionGroups}
+                  />
+                </div>
               </div>
-              <OrderDialog
+              <div className="relative z-10">
+                <OrderDialog
                 orderId={focus.order.id}
                 restaurant={focus.restaurant.name}
                 menu={focus.menu}
@@ -140,7 +145,8 @@ export default async function BentoPage() {
                 mine={mine?.lines ?? []}
                 members={members}
                 me={actor.userId}
-              />
+                />
+              </div>
             </div>
           </Focus>
         ) : (

@@ -13,7 +13,7 @@ function PopoverTrigger({ ...props }: PopoverPrimitive.Trigger.Props) {
 }
 
 // A layer-2 menu surface: frosted glass, p-1 around control-radius content.
-// For a combobox, pass className="w-(--anchor-width)" to match the trigger.
+// For a combobox, use ComboboxContent: at least the trigger's width.
 function PopoverContent({
   className,
   align = "start",
