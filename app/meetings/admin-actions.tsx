@@ -134,7 +134,7 @@ export function AdminActions({ dates }: { dates: Option[] }) {
       </FormDialog>
       <ConfirmDialog
         trigger={<Button>自動排報告人</Button>}
-        title="依報告順序填入所有待認領的週？"
+        title="依報告順序填入所有還沒排的週？"
         confirmLabel="排入"
         variant="default"
         onConfirm={() => report(fill(), "已排入")}

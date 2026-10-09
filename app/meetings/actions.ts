@@ -3,11 +3,7 @@
 import { revalidatePath } from "next/cache"
 
 import { type Action, errorMessage, runAction } from "@/lib/actions/define"
-import {
-  claimMeeting,
-  releaseMeeting,
-  updateMyMeeting,
-} from "@/lib/actions/meetings"
+import { updateMyMeeting } from "@/lib/actions/meetings"
 import {
   addMeeting,
   deleteMeeting,
@@ -41,8 +37,6 @@ async function call(action: Action, input: unknown): Promise<Result> {
   return {}
 }
 
-export const claim = async (input: unknown) => call(claimMeeting, input)
-export const release = async (input: unknown) => call(releaseMeeting, input)
 export const updateMine = async (input: unknown) => call(updateMyMeeting, input)
 export const generate = async (input: unknown) => call(generateSemester, input)
 export const add = async (input: unknown) => call(addMeeting, input)
