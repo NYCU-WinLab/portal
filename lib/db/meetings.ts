@@ -10,6 +10,7 @@ import {
   text,
   time,
   timestamp,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core"
 
@@ -29,6 +30,34 @@ export const papers = pgTable("papers", {
   addedBy: uuid().references(() => user.id, { onDelete: "set null" }),
   createdAt: timestamp({ withTimezone: true }).defaultNow().notNull(),
 })
+
+// Topics papers are filed under (SDN, Kernel/eBPF, ...). A category, so it
+// never gets a color (DESIGN.md Status and categories). Names are unique
+// ignoring case.
+export const paperTags = pgTable(
+  "paper_tags",
+  {
+    id: uuid().defaultRandom().primaryKey(),
+    name: text().notNull(),
+    createdAt: timestamp({ withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("paper_tags_name_unique").on(sql`lower(${table.name})`),
+  ]
+)
+
+export const paperTagLinks = pgTable(
+  "paper_tag_links",
+  {
+    paperId: uuid()
+      .notNull()
+      .references(() => papers.id, { onDelete: "cascade" }),
+    tagId: uuid()
+      .notNull()
+      .references(() => paperTags.id, { onDelete: "cascade" }),
+  },
+  (table) => [primaryKey({ columns: [table.paperId, table.tagId] })]
+)
 
 // One row per Monday lab meeting; the date is the key members use.
 // kind replaces the old holiday / speaker / thesis flags, so they cannot

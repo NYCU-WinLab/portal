@@ -13,7 +13,14 @@ import {
   swapMeetings,
   updateMeeting,
 } from "@/lib/actions/meetings-admin"
-import { addPaper, deletePaper, updatePaper } from "@/lib/actions/papers"
+import {
+  addPaper,
+  addPaperTag,
+  deletePaper,
+  deletePaperTag,
+  renamePaperTag,
+  updatePaper,
+} from "@/lib/actions/papers"
 import {
   addPresenter,
   movePresenter,
@@ -53,3 +60,6 @@ export const presenterRemove = async (input: unknown) =>
   call(removePresenter, input)
 export const presenterMove = async (input: unknown) =>
   call(movePresenter, input)
+export const tagAdd = async (input: unknown) => call(addPaperTag, input)
+export const tagRename = async (input: unknown) => call(renamePaperTag, input)
+export const tagDelete = async (input: unknown) => call(deletePaperTag, input)
