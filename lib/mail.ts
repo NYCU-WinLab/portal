@@ -5,6 +5,8 @@ import { createTransport, type Transporter } from "nodemailer"
 
 export type Mail = {
   to: string[]
+  /** Recipients who must not see each other, such as the whole lab. */
+  bcc?: string[]
   subject: string
   text: string
   html?: string
@@ -25,5 +27,11 @@ export async function sendMail(mail: Mail) {
     connectionTimeout: 10_000,
     socketTimeout: 20_000,
   })
-  await transport.sendMail({ from: process.env.MAIL_FROM, ...mail })
+  const from = process.env.MAIL_FROM
+  // A mail with only hidden recipients is addressed to the sender.
+  await transport.sendMail({
+    from,
+    ...mail,
+    to: mail.to.length ? mail.to : from,
+  })
 }

@@ -16,6 +16,10 @@ export const mailOutbox = pgTable(
   {
     id: uuid().defaultRandom().primaryKey(),
     to: text().array().notNull(),
+    bcc: text()
+      .array()
+      .default(sql`'{}'`)
+      .notNull(),
     subject: text().notNull(),
     text: text().notNull(),
     html: text(),

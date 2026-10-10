@@ -27,6 +27,12 @@ import {
   setBentoOptionGroups,
   updateBentoRestaurant,
 } from "@/lib/actions/bento-restaurants"
+import {
+  createAnnouncement,
+  deleteAnnouncement,
+  listAnnouncements,
+  updateAnnouncement,
+} from "@/lib/actions/bulletin"
 import type { Action } from "@/lib/actions/define"
 import { createLeave, deleteLeave, listLeaves } from "@/lib/actions/leave"
 import {
@@ -100,6 +106,10 @@ export const actions: Action[] = [
   listLeaves,
   createLeave,
   deleteLeave,
+  listAnnouncements,
+  createAnnouncement,
+  updateAnnouncement,
+  deleteAnnouncement,
   listMeetings,
   getNextMeeting,
   updateMyMeeting,
