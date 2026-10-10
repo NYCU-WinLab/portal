@@ -46,6 +46,9 @@ export const tripFiles = pgTable(
     description: text(),
     size: integer().notNull(),
     data: bytea().notNull(),
+    /** PAdES level the portal signed it to (B-LT, or B-B without a
+     * timestamp); null for files from before signing. */
+    signatureLevel: text(),
     createdAt: timestamp({ withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [index().on(table.tripId, table.userId)]

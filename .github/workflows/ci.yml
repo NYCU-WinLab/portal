@@ -19,6 +19,24 @@ jobs:
       - run: bun run actions:check
       - run: bun run build
 
+  # Our own PAdES signer, judged by pyHanko: two signatures with
+  # timestamps and the B-LT validation data must pass ETSI validation.
+  pades:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - run: bun run pades:check
+      - run: pip install pyhanko-cli==0.5.0 pyhanko==0.37.0 pyhanko-certvalidator
+      - name: Validate with pyHanko
+        run: |
+          pyhanko sign adesverify --pretty-print --trust .pades/root.pem .pades/signed.pdf | tee .pades/report.txt
+          test "$(grep -c 'The signature is judged VALID' .pades/report.txt)" = 2
+          grep -q 'Field 1: Uploader' .pades/report.txt
+          grep -q 'Field 2: Reviewer' .pades/report.txt
+          ! grep -qi 'INVALID' .pades/report.txt
+
   # The image as deployed: compose up with Postgres, migrations, then probe
   # sign-in, OAuth discovery and the MCP challenge.
   smoke:
