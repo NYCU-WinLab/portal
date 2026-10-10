@@ -85,6 +85,13 @@
       "when": 1791597368501,
       "tag": "0011_signing",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1791599723697,
+      "tag": "0012_revoke_on_leave",
+      "breakpoints": true
     }
   ]
 }

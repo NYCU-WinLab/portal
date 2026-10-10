@@ -2,9 +2,10 @@ import { and, eq, isNotNull, isNull, sql } from "drizzle-orm"
 
 import { z } from "zod"
 
+import { requireAdmin } from "@/lib/actions/authz"
 import { defineAction } from "@/lib/actions/define"
 import { db } from "@/lib/db"
-import { signingKeys } from "@/lib/db/schema"
+import { signingKeys, user } from "@/lib/db/schema"
 import {
   generateKeyPair,
   issueCertificate,
@@ -264,5 +265,67 @@ export const getSigningRoot = defineAction({
   run: async () => {
     const root = await rootIdentity()
     return { pem: pem(root.certificate.der), url: pkiUrls().certificate }
+  },
+})
+
+export const listSigningCertificates = defineAction({
+  name: "list_signing_certificates",
+  title: "簽章憑證",
+  description:
+    "Every member signing certificate the WinLab CA issued (portal admins only): member, serial, issued and expiry dates, and when it was revoked or retired (retired = replaced on expiry, still valid for what it signed). Certificates of members who left are revoked automatically.",
+  kind: "query",
+  input: z.object({}),
+  run: async (actor) => {
+    await requireAdmin(actor, "portal")
+    const rows = await db
+      .select({
+        id: signingKeys.id,
+        userId: signingKeys.userId,
+        member: user.name,
+        serial: signingKeys.serial,
+        createdAt: signingKeys.createdAt,
+        notAfter: signingKeys.notAfter,
+        revokedAt: signingKeys.revokedAt,
+      })
+      .from(signingKeys)
+      .leftJoin(user, eq(user.id, signingKeys.userId))
+      .where(eq(signingKeys.kind, "member"))
+    return {
+      certificates: rows.map((row) => ({
+        ...row,
+        status:
+          row.revokedAt === null
+            ? "active"
+            : row.revokedAt.getTime() >= row.notAfter.getTime()
+              ? "retired"
+              : "revoked",
+      })),
+    }
+  },
+})
+
+export const revokeSigningCertificate = defineAction({
+  name: "revoke_signing_certificate",
+  title: "撤銷簽章憑證",
+  description:
+    "Revokes a member's current signing certificate (portal admins only), e.g. when their key may be exposed. It is listed on /pki/root.crl at once, documents it signed later than now no longer validate, and the member gets a new certificate on their next upload. It cannot be undone; confirm with the member first.",
+  kind: "mutation",
+  input: z.object({ userId: z.uuid("id 格式不對") }),
+  run: async (actor, { userId }) => {
+    await requireAdmin(actor, "portal")
+    const [revoked] = await db
+      .update(signingKeys)
+      .set({ revokedAt: new Date() })
+      .where(
+        and(
+          eq(signingKeys.kind, "member"),
+          eq(signingKeys.userId, userId),
+          isNull(signingKeys.revokedAt)
+        )
+      )
+      .returning({ serial: signingKeys.serial })
+    if (!revoked) throw new Error("他沒有使用中的簽章憑證")
+    crlCache = null
+    return revoked
   },
 })
