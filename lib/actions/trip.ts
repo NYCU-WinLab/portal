@@ -218,7 +218,7 @@ export const getTrip = defineAction({
   name: "get_trip",
   title: "出差內容",
   description:
-    "One trip with its files (id, filename, description, size in bytes, signatureLevel: B-LT or B-B when the portal signed it, kept when it came signed under a certification that forbids changes and is stored as uploaded, uploaded at): the signed-in member's own, or for a trip admin everyone's grouped by member. Use get_trip_file for a file's contents.",
+    "One trip with its files (id, filename, description, size in bytes, signatureLevel: B-LT or B-B when the portal signed it, kept when the file declares a certification forbidding changes and is stored as uploaded without the portal signature, uploaded at): the signed-in member's own, or for a trip admin everyone's grouped by member. Use get_trip_file for a file's contents.",
   kind: "query",
   input: z.object({ tripId: id }),
   run: async (actor, { tripId }) => {

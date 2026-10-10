@@ -29,12 +29,14 @@ import { timestamp } from "@/lib/pki/tsa"
 // stays B-B rather than failing the upload.
 //
 // A PDF someone already signed is not re-saved: ours is appended to the
-// original bytes so their signature stays valid. If their signature is a
-// certification that allows no changes at all (DocMDP P=1), or the file
-// is beyond our reader, it is kept exactly as uploaded ("kept"). Under a
-// certification that allows form filling and signing only (P=2), ours is
+// original bytes so their signature stays valid. Under a certification
+// that allows form filling and signing only (DocMDP P=2) ours is
 // invisible: a new visible widget counts as an annotation, which P=2
-// does not allow.
+// does not allow. If the file declares a certification that allows no
+// changes at all (P=1) it is stored as uploaded without our signature
+// ("kept"); the file only claims this, so pages say plainly that the
+// portal did not sign it. Anything our reader can't follow is signed the
+// plain way (re-saved).
 
 export type SignatureLevel = "B-B" | "B-LT" | "kept"
 
@@ -99,89 +101,103 @@ export async function signDocument(input: {
   if (input.appearance)
     checkSignatureImage(input.appearance.image, input.appearance.contentType)
 
+  /** Signs on top of base: timestamp (B-B without one), then B-LT data. */
+  const signOn = async (
+    base: Uint8Array,
+    page: number,
+    widget: { appearance: number; rect: number[] } | null,
+    drawAppearance?: Parameters<typeof signPdf>[1]["drawAppearance"]
+  ): Promise<{ bytes: Uint8Array; level: SignatureLevel }> => {
+    const options = {
+      widget,
+      drawAppearance,
+      page,
+      signer: input.signer.certificate,
+      key: input.signer.key,
+      chain: input.chain,
+      signerName: input.displayName,
+      reason: input.reason,
+      fieldName: "WinLabUploader",
+    }
+    let stamped = true
+    let signed
+    try {
+      signed = await signPdf(base, {
+        ...options,
+        timestamp:
+          input.timestamp ??
+          (async (digest) => (await timestamp(digest)).token),
+      })
+    } catch (error) {
+      if (!(error instanceof Error && error.message.startsWith("no timestamp")))
+        throw error
+      console.error("timestamp", error.message)
+      stamped = false
+      signed = await signPdf(base, { ...options, timestamp: null })
+    }
+    const token = stamped ? timestampToken(signed.cms) : null
+    const data = await validationData(
+      [input.signer.certificate, ...input.chain],
+      input.crl,
+      token ? cmsCertificates(token) : []
+    )
+    return {
+      bytes: addDss(signed.bytes, data),
+      level: stamped ? "B-LT" : "B-B",
+    }
+  }
+
   // Signed already? Read with our own parser; pdf-lib would only tell us
-  // after re-saving.
+  // after re-saving. A file our reader can't follow is signed the plain
+  // way below (re-saved): every upload carries the portal's signature,
+  // and "kept" means only a verified no-changes certification.
   let existing: Existing = { signed: false, permission: null }
   if (Buffer.from(input.pdf).includes("/ByteRange")) {
     try {
       existing = inspect(parsePdf(input.pdf))
-    } catch {
-      return { bytes: input.pdf, level: "kept" }
+    } catch (error) {
+      console.error("existing signature unreadable", (error as Error).message)
     }
     if (existing.permission === 1) return { bytes: input.pdf, level: "kept" }
   }
 
-  let base: Uint8Array
-  let page: number
-  let widget: { appearance: number; rect: number[] } | null = null
-  let drawAppearance: Parameters<typeof signPdf>[1]["drawAppearance"]
   if (existing.signed) {
-    base = input.pdf
-    page = (
-      await PDFDocument.load(input.pdf, { updateMetadata: false })
-    ).getPage(0).ref.objectNumber
-    const image = existing.permission === 2 ? null : input.appearance
-    if (image)
-      drawAppearance = (increment, mediaBox) =>
-        addAppearance(
-          increment,
-          {
-            data: image.image,
-            contentType: image.contentType,
-            corner: image.corner,
-          },
-          mediaBox
-        )
-  } else {
-    const prepared = await preparePdf(
-      input.pdf,
-      input.appearance
-        ? {
-            image: input.appearance.image,
-            contentType: input.appearance.contentType,
-            corner: input.appearance.corner as Corner,
-          }
-        : null
-    )
-    base = prepared.bytes
-    page = prepared.page
-    widget = prepared.widget
+    try {
+      const page = (
+        await PDFDocument.load(input.pdf, { updateMetadata: false })
+      ).getPage(0).ref.objectNumber
+      const image = existing.permission === 2 ? null : input.appearance
+      return await signOn(
+        input.pdf,
+        page,
+        null,
+        image
+          ? (increment, mediaBox) =>
+              addAppearance(
+                increment,
+                {
+                  data: image.image,
+                  contentType: image.contentType,
+                  corner: image.corner,
+                },
+                mediaBox
+              )
+          : undefined
+      )
+    } catch (error) {
+      console.error("appending to a signed PDF", (error as Error).message)
+    }
   }
 
-  const options = {
-    widget,
-    drawAppearance,
-    page,
-    signer: input.signer.certificate,
-    key: input.signer.key,
-    chain: input.chain,
-    signerName: input.displayName,
-    reason: input.reason,
-    fieldName: "WinLabUploader",
-  }
-  let stamped = true
-  let signed
-  try {
-    signed = await signPdf(base, {
-      ...options,
-      timestamp:
-        input.timestamp ?? (async (digest) => (await timestamp(digest)).token),
-    })
-  } catch (error) {
-    if (!(error instanceof Error && error.message.startsWith("no timestamp")))
-      throw error
-    console.error("timestamp", error.message)
-    stamped = false
-    signed = await signPdf(base, { ...options, timestamp: null })
-  }
-  const token = stamped ? timestampToken(signed.cms) : null
-  const data = await validationData(
-    [input.signer.certificate, ...input.chain],
-    input.crl,
-    token ? cmsCertificates(token) : []
+  const prepared = await preparePdf(
+    input.pdf,
+    input.appearance
+      ? {
+          image: input.appearance.image,
+          contentType: input.appearance.contentType,
+          corner: input.appearance.corner as Corner,
+        }
+      : null
   )
-  return {
-    bytes: addDss(signed.bytes, data),
-    level: stamped ? "B-LT" : "B-B",
-  }
+  return signOn(prepared.bytes, prepared.page, prepared.widget)
 }

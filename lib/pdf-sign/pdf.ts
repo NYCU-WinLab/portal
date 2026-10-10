@@ -309,6 +309,11 @@ export function parsePdf(bytes: Uint8Array): Pdf {
       for (let i = 0; i < width; i++) value = value * 256 + data[at++]
       return value
     }
+    // Every listed entry needs its bytes: no counts beyond the data, and
+    // no zero-width entries that would loop without reading anything.
+    const listed = index.reduce((sum, n, i) => (i % 2 ? sum + n : sum), 0)
+    if (entry === 0 || listed * entry > data.length)
+      throw new Error("PDF: xref stream /Index beyond its data")
     for (let k = 0; k + 1 < index.length; k += 2) {
       for (let i = 0; i < index[k + 1]; i++) {
         if (at + entry > data.length) throw new Error("PDF: xref stream short")
@@ -425,6 +430,9 @@ export function getObject(pdf: Pdf, n: number): PdfValue {
     const text = Buffer.from(decode(dict, data)).toString("latin1")
     const count = numberOf(dict.get("N")) ?? 0
     const first = numberOf(dict.get("First")) ?? 0
+    // Each object needs at least "n o " in the header.
+    if (count < 0 || first < 0 || first > text.length || count * 4 > first)
+      throw new Error(`PDF: object stream ${streamN} header too short`)
     const header = new Lexer(text, 0)
     const list: number[] = []
     for (let i = 0; i < count; i++) {

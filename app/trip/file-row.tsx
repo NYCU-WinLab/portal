@@ -49,7 +49,7 @@ export function FileRow({
           {file.description ? `${file.description}，` : ""}
           {size(file.size)}
           {file.signatureLevel === "kept"
-            ? "，原檔已有簽章"
+            ? "，原檔已鎖定，未加簽"
             : file.signatureLevel && "，已簽章"}
         </span>
       </span>
