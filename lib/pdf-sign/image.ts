@@ -1,10 +1,29 @@
 // A signature image is checked before anything decodes it. A PNG decoder
-// allocates width x height x 4 bytes from the header, and a PNG can carry
-// a second header later on, so the chunks are walked: exactly one IHDR,
-// first, within the size limit.
+// allocates width x height x 4 bytes from the header, a PNG can carry a
+// second header later on, and an animated PNG makes pdf-lib decode every
+// frame at full size before refusing it. So the chunks are walked: exactly
+// one IHDR, first, within the size limit, and only still-image chunks.
 
 const MAX_SIDE = 3000
 const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+const STILL_PNG_CHUNKS = new Set([
+  "IHDR",
+  "PLTE",
+  "IDAT",
+  "IEND",
+  "tRNS",
+  "gAMA",
+  "cHRM",
+  "sRGB",
+  "iCCP",
+  "sBIT",
+  "bKGD",
+  "pHYs",
+  "tIME",
+  "tEXt",
+  "zTXt",
+  "iTXt",
+])
 
 export function checkSignatureImage(data: Buffer, contentType: string) {
   if (contentType === "image/png") {
@@ -15,6 +34,8 @@ export function checkSignatureImage(data: Buffer, contentType: string) {
       const length = data.readUInt32BE(offset)
       const type = data.toString("latin1", offset + 4, offset + 8)
       if (offset === 8 && type !== "IHDR") throw new Error("PNG 格式不對")
+      if (!STILL_PNG_CHUNKS.has(type))
+        throw new Error("簽名不能是動畫或特殊 PNG")
       if (type === "IHDR") {
         headers += 1
         const width = data.readUInt32BE(offset + 8)

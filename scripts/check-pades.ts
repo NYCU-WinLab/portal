@@ -12,6 +12,7 @@ import {
   timestampToken,
   validationData,
 } from "@/lib/pdf-sign/dss"
+import { checkSignatureImage } from "@/lib/pdf-sign/image"
 import { preparePdf } from "@/lib/pdf-sign/prepare"
 import { signPdf } from "@/lib/pdf-sign/sign"
 import { timestamp } from "@/lib/pki/tsa"
@@ -117,6 +118,89 @@ const data = await validationData(
     cmsCertificates(timestampToken(cms)!)
   )
 )
+// Inputs that once took the server down must now be refused quickly.
+function refuses(label: string, run: () => unknown) {
+  try {
+    run()
+  } catch (error) {
+    // Only our own refusals count, not a bug in this script.
+    if (error instanceof ReferenceError || error instanceof TypeError)
+      throw error
+    return console.log(`refused ${label}: ${(error as Error).message}`)
+  }
+  throw new Error(`accepted ${label}`)
+}
+const pngChunk = (type: string, data: Buffer) => {
+  const length = Buffer.alloc(4)
+  length.writeUInt32BE(data.length)
+  return Buffer.concat([
+    length,
+    Buffer.from(type, "latin1"),
+    data,
+    Buffer.alloc(4),
+  ])
+}
+const header = Buffer.alloc(13)
+header.writeUInt32BE(3000, 0)
+header.writeUInt32BE(3000, 4)
+const pngSignature = Buffer.from([
+  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+])
+refuses("an animated PNG signature", () =>
+  checkSignatureImage(
+    Buffer.concat([
+      pngSignature,
+      pngChunk("IHDR", header),
+      pngChunk("acTL", Buffer.alloc(8)),
+      pngChunk("IEND", Buffer.alloc(0)),
+    ]),
+    "image/png"
+  )
+)
+refuses("a PNG with a second IHDR", () =>
+  checkSignatureImage(
+    Buffer.concat([
+      pngSignature,
+      pngChunk("IHDR", Buffer.alloc(13)),
+      pngChunk("IHDR", header),
+      pngChunk("IEND", Buffer.alloc(0)),
+    ]),
+    "image/png"
+  )
+)
+{
+  const objects = [
+    "<< /Type /Catalog /Pages 2 0 R >>",
+    "<< /Type /Pages /Kids [2 0 R] /Count 1 >>",
+  ]
+  let body = "%PDF-1.4\n"
+  const offsets: number[] = []
+  objects.forEach((object, i) => {
+    offsets.push(body.length)
+    body += `${i + 1} 0 obj\n${object}\nendobj\n`
+  })
+  const xref = body.length
+  body += `xref\n0 3\n0000000000 65535 f\r\n${offsets.map((o) => `${String(o).padStart(10, "0")} 00000 n\r\n`).join("")}trailer\n<< /Size 3 /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`
+  const cyclic = new TextEncoder().encode(body)
+  const signing = signPdf(cyclic, {
+    widget: null,
+    signer: uploader.certificate,
+    key: uploader.key,
+    chain: [rootCert],
+    signerName: "x",
+    reason: "x",
+    fieldName: "x",
+    timestamp: null,
+  })
+  const outcome = await signing.then(
+    () => "signed",
+    (error: Error) => error.message
+  )
+  if (outcome !== "PDF: page tree loops")
+    throw new Error(`cyclic page tree: ${outcome}`)
+  console.log(`refused a PDF whose page tree loops: ${outcome}`)
+}
+
 await mkdir(".pades", { recursive: true })
 await writeFile(".pades/root.pem", pem(rootCert.der))
 await writeFile(".pades/signed.pdf", addDss(second.bytes, data))

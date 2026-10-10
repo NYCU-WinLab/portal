@@ -85,9 +85,19 @@ async function toPdf(contentType: (typeof uploadTypes)[number], data: Buffer) {
   if (contentType === "application/pdf") {
     if (!data.subarray(0, 5).equals(Buffer.from("%PDF-")))
       throw new Error("這不是 PDF 檔")
-    await PDFDocument.load(data, { updateMetadata: false }).catch(() => {
-      throw new Error("PDF 打不開，可能已損毀或有密碼")
-    })
+    const pdf = await PDFDocument.load(data, { updateMetadata: false }).catch(
+      () => {
+        throw new Error("PDF 打不開，可能已損毀或有密碼")
+      }
+    )
+    // Walking the page tree here catches cyclic or empty trees before the
+    // signer sees the file.
+    try {
+      if (pdf.getPageCount() === 0) throw new Error("no pages")
+      pdf.getPage(0)
+    } catch {
+      throw new Error("PDF 的頁面結構有問題")
+    }
     return data
   }
   // pdf-lib reads only the JPEG's header and keeps it compressed.

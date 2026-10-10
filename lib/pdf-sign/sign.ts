@@ -8,6 +8,7 @@ import {
   getDict,
   getObject,
   Increment,
+  pageAt,
   name,
   num,
   parsePdf,
@@ -36,6 +37,8 @@ export async function signPdf(
   input: Uint8Array,
   options: {
     widget: { appearance: number; rect: number[] } | null
+    /** Page 1's object number when the caller knows it (from pdf-lib). */
+    page?: number
     signer: ParsedCertificate
     key: CryptoKey
     chain: ParsedCertificate[]
@@ -48,7 +51,7 @@ export async function signPdf(
 ) {
   const pdf = parsePdf(input)
   const increment = new Increment(pdf)
-  const page = firstPage(pdf)
+  const page = options.page ? pageAt(pdf, options.page) : firstPage(pdf)
   const catalogN = rootRef(pdf)
   const catalog = new Map(getDict(pdf, ref(catalogN)))
 
@@ -134,7 +137,10 @@ export async function signPdf(
 
   const file = Buffer.from(increment.build())
   const s = file.toString("latin1")
-  const rangeAt = s.lastIndexOf(BYTE_RANGE_PLACEHOLDER)
+  // Look inside the signature object only: a name or an /ID string from
+  // the input could contain the placeholder text too.
+  const objectAt = s.lastIndexOf(`\n${signatureN} 0 obj\n`)
+  const rangeAt = s.indexOf(BYTE_RANGE_PLACEHOLDER, objectAt)
   const contentsAt = s.indexOf("/Contents <", rangeAt) + "/Contents ".length
   const contentsEnd = contentsAt + CONTENTS_BYTES * 2 + 2
   const ranges = [0, contentsAt, contentsEnd, file.length - contentsEnd]

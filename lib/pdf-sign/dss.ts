@@ -40,9 +40,25 @@ export function timestampToken(cms: Uint8Array) {
 
 async function fetchBytes(url: string) {
   if (!/^https?:\/\//.test(url)) throw new Error(`not http: ${url}`)
-  const response = await fetch(url, { signal: AbortSignal.timeout(10_000) })
+  // URLs come from certificates in a timestamp token: public hosts only,
+  // no redirects, and no more than a certificate or CRL needs.
+  const host = new URL(url).hostname
+  if (
+    host === "localhost" ||
+    host.includes(":") ||
+    /^(0|10|127)\.|^169\.254\.|^192\.168\.|^172\.(1[6-9]|2\d|3[01])\./.test(
+      host
+    )
+  )
+    throw new Error(`not a public host: ${host}`)
+  const response = await fetch(url, {
+    signal: AbortSignal.timeout(10_000),
+    redirect: "error",
+  })
   if (!response.ok) throw new Error(`${url} answered ${response.status}`)
-  return new Uint8Array(await response.arrayBuffer())
+  const bytes = new Uint8Array(await response.arrayBuffer())
+  if (bytes.length > 2 * 1024 * 1024) throw new Error(`${url} is too large`)
+  return bytes
 }
 
 /** PEM or DER from a download, as DER. */

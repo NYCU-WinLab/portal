@@ -48,6 +48,7 @@ export async function signUpload(input: {
   let stamped = true
   const options = {
     widget: prepared.widget,
+    page: prepared.page,
     signer: member.certificate,
     key: member.key,
     chain: [root.certificate],

@@ -65,5 +65,7 @@ export async function preparePdf(
     useObjectStreams: false,
     addDefaultPage: false,
   })
-  return { bytes, widget }
+  // pdf-lib keeps object numbers on save, so the signer can go straight to
+  // page 1 instead of walking a page tree a member wrote.
+  return { bytes, widget, page: pdf.getPage(0).ref.objectNumber }
 }

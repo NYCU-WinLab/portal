@@ -193,6 +193,8 @@ export function parsePdf(bytes: Uint8Array): Pdf {
       if (first === "trailer") break
       const start = Number(lexer.word())
       const count = Number(lexer.word())
+      if (!Number.isInteger(start) || !Number.isInteger(count) || count < 0)
+        throw new Error("PDF: bad xref section")
       lexer.skip()
       for (let i = 0; i < count; i++) {
         const entry = s.slice(lexer.pos, lexer.pos + 20)
@@ -219,6 +221,26 @@ export function parsePdf(bytes: Uint8Array): Pdf {
     trailer: trailer!,
     startxref,
     size: size?.t === "num" ? Number(size.v) : offsets.size + 1,
+  }
+}
+
+/** A page object by number, with the MediaBox it or its parents give. */
+export function pageAt(pdf: Pdf, n: number) {
+  const dict = getDict(pdf, ref(n))
+  let mediaBox = resolve(pdf, dict.get("MediaBox"))
+  let parent = dict.get("Parent")
+  for (let depth = 0; !mediaBox && parent && depth < 32; depth++) {
+    const up = getDict(pdf, parent)
+    mediaBox = resolve(pdf, up.get("MediaBox"))
+    parent = up.get("Parent")
+  }
+  return {
+    n,
+    dict,
+    mediaBox:
+      mediaBox?.t === "array"
+        ? mediaBox.items.map((item) => Number((item as { v: string }).v))
+        : [0, 0, 612, 792],
   }
 }
 
@@ -255,10 +277,16 @@ export const rootRef = (pdf: Pdf) => {
 export function firstPage(pdf: Pdf) {
   let node = getDict(pdf, getDict(pdf, ref(rootRef(pdf))).get("Pages"))
   let mediaBox = resolve(pdf, node.get("MediaBox"))
-  for (;;) {
+  // At most 32 levels and never the same node twice: a cyclic tree fails
+  // instead of spinning.
+  const visited = new Set<number>()
+  for (let depth = 0; ; depth++) {
+    if (depth > 32) throw new Error("PDF: page tree too deep")
     const kids = resolve(pdf, node.get("Kids"))
     const first = kids?.t === "array" ? kids.items[0] : undefined
     if (first?.t !== "ref") throw new Error("PDF: no pages")
+    if (visited.has(first.n)) throw new Error("PDF: page tree loops")
+    visited.add(first.n)
     const child = getDict(pdf, first)
     mediaBox = resolve(pdf, child.get("MediaBox")) ?? mediaBox
     if (

@@ -83,8 +83,11 @@ async function loadRoot() {
   return row
 }
 
-/** The root CA, made on first use. */
+let rootCache: SigningIdentity | null = null
+
+/** The root CA, made on first use, kept in memory once loaded. */
 export async function rootIdentity(): Promise<SigningIdentity> {
+  if (rootCache) return rootCache
   let row = await loadRoot()
   if (!row) {
     row = await db.transaction(async (tx) => {
@@ -123,10 +126,11 @@ export async function rootIdentity(): Promise<SigningIdentity> {
       return created
     })
   }
-  return {
+  rootCache = {
     certificate: parseCertificate(new Uint8Array(row.certificate)),
     key: await unseal(row.privateKey),
   }
+  return rootCache
 }
 
 /** The member's signing certificate, issued (or renewed) when needed. */
@@ -214,9 +218,14 @@ export async function memberIdentity(
   }
 }
 
-/** The root's current CRL, valid for a week. Retired certificates (renewed
- * on expiry) are not listed: only ones revoked before they expired. */
+let crlCache: { crl: Uint8Array; until: number } | null = null
+
+/** The root's current CRL, valid for a week and reissued at most hourly
+ * (the public route would otherwise sign on every request). Retired
+ * certificates (renewed on expiry) are not listed: only ones revoked
+ * before they expired. */
 export async function currentCrl() {
+  if (crlCache && crlCache.until > Date.now()) return crlCache.crl
   const root = await rootIdentity()
   const revoked = await db
     .select({ serial: signingKeys.serial, at: signingKeys.revokedAt })
@@ -229,7 +238,7 @@ export async function currentCrl() {
       )
     )
   const now = new Date()
-  return issueCrl({
+  const crl = await issueCrl({
     issuer: root.certificate.subject,
     issuerSpki: root.certificate.spki,
     key: root.key,
@@ -241,6 +250,8 @@ export async function currentCrl() {
       at: row.at!,
     })),
   })
+  crlCache = { crl, until: now.getTime() + 3600 * 1000 }
+  return crl
 }
 
 export const getSigningRoot = defineAction({
