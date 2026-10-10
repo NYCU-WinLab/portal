@@ -6,11 +6,14 @@ import { errorMessage, runAction } from "@/lib/actions/define"
 import { getBentoStats } from "@/lib/actions/bento"
 import { getProfile } from "@/lib/actions/profile"
 import { getReimburseStats } from "@/lib/actions/reimburse"
+import { getMySignature, getMySignatureImage } from "@/lib/actions/signature"
+import { getTripStats } from "@/lib/actions/trip"
 import { listMeetingStats } from "@/lib/actions/stats"
 import { requireActor } from "@/lib/auth/session"
 import { ntd } from "@/lib/money"
 import { accountConsoleUrl } from "@/lib/keycloak"
 
+import { SignatureSettings } from "./signature-settings"
 import { SignOutButton } from "./sign-out-button"
 
 export const dynamic = "force-dynamic"
@@ -26,14 +29,19 @@ const fields = [
 
 export default async function ProfilePage() {
   const actor = await requireActor("/profile")
-  const [profile, stats, bento, ledger] = await Promise.all([
-    runAction(getProfile, actor, {}).catch((error: unknown) => ({
-      error: errorMessage(error),
-    })),
-    runAction(listMeetingStats, actor, {}),
-    runAction(getBentoStats, actor, {}),
-    runAction(getReimburseStats, actor, {}),
-  ])
+  const [profile, stats, bento, ledger, signature, image, trips] =
+    await Promise.all([
+      runAction(getProfile, actor, {}).catch((error: unknown) => ({
+        error: errorMessage(error),
+      })),
+      runAction(listMeetingStats, actor, {}),
+      runAction(getBentoStats, actor, {}),
+      runAction(getReimburseStats, actor, {}),
+      runAction(getMySignature, actor, {}),
+      runAction(getMySignatureImage, actor, {}),
+      runAction(getTripStats, actor, {}),
+    ])
+  const travel = trips.members.find((row) => row.userId === actor.userId)
   const paid = ledger.applicants.find((row) => row.applicantId === actor.userId)
   const lunch = bento.members.find((row) => row.userId === actor.userId)
   const mine = stats.members.find((row) => row.userId === actor.userId)
@@ -72,6 +80,14 @@ export default async function ProfilePage() {
             ))}
           </FieldList>
         )}
+        <section className="flex flex-col gap-6">
+          <SectionHeader title="簽名" />
+          <SignatureSettings
+            image={image.dataUrl}
+            stamp={signature.stamp}
+            corner={signature.corner}
+          />
+        </section>
         {mine && (
           <section className="flex flex-col gap-6">
             <SectionHeader title="實驗室會議" />
@@ -114,6 +130,16 @@ export default async function ProfilePage() {
               {paid.owed > 0 && (
                 <FieldRow label="未轉帳">{ntd(paid.owed)}</FieldRow>
               )}
+            </FieldList>
+          </section>
+        )}
+        {travel && (
+          <section className="flex flex-col gap-6">
+            <SectionHeader title="出差" />
+            <FieldList>
+              <FieldRow label="上傳">
+                {travel.trips} 趟，{travel.files} 份
+              </FieldRow>
             </FieldList>
           </section>
         )}
