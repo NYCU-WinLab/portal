@@ -53,13 +53,24 @@ async function seal(key: CryptoKey) {
   return Buffer.concat([iv, Buffer.from(sealed)])
 }
 
-async function unseal(sealed: Buffer) {
-  const pkcs8 = await crypto.subtle.decrypt(
-    { name: "AES-GCM", iv: new Uint8Array(sealed.subarray(0, 12)) },
-    await masterKey(),
-    new Uint8Array(sealed.subarray(12))
+async function unsealPkcs8(sealed: Buffer) {
+  return new Uint8Array(
+    await crypto.subtle.decrypt(
+      { name: "AES-GCM", iv: new Uint8Array(sealed.subarray(0, 12)) },
+      await masterKey(),
+      new Uint8Array(sealed.subarray(12))
+    )
   )
-  return crypto.subtle.importKey("pkcs8", pkcs8, RSA_PARAMS, false, ["sign"])
+}
+
+async function unseal(sealed: Buffer) {
+  return crypto.subtle.importKey(
+    "pkcs8",
+    await unsealPkcs8(sealed),
+    RSA_PARAMS,
+    false,
+    ["sign"]
+  )
 }
 
 /** Public URLs the certificates point at, from the portal's own address. */
@@ -223,6 +234,32 @@ export async function memberIdentity(
 }
 
 let crlCache: { crl: Uint8Array; until: number; latest: number } | null = null
+
+/** The member's certificate and PKCS#8 key, for the PDF worker only: the
+ * key goes to the child process over a pipe and nowhere else. */
+export async function memberSigningMaterial(
+  userId: string,
+  displayName: string
+) {
+  await memberIdentity(userId, displayName)
+  const [row] = await db
+    .select({
+      certificate: signingKeys.certificate,
+      privateKey: signingKeys.privateKey,
+    })
+    .from(signingKeys)
+    .where(
+      and(
+        eq(signingKeys.kind, "member"),
+        eq(signingKeys.userId, userId),
+        isNull(signingKeys.revokedAt)
+      )
+    )
+  return {
+    certificate: new Uint8Array(row.certificate),
+    pkcs8: await unsealPkcs8(row.privateKey),
+  }
+}
 
 /** The root's current CRL, valid for a week and reissued at most hourly
  * (the public route would otherwise sign on every request). Retired
