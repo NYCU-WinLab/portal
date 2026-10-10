@@ -22,6 +22,7 @@ export async function GET(
       "Content-Type": zip.contentType,
       "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(zip.filename)}`,
       "Cache-Control": "private, no-store",
+      "X-Content-Type-Options": "nosniff",
     },
   })
 }

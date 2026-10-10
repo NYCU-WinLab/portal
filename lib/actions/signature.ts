@@ -16,7 +16,7 @@ export const getMySignature = defineAction({
   name: "get_my_signature",
   title: "我的簽名設定",
   description:
-    "Whether the signed-in member has saved a handwritten signature, whether it goes on documents they upload (stamp) and in which corner of the first page (tl, tr, bl, br). The image itself stays on the web.",
+    "Whether the signed-in member has saved a handwritten signature, whether they want it shown when the portal signs documents they upload (stamp), and in which corner of the first page (tl, tr, bl, br). The image itself stays on the web.",
   kind: "query",
   input: z.object({}),
   run: async (actor) => {
@@ -97,7 +97,7 @@ export const setSignatureSettings = defineAction({
   name: "set_signature_settings",
   title: "簽名設定",
   description:
-    "Turns the signed-in member's signature on documents they upload on or off (stamp) and picks the corner of the first page (tl, tr, bl, br). Leave out what stays the same.",
+    "Sets whether the signed-in member's signature is shown when the portal signs documents they upload (stamp) and the corner of the first page (tl, tr, bl, br). Leave out what stays the same.",
   kind: "mutation",
   input: z.object({
     stamp: z.boolean().optional(),

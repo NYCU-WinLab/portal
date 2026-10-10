@@ -25,6 +25,9 @@ export async function GET(
       "Content-Disposition": `${disposition}; filename*=UTF-8''${encodeURIComponent(file.filename)}`,
       "Cache-Control": "private, no-store",
       "X-Content-Type-Options": "nosniff",
+      // A member's PDF opens on the portal's origin; keep it from running
+      // anything there.
+      "Content-Security-Policy": "sandbox",
     },
   })
 }

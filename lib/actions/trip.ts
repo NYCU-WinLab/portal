@@ -57,6 +57,26 @@ function pdfName(name: string) {
   return `${(base || "file").slice(0, 120)}.pdf`
 }
 
+/** Most pixels an uploaded image may have: a 2000 px photo is 4 million,
+ * a 600 dpi A4 scan about 35 million. Decoding is width x height x 4
+ * bytes, so a tiny PNG claiming 30000 x 30000 would take gigabytes. */
+const MAX_PIXELS = 40_000_000
+
+/** Width and height from a PNG's IHDR, read before anything decodes it. */
+function pngSize(data: Buffer) {
+  const signature = Buffer.from([
+    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+  ])
+  if (data.length < 24 || !data.subarray(0, 8).equals(signature))
+    throw new Error("這不是 PNG 檔")
+  return { width: data.readUInt32BE(16), height: data.readUInt32BE(20) }
+}
+
+function checkPixels({ width, height }: { width: number; height: number }) {
+  if (width * height > MAX_PIXELS)
+    throw new Error(`圖片太大(${width} × ${height})，請縮小後再傳`)
+}
+
 /** The uploaded bytes as a PDF: PDFs are checked, images wrapped on a page. */
 async function toPdf(contentType: (typeof uploadTypes)[number], data: Buffer) {
   if (contentType === "application/pdf") {
@@ -67,11 +87,15 @@ async function toPdf(contentType: (typeof uploadTypes)[number], data: Buffer) {
     })
     return data
   }
+  // PNGs are measured before pdf-lib decodes them; JPEGs are only parsed
+  // for their header and kept compressed, then measured the same way.
+  if (contentType === "image/png") checkPixels(pngSize(data))
   const pdf = await PDFDocument.create()
   const image =
     contentType === "image/png"
       ? await pdf.embedPng(data)
       : await pdf.embedJpg(data)
+  checkPixels(image)
   const page = pdf.addPage([image.width, image.height])
   page.drawImage(image, {
     x: 0,
@@ -221,10 +245,10 @@ export const exportTripFiles = defineAction({
     if (rows.length === 0) throw new Error("還沒有檔案")
     const entries: Record<string, Uint8Array> = {}
     for (const row of rows) {
-      const folder = (row.member ?? "已離開的成員").replace(
-        /[\\/:*?"<>|\s]/g,
-        "_"
-      )
+      // No separators, and never "." or ".." so no entry leaves its folder.
+      const folder = (row.member ?? "已離開的成員")
+        .replace(/[\\/:*?"<>|\s]/g, "_")
+        .replace(/^\.+$/, "_")
       let name = `${folder}/${row.filename}`
       for (let n = 2; name in entries; n++)
         name = `${folder}/${row.filename.replace(/\.pdf$/, "")} (${n}).pdf`
