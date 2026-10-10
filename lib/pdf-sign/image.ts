@@ -23,6 +23,16 @@ const STILL_PNG_CHUNKS = new Set([
   "tEXt",
   "zTXt",
   "iTXt",
+  // Later additions to the PNG spec, still images only.
+  "eXIf",
+  "cICP",
+  "mDCV",
+  "cLLI",
+  "sPLT",
+  "hIST",
+  // Apple's hint for decoding in parallel; decoders that do not know it
+  // skip it.
+  "iDOT",
 ])
 
 export function checkSignatureImage(data: Buffer, contentType: string) {
