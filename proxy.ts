@@ -13,9 +13,8 @@ export function proxy(request: NextRequest) {
 export const config = {
   // Open: sign-in and consent (they handle their own state), the auth and
   // MCP endpoints (they answer with OAuth errors, not redirects), discovery
-  // documents, the signing CA's public certificate and CRL (PDF readers
-  // fetch them), and static files.
+  // documents and static files.
   matcher: [
-    "/((?!(?:sign-in|consent|api/auth|mcp|pki|\\.well-known|_next/static|_next/image)(?:/|$)|favicon.ico$|icon.svg$).*)",
+    "/((?!(?:sign-in|consent|api/auth|mcp|\\.well-known|_next/static|_next/image)(?:/|$)|favicon.ico$|icon.svg$).*)",
   ],
 }
