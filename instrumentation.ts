@@ -8,7 +8,13 @@ import { emitErrorLog } from "@/lib/otel"
 // JSON, only when OTEL_EXPORTER_OTLP_ENDPOINT is set. spanProcessors: []
 // stops @vercel/otel from also starting its own protobuf exporter from the
 // same env, which would send every span twice.
-export function register() {
+export async function register() {
+  // Mail queued in mail_outbox goes out from the Node server process.
+  if (process.env.NEXT_RUNTIME === "nodejs") {
+    const { startMailSender } = await import("@/lib/actions/mail")
+    await startMailSender()
+  }
+
   const endpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT?.replace(/\/+$/, "")
   if (!endpoint) return
   const headers = Object.fromEntries(

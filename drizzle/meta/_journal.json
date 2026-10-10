@@ -99,6 +99,13 @@
       "when": 1791604978397,
       "tag": "0013_stamp_only",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1791607276883,
+      "tag": "0014_mail",
+      "breakpoints": true
     }
   ]
 }
