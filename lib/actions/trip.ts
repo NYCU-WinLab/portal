@@ -12,7 +12,10 @@ const id = z.uuid("id 格式不對")
 
 /** Largest file accepted, in bytes. */
 export const TRIP_FILE_LIMIT = 10 * 1024 * 1024
-const uploadTypes = ["application/pdf", "image/jpeg", "image/png"] as const
+// No PNG: decoding one takes width x height x 4 bytes whatever its file
+// size, and its header can lie. The page turns photos into JPEG first, and
+// a JPEG is embedded as it is, never decoded.
+const uploadTypes = ["application/pdf", "image/jpeg"] as const
 
 const description = z
   .string()
@@ -57,20 +60,9 @@ function pdfName(name: string) {
   return `${(base || "file").slice(0, 120)}.pdf`
 }
 
-/** Most pixels an uploaded image may have: a 2000 px photo is 4 million,
- * a 600 dpi A4 scan about 35 million. Decoding is width x height x 4
- * bytes, so a tiny PNG claiming 30000 x 30000 would take gigabytes. */
+/** Most pixels an uploaded photo may have: a 2000 px photo is 4 million,
+ * a 600 dpi A4 scan about 35 million. Viewers decode it to show it. */
 const MAX_PIXELS = 40_000_000
-
-/** Width and height from a PNG's IHDR, read before anything decodes it. */
-function pngSize(data: Buffer) {
-  const signature = Buffer.from([
-    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
-  ])
-  if (data.length < 24 || !data.subarray(0, 8).equals(signature))
-    throw new Error("這不是 PNG 檔")
-  return { width: data.readUInt32BE(16), height: data.readUInt32BE(20) }
-}
 
 function checkPixels({ width, height }: { width: number; height: number }) {
   if (width * height > MAX_PIXELS)
@@ -87,14 +79,12 @@ async function toPdf(contentType: (typeof uploadTypes)[number], data: Buffer) {
     })
     return data
   }
-  // PNGs are measured before pdf-lib decodes them; JPEGs are only parsed
-  // for their header and kept compressed, then measured the same way.
-  if (contentType === "image/png") checkPixels(pngSize(data))
+  // pdf-lib reads only the JPEG's header and keeps it compressed.
   const pdf = await PDFDocument.create()
-  const image =
-    contentType === "image/png"
-      ? await pdf.embedPng(data)
-      : await pdf.embedJpg(data)
+  const image = await pdf.embedJpg(data).catch((error: unknown) => {
+    console.error("embedJpg", error)
+    throw new Error("JPEG 打不開")
+  })
   checkPixels(image)
   const page = pdf.addPage([image.width, image.height])
   page.drawImage(image, {
@@ -268,12 +258,12 @@ export const exportTripFiles = defineAction({
 export const uploadTripFile = defineAction({
   name: "upload_trip_file",
   title: "上傳檔案",
-  description: `Uploads one receipt to an open trip as the signed-in member: a PDF, JPEG or PNG as base64 (images become a one-page PDF), up to ${TRIP_FILE_LIMIT / 1024 / 1024} MB, with an optional description such as "3/14 飯店住宿".`,
+  description: `Uploads one receipt to an open trip as the signed-in member: a PDF or JPEG as base64 (a JPEG becomes a one-page PDF; convert PNGs to JPEG first), up to ${TRIP_FILE_LIMIT / 1024 / 1024} MB, with an optional description such as "3/14 飯店住宿".`,
   kind: "mutation",
   input: z.object({
     tripId: id,
     filename: z.string().trim().min(1, "缺檔名").max(200),
-    contentType: z.enum(uploadTypes, "只收 PDF、JPG、PNG"),
+    contentType: z.enum(uploadTypes, "只收 PDF 和 JPG"),
     base64: z.base64("檔案要是 base64"),
     description,
   }),
