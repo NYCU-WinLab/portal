@@ -218,7 +218,7 @@ export const getTrip = defineAction({
   name: "get_trip",
   title: "出差內容",
   description:
-    "One trip with its files (id, filename, description, size in bytes, signatureLevel B-LT or B-B when the portal signed it, uploaded at): the signed-in member's own, or for a trip admin everyone's grouped by member. Use get_trip_file for a file's contents.",
+    "One trip with its files (id, filename, description, size in bytes, signatureLevel: B-LT or B-B when the portal signed it, kept when it came signed under a certification that forbids changes and is stored as uploaded, uploaded at): the signed-in member's own, or for a trip admin everyone's grouped by member. Use get_trip_file for a file's contents.",
   kind: "query",
   input: z.object({ tripId: id }),
   run: async (actor, { tripId }) => {
@@ -339,7 +339,7 @@ export const exportTripFiles = defineAction({
 export const uploadTripFile = defineAction({
   name: "upload_trip_file",
   title: "上傳檔案",
-  description: `Uploads one receipt to an open trip as the signed-in member: a PDF or JPEG as base64 (a JPEG becomes a one-page PDF; convert PNGs to JPEG first). The portal signs it with the member's WinLab certificate (PAdES B-LT, with their handwritten signature shown if they chose so), up to ${TRIP_FILE_LIMIT / 1024 / 1024} MB, with an optional description such as "3/14 飯店住宿".`,
+  description: `Uploads one receipt to an open trip as the signed-in member: a PDF or JPEG as base64 (a JPEG becomes a one-page PDF; convert PNGs to JPEG first). The portal signs it with the member's WinLab certificate (PAdES B-LT, with their handwritten signature shown if they chose so); a PDF that is already signed keeps its signature and gets ours appended, up to ${TRIP_FILE_LIMIT / 1024 / 1024} MB, with an optional description such as "3/14 飯店住宿".`,
   kind: "mutation",
   input: z.object({
     tripId: id,

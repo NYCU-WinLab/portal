@@ -47,7 +47,8 @@ export const tripFiles = pgTable(
     size: integer().notNull(),
     data: bytea().notNull(),
     /** PAdES level the portal signed it to (B-LT, or B-B without a
-     * timestamp); null for files from before signing. */
+     * timestamp); "kept" when it came signed by someone whose
+     * certification forbids changes, so it is stored as uploaded. */
     signatureLevel: text(),
     createdAt: timestamp({ withTimezone: true }).defaultNow().notNull(),
   },

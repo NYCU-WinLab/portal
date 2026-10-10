@@ -48,7 +48,9 @@ export function FileRow({
         <span className="truncate text-muted-foreground">
           {file.description ? `${file.description}，` : ""}
           {size(file.size)}
-          {file.signatureLevel && "，已簽章"}
+          {file.signatureLevel === "kept"
+            ? "，原檔已有簽章"
+            : file.signatureLevel && "，已簽章"}
         </span>
       </span>
       <div className="flex shrink-0 gap-1">

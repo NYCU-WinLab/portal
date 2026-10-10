@@ -12,7 +12,9 @@ import {
   Increment,
   name,
   parsePdf,
+  type PdfValue,
   ref,
+  resolve,
   rootRef,
 } from "@/lib/pdf-sign/pdf"
 
@@ -118,17 +120,23 @@ export function addDss(
   const increment = new Increment(pdf)
   const catalogN = rootRef(pdf)
   const catalog = new Map(getDict(pdf, ref(catalogN)))
+  // A file signed elsewhere may already have a DSS: keep what it lists
+  // (and its VRI) and add ours after.
+  const existing = catalog.get("DSS")
+    ? new Map(getDict(pdf, catalog.get("DSS")))
+    : new Map<string, PdfValue>()
+  const listed = (key: string) => {
+    const value = resolve(pdf, existing.get(key))
+    return value?.t === "array" ? value.items : []
+  }
   const certs = data.certificates.map((cert) =>
     increment.add(dict({}), cert.der)
   )
   const crls = data.crls.map((crl) => increment.add(dict({}), crl))
-  const dss = increment.add(
-    dict({
-      Type: name("DSS"),
-      Certs: array(...certs.map(ref)),
-      CRLs: array(...crls.map(ref)),
-    })
-  )
+  existing.set("Type", name("DSS"))
+  existing.set("Certs", array(...listed("Certs"), ...certs.map(ref)))
+  existing.set("CRLs", array(...listed("CRLs"), ...crls.map(ref)))
+  const dss = increment.add({ t: "dict", entries: existing })
   catalog.set("DSS", ref(dss))
   increment.set(catalogN, { t: "dict", entries: catalog })
   return increment.build()

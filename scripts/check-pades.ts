@@ -1,8 +1,33 @@
+// `bun run pades:check base` writes only the unsigned base PDFs for
+// scripts/pades-vendor.py to sign as a vendor would.
+if (process.argv[2] === "base") {
+  await mkdir(".pades", { recursive: true })
+  for (const [name, objectStreams] of [
+    ["base-xrefstream", true],
+    ["base-classic", false],
+  ] as const) {
+    const doc = await PDFDocument.create()
+    doc.addPage([595, 842]).drawText("Vendor invoice", {
+      x: 50,
+      y: 780,
+      size: 24,
+      font: await doc.embedFont(StandardFonts.Helvetica),
+    })
+    await writeFile(
+      `.pades/${name}.pdf`,
+      await doc.save({ useObjectStreams: objectStreams })
+    )
+  }
+  console.log("wrote .pades/base-*.pdf")
+  process.exit(0)
+}
+
 // Writes signed sample PDFs with a throwaway CA, the same code paths an
 // upload takes, for pyHanko to judge in CI (the signer must not grade its
 // own work): a visible member signature, then a reviewer's on top, then the
 // B-LT validation data. Output in .pades/: root.pem, signed.pdf.
-import { mkdir, writeFile } from "node:fs/promises"
+import { existsSync } from "node:fs"
+import { mkdir, readFile, writeFile } from "node:fs/promises"
 
 import { PDFDocument, StandardFonts } from "pdf-lib"
 
@@ -12,6 +37,7 @@ import {
   timestampToken,
   validationData,
 } from "@/lib/pdf-sign/dss"
+import { signDocument } from "@/lib/pdf-sign/document"
 import { checkSignatureImage } from "@/lib/pdf-sign/image"
 import { preparePdf } from "@/lib/pdf-sign/prepare"
 import { signPdf } from "@/lib/pdf-sign/sign"
@@ -204,6 +230,37 @@ refuses("a PNG with a second IHDR", () =>
 await mkdir(".pades", { recursive: true })
 await writeFile(".pades/root.pem", pem(rootCert.der))
 await writeFile(".pades/signed.pdf", addDss(second.bytes, data))
+
+// PDFs a vendor signed (scripts/pades-vendor.py): ours goes on top of the
+// original bytes; a certification that allows no changes is kept as is.
+for (const name of [
+  "vendor-xrefstream",
+  "vendor-classic",
+  "vendor-certified",
+  "vendor-locked",
+]) {
+  const path = `.pades/${name}.pdf`
+  if (!existsSync(path)) continue
+  const original = new Uint8Array(await readFile(path))
+  const out = await signDocument({
+    pdf: original,
+    signer: uploader,
+    chain: [rootCert],
+    crl,
+    displayName: "詹詠翔",
+    reason: "上傳至出差「CI」",
+    appearance: { image: signaturePng, contentType: "image/png", corner: "br" },
+  })
+  const kept = Buffer.from(out.bytes.subarray(0, original.length)).equals(
+    Buffer.from(original)
+  )
+  if (!kept) throw new Error(`${name}: the original bytes changed`)
+  const expected = name === "vendor-locked" ? "kept" : "B-LT"
+  if (out.level !== expected)
+    throw new Error(`${name}: ${out.level}, expected ${expected}`)
+  await writeFile(`.pades/out-${name}.pdf`, out.bytes)
+  console.log(`${name}: ${out.level}, original bytes kept`)
+}
 console.log(
   `wrote .pades/signed.pdf (${data.certificates.length} certificates, ${data.crls.length} CRLs)`
 )
