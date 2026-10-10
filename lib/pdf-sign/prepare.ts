@@ -28,8 +28,8 @@ export async function preparePdf(
   if (appearance) {
     const image =
       appearance.contentType === "image/png"
-        ? await pdf.embedPng(appearance.image)
-        : await pdf.embedJpg(appearance.image)
+        ? await pdf.embedPng(new Uint8Array(appearance.image))
+        : await pdf.embedJpg(new Uint8Array(appearance.image))
     let width = WIDTH
     let height = (WIDTH * image.height) / image.width
     if (height > MAX_HEIGHT) {

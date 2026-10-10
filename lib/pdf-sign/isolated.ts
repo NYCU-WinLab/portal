@@ -9,9 +9,28 @@ import type { SignJob, SignResult } from "@/lib/pdf-sign/job"
 // reader there, and a hostile one may make either spin for minutes. The
 // child gets no environment (no database URL, no secrets), only the job.
 
-/** Long enough for a timestamp authority or two to answer. */
+/** Long enough for the timestamp authorities (25 s in all) and the rest. */
 const TIME_LIMIT_MS = 45_000
 const HEAP_LIMIT_MB = 512
+/** Workers running at once; more uploads wait their turn. */
+const CONCURRENCY = 3
+
+let running = 0
+const waiting: (() => void)[] = []
+
+async function slot() {
+  if (running < CONCURRENCY) {
+    running += 1
+    return
+  }
+  await new Promise<void>((resolve) => waiting.push(resolve))
+}
+
+function release() {
+  const next = waiting.shift()
+  if (next) next()
+  else running -= 1
+}
 
 function command() {
   // The image ships the bundled worker next to server.js; elsewhere (dev,
@@ -25,8 +44,20 @@ function command() {
   return { file: "bun", args: [join(process.cwd(), "scripts/pdf-worker.ts")] }
 }
 
-export function signIsolated(job: SignJob): Promise<SignResult> {
+export async function signIsolated(job: SignJob): Promise<SignResult> {
+  await slot()
+  try {
+    return await runWorker(job)
+  } finally {
+    release()
+  }
+}
+
+function runWorker(job: SignJob): Promise<SignResult> {
   const { file, args } = command()
+  // The answer is the signed PDF in base64: a third larger than maxBytes
+  // plus the signature. Anything beyond is not an answer.
+  const outputLimit = Math.ceil(job.maxBytes * 1.5) + 1024 * 1024
   return new Promise((resolve) => {
     const child: ChildProcessWithoutNullStreams = spawn(file, args, {
       env: { PATH: process.env.PATH ?? "", NODE_ENV: "production" },
@@ -38,7 +69,12 @@ export function signIsolated(job: SignJob): Promise<SignResult> {
       timedOut = true
       child.kill("SIGKILL")
     }, TIME_LIMIT_MS)
-    child.stdout.on("data", (chunk: Buffer) => out.push(chunk))
+    let outputBytes = 0
+    child.stdout.on("data", (chunk: Buffer) => {
+      outputBytes += chunk.length
+      if (outputBytes > outputLimit) child.kill("SIGKILL")
+      else out.push(chunk)
+    })
     child.stderr.on("data", (chunk: Buffer) => {
       if (err.length < 64) err.push(chunk)
     })

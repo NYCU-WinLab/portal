@@ -39,8 +39,9 @@ export async function toPdf(
   }
   // pdf-lib reads only the JPEG's header and keeps it compressed.
   const pdf = await PDFDocument.create()
-  const image = await pdf.embedJpg(data).catch((error: unknown) => {
-    console.error("embedJpg", error)
+  // A copy: pdf-lib reads the underlying ArrayBuffer from offset 0, and
+  // Node keeps small Buffers inside a shared pool.
+  const image = await pdf.embedJpg(new Uint8Array(data)).catch(() => {
     throw new Error("JPEG 打不開")
   })
   checkPixels(image)

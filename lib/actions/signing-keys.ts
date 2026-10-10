@@ -255,6 +255,7 @@ export async function memberSigningMaterial(
         isNull(signingKeys.revokedAt)
       )
     )
+  if (!row) throw new Error("簽章憑證剛被撤銷，請再上傳一次")
   return {
     certificate: new Uint8Array(row.certificate),
     pkcs8: await unsealPkcs8(row.privateKey),

@@ -24,7 +24,7 @@ const sameBytes = (a: Uint8Array, b: Uint8Array) =>
   a.length === b.length && a.every((byte, i) => byte === b[i])
 
 /** The TimeStampToken (a CMS ContentInfo, DER) for a SHA-256 digest. */
-async function requestFrom(url: string, digest: Uint8Array) {
+async function requestFrom(url: string, digest: Uint8Array, timeoutMs: number) {
   const nonce = crypto.getRandomValues(new Uint8Array(8))
   nonce[0] &= 0x7f
   const request = sequence(
@@ -37,7 +37,7 @@ async function requestFrom(url: string, digest: Uint8Array) {
     method: "POST",
     headers: { "Content-Type": "application/timestamp-query" },
     body: request as BodyInit,
-    signal: AbortSignal.timeout(10_000),
+    signal: AbortSignal.timeout(timeoutMs),
   })
   if (!response.ok) throw new Error(`${url} answered ${response.status}`)
   const body = read(new Uint8Array(await response.arrayBuffer()))
@@ -65,12 +65,22 @@ async function requestFrom(url: string, digest: Uint8Array) {
   return token.raw
 }
 
+/** All authorities together get this long, so a signature without a
+ * timestamp (B-B) is still made within the PDF worker's time limit. */
+const TOTAL_BUDGET_MS = 25_000
+
 /** A token from the first authority that answers well. */
 export async function timestamp(digest: Uint8Array) {
   const failures: string[] = []
+  const deadline = Date.now() + TOTAL_BUDGET_MS
   for (const url of TSA_URLS) {
+    const left = deadline - Date.now()
+    if (left < 1000) break
     try {
-      return { url, token: await requestFrom(url, digest) }
+      return {
+        url,
+        token: await requestFrom(url, digest, Math.min(10_000, left)),
+      }
     } catch (error) {
       failures.push(error instanceof Error ? error.message : String(error))
     }
