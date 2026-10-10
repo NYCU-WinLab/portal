@@ -24,18 +24,21 @@ export async function runUploadJob(job: UploadJob): Promise<UploadResult> {
       job.contentType,
       Buffer.from(job.file, "base64")
     )
-    if (job.signature)
+    // A PDF someone signed digitally is stored as uploaded: pdf-lib would
+    // rewrite it and break their signature.
+    const stamp = Buffer.from(pdf).includes("/ByteRange") ? null : job.signature
+    if (stamp)
       pdf = await stampPdf(pdf, {
-        image: Buffer.from(job.signature.image, "base64"),
-        contentType: job.signature.contentType,
-        corner: job.signature.corner,
+        image: Buffer.from(stamp.image, "base64"),
+        contentType: stamp.contentType,
+        corner: stamp.corner,
       })
     if (pdf.length > job.maxBytes)
       throw new Error(`轉成 PDF 後超過 ${job.maxBytes / 1024 / 1024} MB`)
     return {
       ok: true,
       file: Buffer.from(pdf).toString("base64"),
-      stamped: job.signature !== null,
+      stamped: stamp !== null,
     }
   } catch (error) {
     return {
