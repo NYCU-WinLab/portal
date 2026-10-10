@@ -2,9 +2,10 @@ import { and, eq, isNotNull, isNull, sql } from "drizzle-orm"
 
 import { z } from "zod"
 
+import { requireAdmin } from "@/lib/actions/authz"
 import { defineAction } from "@/lib/actions/define"
 import { db } from "@/lib/db"
-import { signingKeys } from "@/lib/db/schema"
+import { signingKeys, user } from "@/lib/db/schema"
 import {
   generateKeyPair,
   issueCertificate,
@@ -171,12 +172,15 @@ export async function memberIdentity(
         )
       if (usable(existing)) return existing!
       // An expiring certificate is retired, not revoked: what it signed
-      // stays valid.
+      // stays valid. Only while still unrevoked, so an admin's revocation
+      // at the same moment is never turned into a retirement.
       if (existing)
         await tx
           .update(signingKeys)
           .set({ revokedAt: existing.notAfter })
-          .where(eq(signingKeys.id, existing.id))
+          .where(
+            and(eq(signingKeys.id, existing.id), isNull(signingKeys.revokedAt))
+          )
       const pair = await generateKeyPair()
       const now = new Date()
       const notAfter = years(now, MEMBER_YEARS)
@@ -218,14 +222,33 @@ export async function memberIdentity(
   }
 }
 
-let crlCache: { crl: Uint8Array; until: number } | null = null
+let crlCache: { crl: Uint8Array; until: number; latest: number } | null = null
 
 /** The root's current CRL, valid for a week and reissued at most hourly
  * (the public route would otherwise sign on every request). Retired
  * certificates (renewed on expiry) are not listed: only ones revoked
  * before they expired. */
 export async function currentCrl() {
-  if (crlCache && crlCache.until > Date.now()) return crlCache.crl
+  // A cached CRL is reused only while no revocation is newer than it,
+  // including the ones the database trigger makes when a member leaves.
+  const [{ latest }] = await db
+    .select({
+      latest: sql<string | null>`max(${signingKeys.revokedAt})`,
+    })
+    .from(signingKeys)
+    .where(
+      and(
+        eq(signingKeys.kind, "member"),
+        sql`${signingKeys.revokedAt} < ${signingKeys.notAfter}`
+      )
+    )
+  const latestRevocation = latest ? new Date(latest).getTime() : 0
+  if (
+    crlCache &&
+    crlCache.until > Date.now() &&
+    crlCache.latest === latestRevocation
+  )
+    return crlCache.crl
   const root = await rootIdentity()
   const revoked = await db
     .select({ serial: signingKeys.serial, at: signingKeys.revokedAt })
@@ -250,7 +273,11 @@ export async function currentCrl() {
       at: row.at!,
     })),
   })
-  crlCache = { crl, until: now.getTime() + 3600 * 1000 }
+  crlCache = {
+    crl,
+    until: now.getTime() + 3600 * 1000,
+    latest: latestRevocation,
+  }
   return crl
 }
 
@@ -264,5 +291,67 @@ export const getSigningRoot = defineAction({
   run: async () => {
     const root = await rootIdentity()
     return { pem: pem(root.certificate.der), url: pkiUrls().certificate }
+  },
+})
+
+export const listSigningCertificates = defineAction({
+  name: "list_signing_certificates",
+  title: "簽章憑證",
+  description:
+    "Every member signing certificate the WinLab CA issued (portal admins only): member, serial, issued and expiry dates, and when it was revoked or retired (retired = replaced on expiry, still valid for what it signed). Certificates of members who left are revoked automatically.",
+  kind: "query",
+  input: z.object({}),
+  run: async (actor) => {
+    await requireAdmin(actor, "portal")
+    const rows = await db
+      .select({
+        id: signingKeys.id,
+        userId: signingKeys.userId,
+        member: user.name,
+        serial: signingKeys.serial,
+        createdAt: signingKeys.createdAt,
+        notAfter: signingKeys.notAfter,
+        revokedAt: signingKeys.revokedAt,
+      })
+      .from(signingKeys)
+      .leftJoin(user, eq(user.id, signingKeys.userId))
+      .where(eq(signingKeys.kind, "member"))
+    return {
+      certificates: rows.map((row) => ({
+        ...row,
+        status:
+          row.revokedAt === null
+            ? "active"
+            : row.revokedAt.getTime() >= row.notAfter.getTime()
+              ? "retired"
+              : "revoked",
+      })),
+    }
+  },
+})
+
+export const revokeSigningCertificate = defineAction({
+  name: "revoke_signing_certificate",
+  title: "撤銷簽章憑證",
+  description:
+    "Revokes a member's current signing certificate (portal admins only), e.g. when their key may be exposed. It is listed on /pki/root.crl at once, documents it signed later than now no longer validate, and the member gets a new certificate on their next upload. It cannot be undone; confirm with the member first.",
+  kind: "mutation",
+  input: z.object({ userId: z.uuid("id 格式不對") }),
+  run: async (actor, { userId }) => {
+    await requireAdmin(actor, "portal")
+    const [revoked] = await db
+      .update(signingKeys)
+      .set({ revokedAt: new Date() })
+      .where(
+        and(
+          eq(signingKeys.kind, "member"),
+          eq(signingKeys.userId, userId),
+          isNull(signingKeys.revokedAt)
+        )
+      )
+      .returning({ serial: signingKeys.serial })
+    if (!revoked) throw new Error("他沒有使用中的簽章憑證")
+    crlCache = null
+    return revoked
   },
 })

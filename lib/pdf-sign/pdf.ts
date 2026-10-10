@@ -227,6 +227,9 @@ export function parsePdf(bytes: Uint8Array): Pdf {
 /** A page object by number, with the MediaBox it or its parents give. */
 export function pageAt(pdf: Pdf, n: number) {
   const dict = getDict(pdf, ref(n))
+  const type = dict.get("Type")
+  if (type?.t !== "name" || type.v !== "Page")
+    throw new Error(`PDF: object ${n} is not a page`)
   let mediaBox = resolve(pdf, dict.get("MediaBox"))
   let parent = dict.get("Parent")
   for (let depth = 0; !mediaBox && parent && depth < 32; depth++) {

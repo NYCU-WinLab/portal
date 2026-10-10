@@ -14,7 +14,8 @@ import { user } from "@/lib/db/auth-schema"
 const bytea = customType<{ data: Buffer }>({ dataType: () => "bytea" })
 
 // The WinLab signing CA: one root, and one certificate per member that
-// signs what they upload. Private keys are PKCS#8, encrypted with
+// signs what they upload. When a member is deleted their row loses its
+// user_id, and a trigger (drizzle/0012) revokes the certificate then. Private keys are PKCS#8, encrypted with
 // SIGNING_MASTER_KEY (AES-256-GCM: 12-byte IV, then ciphertext and tag).
 export const signingKeys = pgTable(
   "signing_keys",
