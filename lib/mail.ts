@@ -28,6 +28,20 @@ export async function sendMail(mail: Mail) {
     socketTimeout: 20_000,
   })
   const from = process.env.MAIL_FROM
+  // A dev or test deployment sends every mail to MAIL_REDIRECT_TO alone,
+  // never to the members it was meant for.
+  const redirect = process.env.MAIL_REDIRECT_TO
+  if (redirect) {
+    const meant = mail.to.length + (mail.bcc?.length ?? 0)
+    await transport.sendMail({
+      from,
+      to: redirect,
+      subject: `[dev, ${meant} 位收件人] ${mail.subject}`,
+      text: mail.text,
+      html: mail.html,
+    })
+    return
+  }
   // A mail with only hidden recipients is addressed to the sender.
   await transport.sendMail({
     from,
