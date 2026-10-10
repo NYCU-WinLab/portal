@@ -1,3 +1,5 @@
+import { inflateSync } from "node:zlib"
+
 // A small PDF reader and incremental writer for files with classic xref
 // tables: the ones pdf-lib writes when we normalize an upload, plus our own
 // increments on top. It reads only dictionaries and arrays (never stream
@@ -168,10 +170,106 @@ export type Pdf = {
   /** latin1 view of bytes: one char per byte, so offsets match. */
   s: string
   offsets: Map<number, number>
+  /** Objects inside object streams: [stream object number, index]. */
+  compressed: Map<number, [number, number]>
   trailer: Map<string, PdfValue>
   /** Where the newest xref section starts. */
   startxref: number
   size: number
+  /** The newest section is a cross-reference stream (PDF 1.5 and later),
+   * so increments are written the same way. */
+  xrefStream: boolean
+  objectStreams: Map<number, { s: string; first: number; offsets: number[] }>
+}
+
+/** Most bytes a stream may inflate to: xref and object streams are small,
+ * and the cap keeps a compression bomb from filling memory. */
+const MAX_INFLATED = 32 * 1024 * 1024
+
+const numberOf = (value: PdfValue | undefined) =>
+  value?.t === "num" ? Number(value.v) : undefined
+
+/** A stream object at offset: its dictionary and raw (still encoded) data. */
+function streamAt(
+  pdf: Pick<Pdf, "s" | "bytes"> & Partial<Pdf>,
+  offset: number
+) {
+  const lexer = new Lexer(pdf.s, offset)
+  lexer.word()
+  lexer.word()
+  lexer.expect("obj")
+  const dict = lexer.value()
+  if (dict.t !== "dict") throw new Error("PDF: stream without a dictionary")
+  lexer.skip()
+  if (!pdf.s.startsWith("stream", lexer.pos)) throw new Error("PDF: no stream")
+  let start = lexer.pos + 6
+  if (pdf.s[start] === "\r") start++
+  if (pdf.s[start] === "\n") start++
+  let lengthValue = dict.entries.get("Length")
+  if (lengthValue?.t === "ref" && pdf.offsets)
+    lengthValue = getObject(pdf as Pdf, lengthValue.n)
+  const length = numberOf(lengthValue)
+  if (length === undefined || length < 0 || start + length > pdf.bytes.length)
+    throw new Error("PDF: bad stream length")
+  return { dict: dict.entries, data: pdf.bytes.subarray(start, start + length) }
+}
+
+/** Undoes FlateDecode and the PNG predictors that xref streams use. */
+function decode(dict: Map<string, PdfValue>, data: Uint8Array) {
+  const filter = dict.get("Filter")
+  const filters = filter?.t === "array" ? filter.items : filter ? [filter] : []
+  if (filters.length === 0) return data
+  if (
+    filters.length !== 1 ||
+    filters[0].t !== "name" ||
+    filters[0].v !== "FlateDecode"
+  )
+    throw new Error("PDF: unsupported stream filter")
+  let out = new Uint8Array(inflateSync(data, { maxOutputLength: MAX_INFLATED }))
+  const parmsValue = dict.get("DecodeParms")
+  const parms =
+    parmsValue?.t === "dict"
+      ? parmsValue.entries
+      : parmsValue?.t === "array" && parmsValue.items[0]?.t === "dict"
+        ? parmsValue.items[0].entries
+        : undefined
+  const predictor = numberOf(parms?.get("Predictor")) ?? 1
+  if (predictor >= 10) {
+    const columns = numberOf(parms?.get("Columns")) ?? 1
+    const colors = numberOf(parms?.get("Colors")) ?? 1
+    const bits = numberOf(parms?.get("BitsPerComponent")) ?? 8
+    const bpp = Math.max(1, Math.ceil((colors * bits) / 8))
+    const rowLength = Math.ceil((columns * colors * bits) / 8)
+    const rows = Math.floor(out.length / (rowLength + 1))
+    const result = new Uint8Array(rows * rowLength)
+    for (let r = 0; r < rows; r++) {
+      const type = out[r * (rowLength + 1)]
+      const row = out.subarray(
+        r * (rowLength + 1) + 1,
+        (r + 1) * (rowLength + 1)
+      )
+      const at = r * rowLength
+      for (let i = 0; i < rowLength; i++) {
+        const left = i >= bpp ? result[at + i - bpp] : 0
+        const up = r > 0 ? result[at - rowLength + i] : 0
+        const upLeft = r > 0 && i >= bpp ? result[at - rowLength + i - bpp] : 0
+        let value = row[i]
+        if (type === 1) value += left
+        else if (type === 2) value += up
+        else if (type === 3) value += (left + up) >> 1
+        else if (type === 4) {
+          const p = left + up - upLeft
+          const pa = Math.abs(p - left)
+          const pb = Math.abs(p - up)
+          const pc = Math.abs(p - upLeft)
+          value += pa <= pb && pa <= pc ? left : pb <= pc ? up : upLeft
+        }
+        result[at + i] = value & 0xff
+      }
+    }
+    out = result
+  } else if (predictor !== 1) throw new Error("PDF: unsupported predictor")
+  return out
 }
 
 export function parsePdf(bytes: Uint8Array): Pdf {
@@ -179,48 +277,115 @@ export function parsePdf(bytes: Uint8Array): Pdf {
   const at = s.lastIndexOf("startxref")
   if (at < 0) throw new Error("PDF: no startxref")
   const startxref = Number(new Lexer(s, at + 9).word())
+  if (!Number.isInteger(startxref) || startxref < 0 || startxref >= s.length)
+    throw new Error("PDF: bad startxref")
   const offsets = new Map<number, number>()
+  const compressed = new Map<number, [number, number]>()
+  // Newer sections come first; the first entry seen for a number wins,
+  // free ones included.
+  const known = new Set<number>()
   let trailer: Map<string, PdfValue> | null = null
+  let xrefStream = false
   const seen = new Set<number>()
+
+  const readXrefStream = (offset: number) => {
+    const { dict, data: raw } = streamAt({ s, bytes }, offset)
+    const data = decode(dict, raw)
+    const w = dict.get("W")
+    const widths =
+      w?.t === "array" ? w.items.map((item) => numberOf(item) ?? 0) : []
+    if (widths.length !== 3 || widths.some((n) => n < 0 || n > 8))
+      throw new Error("PDF: bad xref stream /W")
+    const indexValue = dict.get("Index")
+    const index =
+      indexValue?.t === "array"
+        ? indexValue.items.map((item) => numberOf(item) ?? 0)
+        : [0, numberOf(dict.get("Size")) ?? 0]
+    const entry = widths[0] + widths[1] + widths[2]
+    let at = 0
+    const field = (width: number, fallback: number) => {
+      if (width === 0) return fallback
+      let value = 0
+      for (let i = 0; i < width; i++) value = value * 256 + data[at++]
+      return value
+    }
+    // Every listed entry needs its bytes: no counts beyond the data, and
+    // no zero-width entries that would loop without reading anything.
+    const listed = index.reduce((sum, n, i) => (i % 2 ? sum + n : sum), 0)
+    if (
+      entry === 0 ||
+      index.some((n) => !Number.isInteger(n) || n < 0) ||
+      listed * entry > data.length
+    )
+      throw new Error("PDF: xref stream /Index beyond its data")
+    for (let k = 0; k + 1 < index.length; k += 2) {
+      for (let i = 0; i < index[k + 1]; i++) {
+        if (at + entry > data.length) throw new Error("PDF: xref stream short")
+        const type = field(widths[0], 1)
+        const second = field(widths[1], 0)
+        const third = field(widths[2], 0)
+        const n = index[k] + i
+        if (known.has(n)) continue
+        known.add(n)
+        if (type === 1) offsets.set(n, second)
+        else if (type === 2) compressed.set(n, [second, third])
+      }
+    }
+    return dict
+  }
+
   for (let section: number | null = startxref; section !== null;) {
     if (seen.has(section)) throw new Error("PDF: xref loop")
     seen.add(section)
+    let sectionTrailer: Map<string, PdfValue>
     const lexer: Lexer = new Lexer(s, section)
-    if (lexer.word() !== "xref")
-      throw new Error("PDF: not a classic xref table (normalize it first)")
-    for (;;) {
-      const first = lexer.peekWord()
-      if (first === "trailer") break
-      const start = Number(lexer.word())
-      const count = Number(lexer.word())
-      if (!Number.isInteger(start) || !Number.isInteger(count) || count < 0)
-        throw new Error("PDF: bad xref section")
-      lexer.skip()
-      for (let i = 0; i < count; i++) {
-        const entry = s.slice(lexer.pos, lexer.pos + 20)
-        const [offset, , kind] = entry.trim().split(/\s+/)
-        // Newer sections come first; keep the first offset seen.
-        if (kind === "n" && !offsets.has(start + i))
-          offsets.set(start + i, Number(offset))
-        lexer.pos += 20
+    if (lexer.peekWord() === "xref") {
+      lexer.word()
+      for (;;) {
+        const first = lexer.peekWord()
+        if (first === "trailer") break
+        const start = Number(lexer.word())
+        const count = Number(lexer.word())
+        if (!Number.isInteger(start) || !Number.isInteger(count) || count < 0)
+          throw new Error("PDF: bad xref section")
         lexer.skip()
+        for (let i = 0; i < count; i++) {
+          const entry = s.slice(lexer.pos, lexer.pos + 20)
+          const [offset, , kind] = entry.trim().split(/\s+/)
+          if (!known.has(start + i)) {
+            known.add(start + i)
+            if (kind === "n") offsets.set(start + i, Number(offset))
+          }
+          lexer.pos += 20
+          lexer.skip()
+        }
       }
+      lexer.expect("trailer")
+      const dictValue: PdfValue = lexer.value()
+      if (dictValue.t !== "dict") throw new Error("PDF: bad trailer")
+      sectionTrailer = dictValue.entries
+      // A hybrid file lists its compressed objects in a stream too.
+      const hidden = numberOf(sectionTrailer.get("XRefStm"))
+      if (hidden !== undefined) readXrefStream(hidden)
+    } else {
+      sectionTrailer = readXrefStream(section)
+      if (trailer === null) xrefStream = true
     }
-    lexer.expect("trailer")
-    const dictValue: PdfValue = lexer.value()
-    if (dictValue.t !== "dict") throw new Error("PDF: bad trailer")
-    trailer ??= dictValue.entries
-    const prev: PdfValue | undefined = dictValue.entries.get("Prev")
-    section = prev?.t === "num" ? Number(prev.v) : null
+    trailer ??= sectionTrailer
+    const prev = numberOf(sectionTrailer.get("Prev"))
+    section = prev ?? null
   }
-  const size = trailer!.get("Size")
+  const size = numberOf(trailer!.get("Size"))
   return {
     bytes,
     s,
     offsets,
+    compressed,
     trailer: trailer!,
     startxref,
-    size: size?.t === "num" ? Number(size.v) : offsets.size + 1,
+    size: size ?? Math.max(0, ...known) + 1,
+    xrefStream,
+    objectStreams: new Map(),
   }
 }
 
@@ -249,12 +414,41 @@ export function pageAt(pdf: Pdf, n: number) {
 
 export function getObject(pdf: Pdf, n: number): PdfValue {
   const offset = pdf.offsets.get(n)
-  if (offset === undefined) throw new Error(`PDF: object ${n} missing`)
-  const lexer = new Lexer(pdf.s, offset)
-  if (Number(lexer.word()) !== n) throw new Error(`PDF: object ${n} misplaced`)
-  lexer.word()
-  lexer.expect("obj")
-  return lexer.value()
+  if (offset !== undefined) {
+    const lexer = new Lexer(pdf.s, offset)
+    if (Number(lexer.word()) !== n)
+      throw new Error(`PDF: object ${n} misplaced`)
+    lexer.word()
+    lexer.expect("obj")
+    return lexer.value()
+  }
+  const inStream = pdf.compressed.get(n)
+  if (!inStream) throw new Error(`PDF: object ${n} missing`)
+  const [streamN, index] = inStream
+  let objects = pdf.objectStreams.get(streamN)
+  if (!objects) {
+    const streamOffset = pdf.offsets.get(streamN)
+    if (streamOffset === undefined)
+      throw new Error(`PDF: object stream ${streamN} missing`)
+    const { dict, data } = streamAt(pdf, streamOffset)
+    const text = Buffer.from(decode(dict, data)).toString("latin1")
+    const count = numberOf(dict.get("N")) ?? 0
+    const first = numberOf(dict.get("First")) ?? 0
+    // Each object needs at least "n o " in the header.
+    if (count < 0 || first < 0 || first > text.length || count * 4 > first)
+      throw new Error(`PDF: object stream ${streamN} header too short`)
+    const header = new Lexer(text, 0)
+    const list: number[] = []
+    for (let i = 0; i < count; i++) {
+      header.word()
+      list.push(Number(header.word()))
+    }
+    objects = { s: text, first, offsets: list }
+    pdf.objectStreams.set(streamN, objects)
+  }
+  const at = objects.offsets[index]
+  if (at === undefined) throw new Error(`PDF: object ${n} missing`)
+  return new Lexer(objects.s, objects.first + at).value()
 }
 
 export function resolve(
@@ -364,15 +558,55 @@ export class Increment {
       offset += body.length
     }
     const xrefAt = offset
-    let xref = "xref\n"
-    for (const [n, position] of positions)
-      xref += `${n} 1\n${String(position).padStart(10, "0")} 00000 n\r\n`
     const trailer = new Map(this.pdf.trailer)
-    trailer.set("Size", num(this.next))
+    for (const key of [
+      "Prev",
+      "XRefStm",
+      "Type",
+      "W",
+      "Index",
+      "Filter",
+      "DecodeParms",
+      "Length",
+      "Size",
+    ])
+      trailer.delete(key)
     trailer.set("Prev", num(this.pdf.startxref))
-    trailer.delete("XRefStm")
-    xref += `trailer\n${serialize({ t: "dict", entries: trailer })}\nstartxref\n${xrefAt}\n%%EOF\n`
-    parts.push(Buffer.from(xref, "latin1"))
+    if (this.pdf.xrefStream) {
+      // A file indexed by an xref stream gets its update the same way:
+      // one stream object listing the new objects and itself.
+      const self = this.next++
+      positions.set(self, xrefAt)
+      const entries = [...positions].sort((a, b) => a[0] - b[0])
+      const data = Buffer.alloc(entries.length * 7)
+      entries.forEach(([, position], i) => {
+        data[i * 7] = 1
+        data.writeUInt32BE(position, i * 7 + 1)
+      })
+      trailer.set("Type", name("XRef"))
+      trailer.set("Size", num(this.next))
+      trailer.set("W", array(num(1), num(4), num(2)))
+      trailer.set("Index", array(...entries.flatMap(([n]) => [num(n), num(1)])))
+      trailer.set("Length", num(data.length))
+      parts.push(
+        Buffer.from(
+          `${self} 0 obj\n${serialize({ t: "dict", entries: trailer })}\nstream\n`,
+          "latin1"
+        ),
+        data,
+        Buffer.from(
+          `\nendstream\nendobj\nstartxref\n${xrefAt}\n%%EOF\n`,
+          "latin1"
+        )
+      )
+    } else {
+      let xref = "xref\n"
+      for (const [n, position] of positions)
+        xref += `${n} 1\n${String(position).padStart(10, "0")} 00000 n\r\n`
+      trailer.set("Size", num(this.next))
+      xref += `trailer\n${serialize({ t: "dict", entries: trailer })}\nstartxref\n${xrefAt}\n%%EOF\n`
+      parts.push(Buffer.from(xref, "latin1"))
+    }
     return new Uint8Array(Buffer.concat(parts))
   }
 }

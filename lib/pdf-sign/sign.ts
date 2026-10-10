@@ -37,6 +37,12 @@ export async function signPdf(
   input: Uint8Array,
   options: {
     widget: { appearance: number; rect: number[] } | null
+    /** Draws the appearance into this same increment instead (for files
+     * that are not re-saved); null for an invisible signature. */
+    drawAppearance?: (
+      increment: Increment,
+      mediaBox: number[]
+    ) => { appearance: number; rect: number[] } | null
     /** Page 1's object number when the caller knows it (from pdf-lib). */
     page?: number
     signer: ParsedCertificate
@@ -58,7 +64,9 @@ export async function signPdf(
   const signatureN = increment.reserve()
   const fieldN = increment.reserve()
 
-  let appearance = options.widget?.appearance
+  const widget =
+    options.widget ?? options.drawAppearance?.(increment, page.mediaBox) ?? null
+  let appearance = widget?.appearance
   if (appearance === undefined)
     appearance = increment.add(
       dict({
@@ -79,7 +87,7 @@ export async function signPdf(
       // Print + Locked
       F: num(132),
       P: ref(page.n),
-      Rect: array(...(options.widget?.rect ?? [0, 0, 0, 0]).map(num)),
+      Rect: array(...(widget?.rect ?? [0, 0, 0, 0]).map(num)),
       AP: dict({ N: ref(appearance) }),
     })
   )
