@@ -312,7 +312,11 @@ export function parsePdf(bytes: Uint8Array): Pdf {
     // Every listed entry needs its bytes: no counts beyond the data, and
     // no zero-width entries that would loop without reading anything.
     const listed = index.reduce((sum, n, i) => (i % 2 ? sum + n : sum), 0)
-    if (entry === 0 || listed * entry > data.length)
+    if (
+      entry === 0 ||
+      index.some((n) => !Number.isInteger(n) || n < 0) ||
+      listed * entry > data.length
+    )
       throw new Error("PDF: xref stream /Index beyond its data")
     for (let k = 0; k + 1 < index.length; k += 2) {
       for (let i = 0; i < index[k + 1]; i++) {
