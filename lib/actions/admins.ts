@@ -1,9 +1,9 @@
-import { and, asc, eq, ne } from "drizzle-orm"
+import { and, asc, eq, notInArray } from "drizzle-orm"
 import { z } from "zod"
 
 import { requireAdmin } from "@/lib/actions/authz"
 import { defineAction } from "@/lib/actions/define"
-import { adminAppKeys, adminApps } from "@/lib/apps"
+import { adminAppKeys, adminApps, ownAdminsOnly } from "@/lib/apps"
 import { db } from "@/lib/db"
 import { admins, user } from "@/lib/db/schema"
 
@@ -29,7 +29,7 @@ export const listMembers = defineAction({
 export const listAdmins = defineAction({
   name: "list_admins",
   title: "管理員名單",
-  description: `Who administers which app, grouped by app. Apps: ${adminAppKeys.map((app) => `${app} (${adminApps[app]})`).join(", ")}. A portal admin administers every app.`,
+  description: `Who administers which app, grouped by app. Apps: ${adminAppKeys.map((app) => `${app} (${adminApps[app]})`).join(", ")}. A portal admin administers every app except ${ownAdminsOnly.map((app) => app).join(", ")}, which only its own admins run.`,
   kind: "query",
   input: z.object({}),
   run: async () => {
@@ -77,19 +77,25 @@ export const grantAdmin = defineAction({
         .select({ app: admins.app })
         .from(admins)
         .where(and(eq(admins.userId, userId), eq(admins.app, "portal")))
-      if (app !== "portal" && portalRow)
-        throw new Error("他是全站管理員，已經管得到每個 app")
+      if (app !== "portal" && !ownAdminsOnly.includes(app) && portalRow)
+        throw new Error("他是全站管理員，已經管得到這個 app")
       const [added] = await tx
         .insert(admins)
         .values({ userId, app, grantedBy: actor.userId })
         .onConflictDoNothing()
         .returning({ app: admins.app })
       if (!added) throw new Error(`已經是${adminApps[app]}管理員了`)
-      // A portal admin already runs every app; drop their app-level rows.
+      // A portal admin already runs the other apps; drop those rows and
+      // keep the ones portal rank does not cover.
       if (app === "portal")
         await tx
           .delete(admins)
-          .where(and(eq(admins.userId, userId), ne(admins.app, "portal")))
+          .where(
+            and(
+              eq(admins.userId, userId),
+              notInArray(admins.app, ["portal", ...ownAdminsOnly])
+            )
+          )
       return { userId, app }
     })
   },

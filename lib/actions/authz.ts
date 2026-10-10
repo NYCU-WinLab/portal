@@ -1,11 +1,12 @@
 import { and, eq, inArray } from "drizzle-orm"
 
 import type { Actor } from "@/lib/actions/define"
-import { type AdminApp, adminApps } from "@/lib/apps"
+import { type AdminApp, adminApps, ownAdminsOnly } from "@/lib/apps"
 import { db } from "@/lib/db"
 import { admins } from "@/lib/db/schema"
 
-/** Whether the member administers app, directly or as a portal admin. */
+/** Whether the member administers app, directly or as a portal admin
+ * (except for the apps in ownAdminsOnly). */
 export async function isAdmin(actor: Actor, app: AdminApp) {
   const [row] = await db
     .select({ app: admins.app })
@@ -13,7 +14,12 @@ export async function isAdmin(actor: Actor, app: AdminApp) {
     .where(
       and(
         eq(admins.userId, actor.userId),
-        inArray(admins.app, app === "portal" ? ["portal"] : ["portal", app])
+        inArray(
+          admins.app,
+          app === "portal" || ownAdminsOnly.includes(app)
+            ? [app]
+            : ["portal", app]
+        )
       )
     )
     .limit(1)

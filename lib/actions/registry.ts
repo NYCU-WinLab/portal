@@ -61,6 +61,25 @@ import {
 } from "@/lib/actions/presenters"
 import { getProfile } from "@/lib/actions/profile"
 import {
+  getMySignature,
+  getMySignatureImage,
+  setMySignature,
+  setSignatureSettings,
+} from "@/lib/actions/signature"
+import {
+  createTrip,
+  deleteTrip,
+  deleteTripFile,
+  exportTripFiles,
+  getTrip,
+  getTripFile,
+  getTripStats,
+  listTrips,
+  updateTrip,
+  updateTripFile,
+  uploadTripFile,
+} from "@/lib/actions/trip"
+import {
   addReimburseEgress,
   addReimburseIngress,
   deleteReimburseEgress,
@@ -132,6 +151,21 @@ export const actions: Action[] = [
   addReimburseIngress,
   updateReimburseIngress,
   deleteReimburseIngress,
+  listTrips,
+  getTrip,
+  getTripFile,
+  exportTripFiles,
+  getTripStats,
+  uploadTripFile,
+  updateTripFile,
+  deleteTripFile,
+  createTrip,
+  updateTrip,
+  deleteTrip,
+  getMySignature,
+  getMySignatureImage,
+  setMySignature,
+  setSignatureSettings,
   listMembers,
   listAdmins,
   grantAdmin,
