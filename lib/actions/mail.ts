@@ -14,10 +14,26 @@ const MAX_ATTEMPTS = 5
 
 type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0]
 
-/** Queues mail; pass the action's transaction so it commits with the change. */
+/** Queues mail; pass the action's transaction so it commits with the
+ * change. Returns the outbox id, or null when there is no recipient. */
 export async function queueMail(tx: Db | Tx, mail: Mail) {
-  if (!mail.to.length) return
-  await tx.insert(mailOutbox).values(mail)
+  if (!mail.to.length && !mail.bcc?.length) return null
+  const [row] = await tx
+    .insert(mailOutbox)
+    .values(mail)
+    .returning({ id: mailOutbox.id })
+  return row.id
+}
+
+/** Where a queued mail stands, for the page that queued it. */
+export function mailStatus(mail: {
+  sentAt: Date | null
+  attempts: number | null
+}) {
+  if (mail.sentAt) return "sent" as const
+  return (mail.attempts ?? 0) >= MAX_ATTEMPTS
+    ? ("failed" as const)
+    : ("queued" as const)
 }
 
 let sending: Promise<void> | null = null
@@ -49,6 +65,7 @@ async function drain() {
       try {
         await sendMail({
           to: mail.to,
+          bcc: mail.bcc,
           subject: mail.subject,
           text: mail.text,
           html: mail.html ?? undefined,

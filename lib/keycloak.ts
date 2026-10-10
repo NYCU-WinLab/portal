@@ -81,7 +81,7 @@ export const labStatuses = [
   "alumni",
 ] as const
 export type LabStatus = (typeof labStatuses)[number]
-export type LabMember = { status?: LabStatus; cohort?: number }
+export type LabMember = { status?: LabStatus; cohort?: number; email?: string }
 
 const LAB_DIRECTORY_TTL_MS = 10 * 60 * 1000
 let directory: { members: Map<string, LabMember>; at: number } | null = null
@@ -115,11 +115,12 @@ export async function labDirectory(): Promise<Map<string, LabMember>> {
     const status = labStatuses.find((name) => name === group.name)
     const cohort = /^\d{3}$/.test(group.name) ? Number(group.name) : undefined
     if (!status && cohort === undefined) continue
-    const people = await adminGet<{ id: string }[]>(
+    const people = await adminGet<{ id: string; email?: string }[]>(
       `/groups/${group.id}/members?max=1000&briefRepresentation=true`
     )
-    for (const { id } of people) {
+    for (const { id, email } of people) {
       const member = members.get(id) ?? {}
+      if (email) member.email = email
       if (status) member.status = status
       if (cohort !== undefined) member.cohort = cohort
       members.set(id, member)
