@@ -79,14 +79,6 @@ export function SignatureSettings({
             </SelectContent>
           </Select>
         </FieldRow>
-        <FieldRow label="驗證簽章">
-          <a
-            href="/pki/root.crt"
-            className="underline-offset-4 hover:underline"
-          >
-            下載實驗室根憑證
-          </a>
-        </FieldRow>
       </FieldList>
     </div>
   )

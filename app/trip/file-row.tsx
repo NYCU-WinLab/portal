@@ -21,7 +21,7 @@ type File = {
   filename: string
   description: string | null
   size: number
-  signatureLevel: string | null
+  stamped: boolean
 }
 
 // One file: its name opens the PDF; download, describe and delete beside it.
@@ -48,9 +48,7 @@ export function FileRow({
         <span className="truncate text-muted-foreground">
           {file.description ? `${file.description}，` : ""}
           {size(file.size)}
-          {file.signatureLevel === "kept"
-            ? "，原檔已鎖定，未加簽"
-            : file.signatureLevel && "，已簽章"}
+          {file.stamped && "，已簽名"}
         </span>
       </span>
       <div className="flex shrink-0 gap-1">

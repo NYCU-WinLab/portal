@@ -2,15 +2,15 @@ import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process"
 import { existsSync } from "node:fs"
 import { join } from "node:path"
 
-import type { SignJob, SignResult } from "@/lib/pdf-sign/job"
+import type { UploadJob, UploadResult } from "@/lib/pdf-sign/job"
 
-// Runs a SignJob in a child process with a wall-clock limit and a heap
-// limit, and kills it past either: member files reach pdf-lib and our own
-// reader there, and a hostile one may make either spin for minutes. The
+// Runs an UploadJob in a child process with a wall-clock limit and a heap
+// limit, and kills it past either: member files reach pdf-lib there, and a
+// hostile one can make it spin for minutes. The
 // child gets no environment (no database URL, no secrets), only the job.
 
-/** Long enough for the timestamp authorities (25 s in all) and the rest. */
-const TIME_LIMIT_MS = 45_000
+/** Far more than any honest file needs to convert and stamp. */
+const TIME_LIMIT_MS = 30_000
 const HEAP_LIMIT_MB = 512
 /** Workers running at once; more uploads wait their turn. */
 const CONCURRENCY = 3
@@ -44,7 +44,7 @@ function command() {
   return { file: "bun", args: [join(process.cwd(), "scripts/pdf-worker.ts")] }
 }
 
-export async function signIsolated(job: SignJob): Promise<SignResult> {
+export async function processIsolated(job: UploadJob): Promise<UploadResult> {
   await slot()
   try {
     return await runWorker(job)
@@ -53,10 +53,10 @@ export async function signIsolated(job: SignJob): Promise<SignResult> {
   }
 }
 
-function runWorker(job: SignJob): Promise<SignResult> {
+function runWorker(job: UploadJob): Promise<UploadResult> {
   const { file, args } = command()
-  // The answer is the signed PDF in base64: a third larger than maxBytes
-  // plus the signature. Anything beyond is not an answer.
+  // The answer is the PDF in base64, a third larger than maxBytes.
+  // Anything beyond is not an answer.
   const outputLimit = Math.ceil(job.maxBytes * 1.5) + 1024 * 1024
   return new Promise((resolve) => {
     const child: ChildProcessWithoutNullStreams = spawn(file, args, {
@@ -91,7 +91,7 @@ function runWorker(job: SignJob): Promise<SignResult> {
           error: "這個檔案處理太久，請另存成 PDF 或改傳照片",
         })
       try {
-        resolve(JSON.parse(Buffer.concat(out).toString("utf8")) as SignResult)
+        resolve(JSON.parse(Buffer.concat(out).toString("utf8")) as UploadResult)
       } catch {
         console.error(
           "pdf worker exited",

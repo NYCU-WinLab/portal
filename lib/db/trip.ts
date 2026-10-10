@@ -46,17 +46,15 @@ export const tripFiles = pgTable(
     description: text(),
     size: integer().notNull(),
     data: bytea().notNull(),
-    /** PAdES level the portal signed it to (B-LT, or B-B without a
-     * timestamp); "kept" when the file declares a certification that
-     * forbids changes, so it is stored as uploaded without our signature. */
-    signatureLevel: text(),
+    /** The uploader's handwritten signature was drawn on page 1. */
+    stamped: boolean().default(false).notNull(),
     createdAt: timestamp({ withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [index().on(table.tripId, table.userId)]
 )
 
 // A member's handwritten signature and how it goes on their documents.
-// Shared by every app that signs (trip now, approve later).
+// Shared by every app that stamps it (trip now, approve later).
 export const signatures = pgTable(
   "signatures",
   {

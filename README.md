@@ -36,7 +36,7 @@ With Docker Compose, on any machine with Docker:
 ```sh
 curl -fsSLO https://raw.githubusercontent.com/NYCU-WinLab/portal/main/compose.yaml
 curl -fsSL -o .env https://raw.githubusercontent.com/NYCU-WinLab/portal/main/.env.example
-# set POSTGRES_PASSWORD, BETTER_AUTH_URL, BETTER_AUTH_SECRET, SIGNING_MASTER_KEY and the KEYCLOAK_* keys in .env
+# set POSTGRES_PASSWORD, BETTER_AUTH_URL, BETTER_AUTH_SECRET and the KEYCLOAK_* keys in .env
 docker compose up -d
 ```
 
@@ -69,7 +69,6 @@ Set these in `.env`; [.env.example](.env.example) documents every one.
 | `BETTER_AUTH_SECRET` | Signs sessions and OAuth queries | required |
 | `KEYCLOAK_ISSUER` | The realm URL, e.g. `https://auth.example.com/realms/lab` | required |
 | `KEYCLOAK_CLIENT_ID`, `KEYCLOAK_CLIENT_SECRET` | The portal's Keycloak client | required |
-| `SIGNING_MASTER_KEY` | 32 bytes, base64: seals the signing CA's private keys (trip uploads are signed with PAdES B-LT); keep a copy, losing it means a new CA | required |
 | `PORTAL_VERSION` | Image tag | `main` |
 | `PORTAL_BIND`, `PORTAL_PORT` | Where web listens on the host | `127.0.0.1`, `3000` |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | OTLP/HTTP endpoint for traces and error logs; off when empty | empty |

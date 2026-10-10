@@ -61,11 +61,6 @@ import {
 } from "@/lib/actions/presenters"
 import { getProfile } from "@/lib/actions/profile"
 import {
-  getSigningRoot,
-  listSigningCertificates,
-  revokeSigningCertificate,
-} from "@/lib/actions/signing-keys"
-import {
   getMySignature,
   getMySignatureImage,
   setMySignature,
@@ -171,9 +166,6 @@ export const actions: Action[] = [
   getMySignatureImage,
   setMySignature,
   setSignatureSettings,
-  getSigningRoot,
-  listSigningCertificates,
-  revokeSigningCertificate,
   listMembers,
   listAdmins,
   grantAdmin,
