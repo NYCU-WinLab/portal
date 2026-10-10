@@ -21,6 +21,7 @@ type File = {
   filename: string
   description: string | null
   size: number
+  signatureLevel: string | null
 }
 
 // One file: its name opens the PDF; download, describe and delete beside it.
@@ -47,6 +48,7 @@ export function FileRow({
         <span className="truncate text-muted-foreground">
           {file.description ? `${file.description}，` : ""}
           {size(file.size)}
+          {file.signatureLevel && "，已簽章"}
         </span>
       </span>
       <div className="flex shrink-0 gap-1">

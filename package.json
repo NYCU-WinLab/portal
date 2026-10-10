@@ -13,7 +13,8 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "actions:check": "bun scripts/check-actions.ts",
-    "tokens:check": "bun scripts/check-tokens.ts"
+    "tokens:check": "bun scripts/check-tokens.ts",
+    "pades:check": "bun scripts/check-pades.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",

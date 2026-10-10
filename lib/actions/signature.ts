@@ -4,6 +4,7 @@ import { z } from "zod"
 import { defineAction } from "@/lib/actions/define"
 import { db } from "@/lib/db"
 import { signatures } from "@/lib/db/schema"
+import { checkSignatureImage } from "@/lib/pdf-sign/image"
 
 /** Largest signature image accepted, in bytes. */
 const SIGNATURE_LIMIT = 1024 * 1024
@@ -79,6 +80,7 @@ export const setMySignature = defineAction({
     )!
     const image = Buffer.from(base64, "base64")
     if (image.length > SIGNATURE_LIMIT) throw new Error("簽名圖片最大 1 MB")
+    checkSignatureImage(image, `image/${type}`)
     const values = {
       userId: actor.userId,
       contentType: `image/${type}`,

@@ -1,4 +1,14 @@
-import { and, asc, count, desc, eq, sql, sum } from "drizzle-orm"
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  isNotNull,
+  isNull,
+  sql,
+  sum,
+} from "drizzle-orm"
 import { zipSync } from "fflate"
 import { PDFDocument } from "pdf-lib"
 import { z } from "zod"
@@ -6,7 +16,8 @@ import { z } from "zod"
 import { isAdmin, requireAdmin } from "@/lib/actions/authz"
 import { type Actor, defineAction } from "@/lib/actions/define"
 import { db } from "@/lib/db"
-import { tripFiles, trips, user } from "@/lib/db/schema"
+import { signatures, tripFiles, trips, user } from "@/lib/db/schema"
+import { signUpload } from "@/lib/pdf-sign"
 
 const id = z.uuid("id 格式不對")
 
@@ -74,9 +85,19 @@ async function toPdf(contentType: (typeof uploadTypes)[number], data: Buffer) {
   if (contentType === "application/pdf") {
     if (!data.subarray(0, 5).equals(Buffer.from("%PDF-")))
       throw new Error("這不是 PDF 檔")
-    await PDFDocument.load(data, { updateMetadata: false }).catch(() => {
-      throw new Error("PDF 打不開，可能已損毀或有密碼")
-    })
+    const pdf = await PDFDocument.load(data, { updateMetadata: false }).catch(
+      () => {
+        throw new Error("PDF 打不開，可能已損毀或有密碼")
+      }
+    )
+    // Walking the page tree here catches cyclic or empty trees before the
+    // signer sees the file.
+    try {
+      if (pdf.getPageCount() === 0) throw new Error("no pages")
+      pdf.getPage(0)
+    } catch {
+      throw new Error("PDF 的頁面結構有問題")
+    }
     return data
   }
   // pdf-lib reads only the JPEG's header and keeps it compressed.
@@ -94,6 +115,65 @@ async function toPdf(contentType: (typeof uploadTypes)[number], data: Buffer) {
     height: image.height,
   })
   return Buffer.from(await pdf.save())
+}
+
+/** The PDF signed by its uploader's WinLab certificate, with their
+ * handwritten signature shown if they chose to. */
+async function signFor(userId: string, tripName: string, pdf: Uint8Array) {
+  const [[member], [signature]] = await Promise.all([
+    db.select({ name: user.name }).from(user).where(eq(user.id, userId)),
+    db.select().from(signatures).where(eq(signatures.userId, userId)),
+  ])
+  return signUpload({
+    pdf,
+    userId,
+    displayName: member.name,
+    reason: `上傳至出差「${tripName}」`,
+    appearance:
+      signature?.image && signature.contentType && signature.stamp
+        ? {
+            image: signature.image,
+            contentType: signature.contentType,
+            corner: signature.corner,
+          }
+        : null,
+  })
+}
+
+/** Signs the files uploaded before the portal signed uploads, as if each
+ * had just been uploaded by its owner (scripts/sign-trip-files.ts). */
+export async function signLegacyTripFiles(log: (line: string) => void) {
+  const files = await db
+    .select({
+      id: tripFiles.id,
+      userId: tripFiles.userId,
+      data: tripFiles.data,
+      trip: trips.name,
+    })
+    .from(tripFiles)
+    .innerJoin(trips, eq(trips.id, tripFiles.tripId))
+    .where(and(isNull(tripFiles.signatureLevel), isNotNull(tripFiles.userId)))
+  let signedCount = 0
+  for (const [index, file] of files.entries()) {
+    // One bad old file is logged and left unsigned; the rest still go.
+    let signed
+    try {
+      signed = await signFor(file.userId!, file.trip, new Uint8Array(file.data))
+    } catch (error) {
+      log(
+        `${index + 1}/${files.length} ${file.id} failed: ${(error as Error).message}`
+      )
+      continue
+    }
+    const data = Buffer.from(signed.bytes)
+    await db
+      .update(tripFiles)
+      .set({ data, size: data.length, signatureLevel: signed.level })
+      .where(eq(tripFiles.id, file.id))
+    signedCount += 1
+    log(`${index + 1}/${files.length} ${signed.level}`)
+  }
+  return signedCount
 }
 
 export const listTrips = defineAction({
@@ -138,7 +218,7 @@ export const getTrip = defineAction({
   name: "get_trip",
   title: "出差內容",
   description:
-    "One trip with its files (id, filename, description, size in bytes, uploaded at): the signed-in member's own, or for a trip admin everyone's grouped by member. Use get_trip_file for a file's contents.",
+    "One trip with its files (id, filename, description, size in bytes, signatureLevel B-LT or B-B when the portal signed it, uploaded at): the signed-in member's own, or for a trip admin everyone's grouped by member. Use get_trip_file for a file's contents.",
   kind: "query",
   input: z.object({ tripId: id }),
   run: async (actor, { tripId }) => {
@@ -152,6 +232,7 @@ export const getTrip = defineAction({
         filename: tripFiles.filename,
         description: tripFiles.description,
         size: tripFiles.size,
+        signatureLevel: tripFiles.signatureLevel,
         createdAt: tripFiles.createdAt,
       })
       .from(tripFiles)
@@ -258,7 +339,7 @@ export const exportTripFiles = defineAction({
 export const uploadTripFile = defineAction({
   name: "upload_trip_file",
   title: "上傳檔案",
-  description: `Uploads one receipt to an open trip as the signed-in member: a PDF or JPEG as base64 (a JPEG becomes a one-page PDF; convert PNGs to JPEG first), up to ${TRIP_FILE_LIMIT / 1024 / 1024} MB, with an optional description such as "3/14 飯店住宿".`,
+  description: `Uploads one receipt to an open trip as the signed-in member: a PDF or JPEG as base64 (a JPEG becomes a one-page PDF; convert PNGs to JPEG first). The portal signs it with the member's WinLab certificate (PAdES B-LT, with their handwritten signature shown if they chose so), up to ${TRIP_FILE_LIMIT / 1024 / 1024} MB, with an optional description such as "3/14 飯店住宿".`,
   kind: "mutation",
   input: z.object({
     tripId: id,
@@ -278,9 +359,11 @@ export const uploadTripFile = defineAction({
       throw new Error(
         `檔案最大 ${TRIP_FILE_LIMIT / 1024 / 1024} MB，這個 ${(raw.length / 1024 / 1024).toFixed(1)} MB`
       )
-    const data = await toPdf(contentType, raw)
-    if (data.length > TRIP_FILE_LIMIT)
+    const converted = await toPdf(contentType, raw)
+    if (converted.length > TRIP_FILE_LIMIT)
       throw new Error(`轉成 PDF 後超過 ${TRIP_FILE_LIMIT / 1024 / 1024} MB`)
+    const signed = await signFor(actor.userId, trip.name, converted)
+    const data = Buffer.from(signed.bytes)
     const [created] = await db
       .insert(tripFiles)
       .values({
@@ -290,8 +373,13 @@ export const uploadTripFile = defineAction({
         description,
         size: data.length,
         data,
+        signatureLevel: signed.level,
       })
-      .returning({ id: tripFiles.id, filename: tripFiles.filename })
+      .returning({
+        id: tripFiles.id,
+        filename: tripFiles.filename,
+        signatureLevel: tripFiles.signatureLevel,
+      })
     return created
   },
 })
