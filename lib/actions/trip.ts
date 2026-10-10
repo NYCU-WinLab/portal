@@ -10,7 +10,6 @@ import {
   sum,
 } from "drizzle-orm"
 import { zipSync } from "fflate"
-import { PDFDocument } from "pdf-lib"
 import { z } from "zod"
 
 import { isAdmin, requireAdmin } from "@/lib/actions/authz"
@@ -71,61 +70,22 @@ function pdfName(name: string) {
   return `${(base || "file").slice(0, 120)}.pdf`
 }
 
-/** Most pixels an uploaded photo may have: a 2000 px photo is 4 million,
- * a 600 dpi A4 scan about 35 million. Viewers decode it to show it. */
-const MAX_PIXELS = 40_000_000
-
-function checkPixels({ width, height }: { width: number; height: number }) {
-  if (width * height > MAX_PIXELS)
-    throw new Error(`圖片太大(${width} × ${height})，請縮小後再傳`)
-}
-
-/** The uploaded bytes as a PDF: PDFs are checked, images wrapped on a page. */
-async function toPdf(contentType: (typeof uploadTypes)[number], data: Buffer) {
-  if (contentType === "application/pdf") {
-    if (!data.subarray(0, 5).equals(Buffer.from("%PDF-")))
-      throw new Error("這不是 PDF 檔")
-    const pdf = await PDFDocument.load(data, { updateMetadata: false }).catch(
-      () => {
-        throw new Error("PDF 打不開，可能已損毀或有密碼")
-      }
-    )
-    // Walking the page tree here catches cyclic or empty trees before the
-    // signer sees the file.
-    try {
-      if (pdf.getPageCount() === 0) throw new Error("no pages")
-      pdf.getPage(0)
-    } catch {
-      throw new Error("PDF 的頁面結構有問題")
-    }
-    return data
-  }
-  // pdf-lib reads only the JPEG's header and keeps it compressed.
-  const pdf = await PDFDocument.create()
-  const image = await pdf.embedJpg(data).catch((error: unknown) => {
-    console.error("embedJpg", error)
-    throw new Error("JPEG 打不開")
-  })
-  checkPixels(image)
-  const page = pdf.addPage([image.width, image.height])
-  page.drawImage(image, {
-    x: 0,
-    y: 0,
-    width: image.width,
-    height: image.height,
-  })
-  return Buffer.from(await pdf.save())
-}
-
 /** The PDF signed by its uploader's WinLab certificate, with their
  * handwritten signature shown if they chose to. */
-async function signFor(userId: string, tripName: string, pdf: Uint8Array) {
+async function signFor(
+  userId: string,
+  tripName: string,
+  file: Uint8Array,
+  contentType: "application/pdf" | "image/jpeg" = "application/pdf"
+) {
   const [[member], [signature]] = await Promise.all([
     db.select({ name: user.name }).from(user).where(eq(user.id, userId)),
     db.select().from(signatures).where(eq(signatures.userId, userId)),
   ])
   return signUpload({
-    pdf,
+    file,
+    contentType,
+    maxBytes: TRIP_FILE_LIMIT,
     userId,
     displayName: member.name,
     reason: `上傳至出差「${tripName}」`,
@@ -359,10 +319,13 @@ export const uploadTripFile = defineAction({
       throw new Error(
         `檔案最大 ${TRIP_FILE_LIMIT / 1024 / 1024} MB，這個 ${(raw.length / 1024 / 1024).toFixed(1)} MB`
       )
-    const converted = await toPdf(contentType, raw)
-    if (converted.length > TRIP_FILE_LIMIT)
-      throw new Error(`轉成 PDF 後超過 ${TRIP_FILE_LIMIT / 1024 / 1024} MB`)
-    const signed = await signFor(actor.userId, trip.name, converted)
+    // Converting, checking and signing the file happen in the PDF worker.
+    const signed = await signFor(
+      actor.userId,
+      trip.name,
+      new Uint8Array(raw),
+      contentType
+    )
     const data = Buffer.from(signed.bytes)
     const [created] = await db
       .insert(tripFiles)

@@ -12,7 +12,8 @@ ENV NEXT_PUBLIC_BUILD_SHA=$BUILD_SHA \
     NEXT_TELEMETRY_DISABLED=1
 RUN bun run build \
  && bun build scripts/migrate.ts --target node --external pg-native --outfile migrate.mjs \
- && bun build scripts/sign-trip-files.ts --target node --external pg-native --outfile sign-trip-files.mjs
+ && bun build scripts/sign-trip-files.ts --target node --external pg-native --outfile sign-trip-files.mjs \
+ && bun build scripts/pdf-worker.ts --target node --outfile pdf-worker.mjs
 
 FROM node:24-slim
 WORKDIR /app
@@ -21,6 +22,7 @@ COPY --from=build /app/.next/standalone ./
 COPY --from=build /app/.next/static ./.next/static
 COPY --from=build /app/migrate.mjs ./migrate.mjs
 COPY --from=build /app/sign-trip-files.mjs ./sign-trip-files.mjs
+COPY --from=build /app/pdf-worker.mjs ./pdf-worker.mjs
 COPY --from=build /app/drizzle ./drizzle
 USER node
 EXPOSE 3000
