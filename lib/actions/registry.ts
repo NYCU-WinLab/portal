@@ -67,6 +67,13 @@ import {
 } from "@/lib/actions/presenters"
 import { getProfile } from "@/lib/actions/profile"
 import {
+  deleteReceipt,
+  getReceiptFile,
+  listReceipts,
+  updateReceipt,
+  uploadReceipt,
+} from "@/lib/actions/receipts"
+import {
   getMySignature,
   getMySignatureImage,
   setMySignature,
@@ -110,6 +117,11 @@ export const actions: Action[] = [
   createAnnouncement,
   updateAnnouncement,
   deleteAnnouncement,
+  listReceipts,
+  getReceiptFile,
+  uploadReceipt,
+  updateReceipt,
+  deleteReceipt,
   listMeetings,
   getNextMeeting,
   updateMyMeeting,
