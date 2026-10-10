@@ -153,20 +153,27 @@ export async function signLegacyTripFiles(log: (line: string) => void) {
     .from(tripFiles)
     .innerJoin(trips, eq(trips.id, tripFiles.tripId))
     .where(and(isNull(tripFiles.signatureLevel), isNotNull(tripFiles.userId)))
+  let signedCount = 0
   for (const [index, file] of files.entries()) {
-    const signed = await signFor(
-      file.userId!,
-      file.trip,
-      new Uint8Array(file.data)
-    )
+    // One bad old file is logged and left unsigned; the rest still go.
+    let signed
+    try {
+      signed = await signFor(file.userId!, file.trip, new Uint8Array(file.data))
+    } catch (error) {
+      log(
+        `${index + 1}/${files.length} ${file.id} failed: ${(error as Error).message}`
+      )
+      continue
+    }
     const data = Buffer.from(signed.bytes)
     await db
       .update(tripFiles)
       .set({ data, size: data.length, signatureLevel: signed.level })
       .where(eq(tripFiles.id, file.id))
+    signedCount += 1
     log(`${index + 1}/${files.length} ${signed.level}`)
   }
-  return files.length
+  return signedCount
 }
 
 export const listTrips = defineAction({
