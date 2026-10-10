@@ -172,12 +172,15 @@ export async function memberIdentity(
         )
       if (usable(existing)) return existing!
       // An expiring certificate is retired, not revoked: what it signed
-      // stays valid.
+      // stays valid. Only while still unrevoked, so an admin's revocation
+      // at the same moment is never turned into a retirement.
       if (existing)
         await tx
           .update(signingKeys)
           .set({ revokedAt: existing.notAfter })
-          .where(eq(signingKeys.id, existing.id))
+          .where(
+            and(eq(signingKeys.id, existing.id), isNull(signingKeys.revokedAt))
+          )
       const pair = await generateKeyPair()
       const now = new Date()
       const notAfter = years(now, MEMBER_YEARS)
@@ -219,14 +222,33 @@ export async function memberIdentity(
   }
 }
 
-let crlCache: { crl: Uint8Array; until: number } | null = null
+let crlCache: { crl: Uint8Array; until: number; latest: number } | null = null
 
 /** The root's current CRL, valid for a week and reissued at most hourly
  * (the public route would otherwise sign on every request). Retired
  * certificates (renewed on expiry) are not listed: only ones revoked
  * before they expired. */
 export async function currentCrl() {
-  if (crlCache && crlCache.until > Date.now()) return crlCache.crl
+  // A cached CRL is reused only while no revocation is newer than it,
+  // including the ones the database trigger makes when a member leaves.
+  const [{ latest }] = await db
+    .select({
+      latest: sql<string | null>`max(${signingKeys.revokedAt})`,
+    })
+    .from(signingKeys)
+    .where(
+      and(
+        eq(signingKeys.kind, "member"),
+        sql`${signingKeys.revokedAt} < ${signingKeys.notAfter}`
+      )
+    )
+  const latestRevocation = latest ? new Date(latest).getTime() : 0
+  if (
+    crlCache &&
+    crlCache.until > Date.now() &&
+    crlCache.latest === latestRevocation
+  )
+    return crlCache.crl
   const root = await rootIdentity()
   const revoked = await db
     .select({ serial: signingKeys.serial, at: signingKeys.revokedAt })
@@ -251,7 +273,11 @@ export async function currentCrl() {
       at: row.at!,
     })),
   })
-  crlCache = { crl, until: now.getTime() + 3600 * 1000 }
+  crlCache = {
+    crl,
+    until: now.getTime() + 3600 * 1000,
+    latest: latestRevocation,
+  }
   return crl
 }
 
