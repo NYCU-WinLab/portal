@@ -21,6 +21,7 @@ const apps = [
   { label: "Bento", href: "/bento" },
   { label: "Reimburse", href: "/reimburse" },
   { label: "Trip", href: "/trip" },
+  { label: "Receipts", href: "/receipts" },
   { label: "Profile", href: "/profile" },
   { label: "Admins", href: "/admins" },
 ]

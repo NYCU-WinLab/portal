@@ -113,6 +113,13 @@
       "when": 1791610851240,
       "tag": "0015_bulletin",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1791620998985,
+      "tag": "0016_receipts",
+      "breakpoints": true
     }
   ]
 }
