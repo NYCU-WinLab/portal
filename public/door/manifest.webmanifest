@@ -1,0 +1,18 @@
+{
+  "id": "/door",
+  "name": "Door, WinLab",
+  "short_name": "Door",
+  "description": "一鍵開實驗室的門。",
+  "lang": "zh-TW",
+  "start_url": "/door/go",
+  "scope": "/door",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#000000",
+  "theme_color": "#000000",
+  "icons": [
+    { "src": "/door/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/door/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/door/apple-touch-icon.png", "sizes": "180x180", "type": "image/png" }
+  ]
+}
