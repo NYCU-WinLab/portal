@@ -57,12 +57,14 @@ export default async function DoorLogPage({
     )
   const params = await searchParams
   const source =
-    typeof params.source === "string" && params.source in sources
+    typeof params.source === "string" && Object.hasOwn(sources, params.source)
       ? (params.source as keyof typeof sources)
       : undefined
   const before =
     typeof params.before === "string" &&
-    !Number.isNaN(Date.parse(params.before))
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(
+      params.before
+    )
       ? params.before
       : undefined
   const { events } = await runAction(listDoorEvents, actor, {
@@ -170,7 +172,7 @@ export default async function DoorLogPage({
         )}
         {oldest && events.length === PAGE_SIZE && (
           <Link
-            href={link({ source, before: oldest.at.toISOString() })}
+            href={link({ source, before: oldest.id })}
             className="self-center text-muted-foreground transition-colors duration-state hover:text-foreground"
           >
             更早

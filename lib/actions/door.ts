@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, lt } from "drizzle-orm"
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm"
 import { z } from "zod"
 
 import { requireAdmin } from "@/lib/actions/authz"
@@ -82,11 +82,11 @@ export const listDoorEvents = defineAction({
   name: "list_door_events",
   title: "開門紀錄",
   description:
-    "Door openings, newest first, for door admins only: presses on /door (web), presses by an agent (mcp) and card swipes (card, timed by the reader's clock). ok is null for reader events that are neither a grant nor a known denial. Page back with before set to the oldest at returned.",
+    "Door openings, newest first, for door admins only: presses on /door (web), presses by an agent (mcp) and card swipes (card, timed by the reader's clock). ok is null for reader events that are neither a grant nor a known denial. Page back with before set to the id of the last event returned.",
   kind: "query",
   input: z.object({
     limit: z.number().int().min(1).max(500).default(100),
-    before: z.coerce.date().optional(),
+    before: z.uuid("before 是事件的 id").optional(),
     source: source.optional(),
   }),
   run: async (actor, { limit, before, source }) => {
@@ -107,11 +107,14 @@ export const listDoorEvents = defineAction({
       .from(doorEvents)
       .where(
         and(
-          before ? lt(doorEvents.at, before) : undefined,
+          // Older than the event given; the id breaks ties in time.
+          before
+            ? sql`(${doorEvents.at}, ${doorEvents.id}) < (select at, id from door_events where id = ${before})`
+            : undefined,
           source ? eq(doorEvents.source, source) : undefined
         )
       )
-      .orderBy(desc(doorEvents.at))
+      .orderBy(desc(doorEvents.at), desc(doorEvents.id))
       .limit(limit)
     return { events: rows as DoorEvent[] }
   },
@@ -146,14 +149,24 @@ export const listDoorCards = defineAction({
 // Card swipes reported by hams-bridge. Not an action: the bridge is a
 // machine with its own secret (app/api/door/events), not a member.
 
+// A real calendar time: Date rolls 02-31 over into March, so the parsed
+// time must print back as the same wall clock.
+const sameWallClock = (value: string, offsetHours: number) => {
+  const time = Date.parse(value)
+  return (
+    !Number.isNaN(time) &&
+    new Date(time + offsetHours * 3600_000).toISOString().slice(0, 19) ===
+      value.slice(0, 19)
+  )
+}
 const deviceTime = z
   .string()
   .regex(/^20\d{2}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\+08:00$/)
-  .refine((value) => !Number.isNaN(Date.parse(value)))
+  .refine((value) => sameWallClock(value, 8))
 const utcTime = z
   .string()
   .regex(/^20\d{2}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?(Z|\+00:00)$/)
-  .refine((value) => !Number.isNaN(Date.parse(value)))
+  .refine((value) => sameWallClock(value, 0))
 
 export const cardSwipes = z.object({
   events: z
@@ -252,7 +265,7 @@ export async function recordCardSwipes(
           if (
             event.ok &&
             event.name !== "卡片" &&
-            Date.now() - event.at.getTime() < GREET_WITHIN_MS
+            Math.abs(Date.now() - event.at.getTime()) < GREET_WITHIN_MS
           )
             void greet(event.name)
       return events.map((event) => event.event_id)
