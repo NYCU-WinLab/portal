@@ -34,6 +34,12 @@ import {
   updateAnnouncement,
 } from "@/lib/actions/bulletin"
 import type { Action } from "@/lib/actions/define"
+import {
+  getDoorStatus,
+  listDoorCards,
+  listDoorEvents,
+  openDoor,
+} from "@/lib/actions/door"
 import { createLeave, deleteLeave, listLeaves } from "@/lib/actions/leave"
 import {
   getNextMeeting,
@@ -122,6 +128,10 @@ export const actions: Action[] = [
   uploadReceipt,
   updateReceipt,
   deleteReceipt,
+  getDoorStatus,
+  openDoor,
+  listDoorEvents,
+  listDoorCards,
   listMeetings,
   getNextMeeting,
   updateMyMeeting,
