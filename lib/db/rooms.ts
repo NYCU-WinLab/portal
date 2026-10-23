@@ -15,6 +15,7 @@ import {
 } from "drizzle-orm/pg-core"
 
 import { user } from "@/lib/db/auth-schema"
+import { meetings } from "@/lib/db/meetings"
 import type { Attendee } from "@/lib/rooms/meeting"
 
 // Standing meetings: the scheduler books each occurrence a week ahead.
@@ -87,6 +88,10 @@ export const roomBookings = pgTable(
       .default(sql`'{}'`)
       .notNull(),
     seriesId: uuid().references(() => roomSeries.id, { onDelete: "set null" }),
+    // The Monday lab meeting this booking holds the Teams meeting for.
+    meetingId: uuid().references(() => meetings.id, { onDelete: "set null" }),
+    // Where it happens when no department room is reserved (EC411).
+    place: text(),
     requestedBy: uuid()
       .notNull()
       .references(() => user.id),
@@ -104,6 +109,11 @@ export const roomBookings = pgTable(
     uniqueIndex()
       .on(table.seriesId, table.date)
       .where(sql`${table.status} = 'booked' and ${table.seriesId} is not null`),
+    uniqueIndex()
+      .on(table.meetingId)
+      .where(
+        sql`${table.status} = 'booked' and ${table.meetingId} is not null`
+      ),
     check(
       "room_bookings_status",
       sql`${table.status} in ('booked', 'cancelled')`

@@ -1,8 +1,9 @@
 // What the meetings actions share: who may present or ask (from Keycloak),
 // the schedule as members read it, and the questioner assignment that runs
 // after every change to the schedule or the presenter list.
-import { and, asc, eq, gt, inArray, sql } from "drizzle-orm"
+import { and, asc, eq, gt, inArray, isNotNull, sql } from "drizzle-orm"
 
+import { joinUrl } from "@/lib/actions/rooms-meetings"
 import { db } from "@/lib/db"
 import {
   account,
@@ -10,6 +11,7 @@ import {
   meetings,
   papers,
   presenters,
+  roomBookings,
   semesters,
   user,
 } from "@/lib/db/schema"
@@ -252,7 +254,15 @@ export async function readSchedule(where?: { fromDate?: string }) {
     .from(meetingQuestioners)
     .innerJoin(user, eq(user.id, meetingQuestioners.userId))
     .orderBy(asc(user.name))
+  // The Teams meeting the Friday announcement made for a week.
+  const teams = await db
+    .select({ id: roomBookings.id, meetingId: roomBookings.meetingId })
+    .from(roomBookings)
+    .where(
+      and(isNotNull(roomBookings.meetingId), eq(roomBookings.status, "booked"))
+    )
   return rows.map((row) => ({
+    id: row.id,
     date: row.date,
     label: weekLabel(row.date, terms),
     semester: semesterOf(row.date).label,
@@ -275,6 +285,10 @@ export async function readSchedule(where?: { fromDate?: string }) {
     notes: row.notes,
     location: row.location,
     startsAt: row.startsAt.slice(0, 5),
+    joinUrl: (() => {
+      const booking = teams.find((t) => t.meetingId === row.id)
+      return booking ? joinUrl(booking.id) : null
+    })(),
     questioners: questioners
       .filter((seat) => seat.meetingId === row.id)
       .map(({ userId, name, manual }) => ({ id: userId, name, manual })),

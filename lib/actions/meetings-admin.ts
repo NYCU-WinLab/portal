@@ -13,6 +13,7 @@ import { z } from "zod"
 
 import { requireAdmin } from "@/lib/actions/authz"
 import { defineAction } from "@/lib/actions/define"
+import { cancelLabMeeting, releaseWeek } from "@/lib/actions/meetings-mail"
 import {
   isoDate,
   optionalText,
@@ -171,7 +172,19 @@ export const updateMeeting = defineAction({
         if (isUniqueViolation(error)) throw new Error(`${next.date} 已經有會議`)
         throw error
       }
-      return { date: next.date }
+      // A Teams meeting already made for the old date, time or place.
+      const moved =
+        next.date !== meeting.date ||
+        next.startsAt.slice(0, 5) !== meeting.startsAt.slice(0, 5) ||
+        next.location !== meeting.location ||
+        (next.kind === "holiday") !== (meeting.kind === "holiday")
+      const held = moved
+        ? await releaseWeek(tx, id, [meeting.date, next.date])
+        : null
+      return { date: next.date, held }
+    }).then(async ({ date, held }) => {
+      await cancelLabMeeting(held, actor.userId)
+      return { date }
     })
   },
 })
@@ -187,7 +200,12 @@ export const deleteMeeting = defineAction({
     await requireAdmin(actor, "meetings")
     return changeSchedule(async (tx) => {
       const meeting = await meetingOn(tx, date)
+      // Read before the delete unlinks the booking.
+      const held = await releaseWeek(tx, meeting.id, [date])
       await tx.delete(meetings).where(eq(meetings.id, meeting.id))
+      return held
+    }).then(async (held) => {
+      await cancelLabMeeting(held, actor.userId)
       return { date }
     })
   },

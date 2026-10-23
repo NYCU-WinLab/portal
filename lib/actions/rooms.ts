@@ -9,6 +9,7 @@ import {
   meetingsOf,
   requestMeeting,
 } from "@/lib/actions/rooms-meetings"
+import type { Mail } from "@/lib/mail"
 import { mailBody } from "@/lib/mail-body"
 import { db } from "@/lib/db"
 import { roomBookings, user } from "@/lib/db/schema"
@@ -317,7 +318,39 @@ export async function resolveAttendees(input: {
   return out
 }
 
-type Booking = typeof roomBookings.$inferSelect
+export type Booking = typeof roomBookings.$inferSelect
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0]
+
+/** Where a booking happens, as members read it. */
+export const placeOf = (booking: Booking) =>
+  booking.room ? `資工系 ${booking.room}` : (booking.place ?? "線上")
+
+/** A booking's calendar event, for its invite or its cancellation. */
+export function bookingCalendar(
+  booking: Booking,
+  organizer: { name: string; email: string },
+  method: "REQUEST" | "CANCEL"
+) {
+  return {
+    ics: calendarInvite({
+      uid: `rooms-${booking.id}@portal.winlab.tw`,
+      method,
+      sequence: booking.inviteSequence,
+      title: booking.title,
+      location: booking.room || booking.place ? placeOf(booking) : "線上會議",
+      start: taipeiIso(booking.date, booking.startTime),
+      end: taipeiIso(booking.date, booking.endTime),
+      organizer,
+      attendees: booking.attendees,
+      // A mailing list stands for the whole lab: replies would all land on
+      // the organizer.
+      rsvp: !booking.meetingId,
+      joinUrl:
+        booking.online && method === "REQUEST" ? joinUrl(booking.id) : null,
+    }),
+    icsMethod: method,
+  }
+}
 
 /** The invite (or cancellation) for a booking, to the organizer and every
  * attendee, with the calendar event attached. */
@@ -341,7 +374,7 @@ function inviteMail(
       title: method === "CANCEL" ? `已取消：${booking.title}` : booking.title,
       rows: [
         ["時間", when],
-        ["地點", booking.room ? `資工系 ${booking.room}` : "線上"],
+        ["地點", placeOf(booking)],
         ["發起人", organizer.name],
         ...(booking.attendees.length
           ? [
@@ -355,19 +388,7 @@ function inviteMail(
       paragraphs: booking.agenda ? [booking.agenda] : [],
       action: link ? { label: "加入會議", url: link } : undefined,
     }),
-    ics: calendarInvite({
-      uid: `rooms-${booking.id}@portal.winlab.tw`,
-      method,
-      sequence: booking.inviteSequence,
-      title: booking.title,
-      room: booking.room,
-      start: taipeiIso(booking.date, booking.startTime),
-      end: taipeiIso(booking.date, booking.endTime),
-      organizer,
-      attendees: booking.attendees,
-      joinUrl: link,
-    }),
-    icsMethod: method,
+    ...bookingCalendar(booking, organizer, method),
   }
 }
 
@@ -387,6 +408,13 @@ export type NewBooking = {
   issueRefs: string[]
   deliverables: string[]
   seriesId?: string
+  /** The Monday lab meeting this booking is for. */
+  meetingId?: string
+  place?: string
+  /** Replaces the usual invite, as the lab meeting's announcement does. */
+  invite?: (booking: Booking) => Mail
+  /** Runs first in the booking's transaction; throwing books nothing. */
+  inTransaction?: (tx: Tx) => Promise<void>
 }
 
 /**
@@ -403,6 +431,7 @@ export async function placeBooking(input: NewBooking) {
   let booking: Booking
   try {
     booking = await db.transaction(async (tx) => {
+      await input.inTransaction?.(tx)
       const [created] = await tx
         .insert(roomBookings)
         .values({
@@ -420,10 +449,16 @@ export async function placeBooking(input: NewBooking) {
           issueRefs: input.issueRefs,
           deliverables: input.deliverables,
           seriesId: input.seriesId,
+          meetingId: input.meetingId,
+          place: input.place,
           requestedBy: input.organizer.id,
         })
         .returning()
-      await queueMail(tx, inviteMail(created, input.organizer, "REQUEST"))
+      await queueMail(
+        tx,
+        input.invite?.(created) ??
+          inviteMail(created, input.organizer, "REQUEST")
+      )
       return created
     })
   } catch (error) {
@@ -545,34 +580,47 @@ export const cancelRoomBooking = defineAction({
     if (!booking) throw new Error("找不到這筆預約，或已經取消")
     if (booking.requestedBy !== actor.userId)
       throw new Error("只能取消自己的預約")
-    if (booking.externalId && booking.room)
-      await release(booking.externalId, {
-        room: booking.room,
-        start: taipeiIso(booking.date, booking.startTime),
-        end: taipeiIso(booking.date, booking.endTime),
-      })
-    const organizer = await organizerOf(actor.userId)
-    const cancelled = await db.transaction(async (tx) => {
-      const [row] = await tx
-        .update(roomBookings)
-        .set({
-          status: "cancelled",
-          cancelledAt: sql`now()`,
-          cancelledBy: actor.userId,
-          // A CANCEL must outrank the REQUEST, or calendars ignore it.
-          inviteSequence: sql`${roomBookings.inviteSequence} + 1`,
-        })
-        // Two cancels at once: only the first changes the row.
-        .where(and(eq(roomBookings.id, id), eq(roomBookings.status, "booked")))
-        .returning()
-      if (!row) throw new Error("這筆預約已經取消")
-      await queueMail(tx, inviteMail(row, organizer, "CANCEL"))
-      return row
-    })
-    const teamsError = await cancelMeeting(cancelled)
-    return { cancelled: true, teams_error: teamsError }
+    if (booking.meetingId)
+      throw new Error("這是週一 Lab Meeting 的會議，請到 /meetings 請管理員改")
+    return cancelBooking(booking, actor.userId)
   },
 })
+
+/**
+ * Cancels a booking: releases its department room, mails everyone the
+ * cancellation and takes down its Teams meeting. teams_error says why the
+ * Teams meeting could not be taken down.
+ */
+export async function cancelBooking(booking: Booking, cancelledBy: string) {
+  if (booking.externalId && booking.room)
+    await release(booking.externalId, {
+      room: booking.room,
+      start: taipeiIso(booking.date, booking.startTime),
+      end: taipeiIso(booking.date, booking.endTime),
+    })
+  const organizer = await organizerOf(booking.requestedBy)
+  const cancelled = await db.transaction(async (tx) => {
+    const [row] = await tx
+      .update(roomBookings)
+      .set({
+        status: "cancelled",
+        cancelledAt: sql`now()`,
+        cancelledBy,
+        // A CANCEL must outrank the REQUEST, or calendars ignore it.
+        inviteSequence: sql`${roomBookings.inviteSequence} + 1`,
+      })
+      // Two cancels at once: only the first changes the row.
+      .where(
+        and(eq(roomBookings.id, booking.id), eq(roomBookings.status, "booked"))
+      )
+      .returning()
+    if (!row) throw new Error("這筆預約已經取消")
+    await queueMail(tx, inviteMail(row, organizer, "CANCEL"))
+    return row
+  })
+  const teamsError = await cancelMeeting(cancelled)
+  return { cancelled: true, teams_error: teamsError }
+}
 
 /** For the series page: the bookings that already hold these occurrences. */
 export async function seriesBookings(seriesIds: string[], dates: string[]) {

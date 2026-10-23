@@ -170,11 +170,13 @@ export function calendarInvite(event: {
   method: "REQUEST" | "CANCEL"
   sequence: number
   title: string
-  room: string | null
+  location: string
   start: string
   end: string
   organizer: { name: string; email: string }
   attendees: Attendee[]
+  /** Asks each attendee to answer; off for a mailing list. */
+  rsvp?: boolean
   joinUrl: string | null
 }) {
   const lines = [
@@ -190,11 +192,11 @@ export function calendarInvite(event: {
     `DTSTART:${icsTime(event.start)}`,
     `DTEND:${icsTime(event.end)}`,
     `SUMMARY:${icsText(event.title)}`,
-    `LOCATION:${icsText(event.room ? `資工系 ${event.room}` : "線上會議")}`,
+    `LOCATION:${icsText(event.location)}`,
     `ORGANIZER;CN=${icsParam(event.organizer.name)}:mailto:${event.organizer.email}`,
     ...event.attendees.map(
       (a) =>
-        `ATTENDEE;CN=${icsParam(a.name)};ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE:mailto:${a.email}`
+        `ATTENDEE;CN=${icsParam(a.name)};ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=${event.rsvp === false ? "FALSE" : "TRUE"}:mailto:${a.email}`
     ),
     `STATUS:${event.method === "CANCEL" ? "CANCELLED" : "CONFIRMED"}`,
     ...(event.joinUrl

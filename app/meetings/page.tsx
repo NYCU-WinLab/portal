@@ -93,6 +93,16 @@ function MeetingRow({
             論文
           </a>
         )}
+        {meeting.joinUrl && (
+          <a
+            href={meeting.joinUrl}
+            target="_blank"
+            rel="noreferrer"
+            className={link}
+          >
+            加入會議
+          </a>
+        )}
         {meeting.slidesUrl && (
           <a
             href={meeting.slidesUrl}
