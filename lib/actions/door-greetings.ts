@@ -47,7 +47,11 @@ export const getMyDoorGreeting = defineAction({
         .from(doorGreetings)
         .where(eq(doorGreetings.userId, actor.userId)),
       db
-        .select({ id: doorSounds.id, label: doorSounds.label })
+        .select({
+          id: doorSounds.id,
+          version: doorSounds.version,
+          label: doorSounds.label,
+        })
         .from(doorPlaylistItems)
         .innerJoin(doorSounds, eq(doorSounds.id, doorPlaylistItems.soundId))
         .where(eq(doorPlaylistItems.userId, actor.userId))

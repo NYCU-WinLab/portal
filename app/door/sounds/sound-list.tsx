@@ -103,7 +103,13 @@ export function UploadSound({ maxSeconds }: { maxSeconds: number }) {
 
 // A new file for a sound already in the pool: it keeps its name, default
 // mark and playlists, so whoever has it hears the new file.
-function ReplaceSound({ sound }: { sound: DoorSound }) {
+function ReplaceSound({
+  sound,
+  maxSeconds,
+}: {
+  sound: DoorSound
+  maxSeconds: number
+}) {
   const [files, setFiles] = React.useState<File[]>([])
 
   async function submit() {
@@ -132,8 +138,8 @@ function ReplaceSound({ sound }: { sound: DoorSound }) {
       <div className="flex flex-col gap-2">
         <Label htmlFor={`door-sound-file-${sound.id}`}>
           {sound.listeners > 0
-            ? `${sound.listeners} 人在用，他們也會聽到新的`
-            : "新音檔"}
+            ? `${sound.listeners} 人在用，他們也會聽到新的，門口播前 ${maxSeconds} 秒`
+            : `新音檔，門口播前 ${maxSeconds} 秒`}
         </Label>
         <FileUpload
           id={`door-sound-file-${sound.id}`}
@@ -154,9 +160,11 @@ function ReplaceSound({ sound }: { sound: DoorSound }) {
 export function SoundList({
   sounds,
   canEditAll,
+  maxSeconds,
 }: {
   sounds: DoorSound[]
   canEditAll: boolean
+  maxSeconds: number
 }) {
   // The playlist as the member sees it, ahead of the refresh, so two quick
   // taps both count.
@@ -190,7 +198,11 @@ export function SoundList({
             key={sound.id}
             className="flex min-h-14 items-center gap-4 border-b border-border py-2"
           >
-            <PlayButton soundId={sound.id} label={sound.label} />
+            <PlayButton
+              soundId={sound.id}
+              version={sound.version}
+              label={sound.label}
+            />
             <span className="flex min-w-0 flex-1 flex-col">
               <span className="truncate">{sound.label}</span>
               <span className="truncate text-muted-foreground">
@@ -242,7 +254,7 @@ export function SoundList({
                       />
                     </FormField>
                   </FormDialog>
-                  <ReplaceSound sound={sound} />
+                  <ReplaceSound sound={sound} maxSeconds={maxSeconds} />
                   <ConfirmDialog
                     trigger={
                       <Button variant="ghost" size="icon" aria-label="刪除">

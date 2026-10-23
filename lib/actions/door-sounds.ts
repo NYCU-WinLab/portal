@@ -66,6 +66,7 @@ async function ownSound(actor: Actor, soundId: string) {
 
 export type DoorSound = {
   id: string
+  version: string
   label: string
   uploader: string | null
   mine: boolean
@@ -92,6 +93,7 @@ export const listDoorSounds = defineAction({
       db
         .select({
           id: doorSounds.id,
+          version: doorSounds.version,
           label: doorSounds.label,
           uploaderId: doorSounds.uploaderId,
           uploader: user.name,
@@ -113,6 +115,7 @@ export const listDoorSounds = defineAction({
     return {
       sounds: rows.map((row): DoorSound => ({
         id: row.id,
+        version: row.version,
         label: row.label,
         uploader: row.uploader,
         mine: row.uploaderId === actor.userId,

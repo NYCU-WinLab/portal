@@ -21,7 +21,7 @@ export function DoorGreetingSettings({
 }: {
   suffix: string | null
   speakName: boolean
-  playlist: { id: string; label: string }[]
+  playlist: { id: string; version: string; label: string }[]
 }) {
   const [text, setText] = React.useState(suffix ?? "")
 
@@ -67,7 +67,11 @@ export function DoorGreetingSettings({
             <ul className="flex flex-col">
               {playlist.map((sound) => (
                 <li key={sound.id} className="flex items-center gap-2">
-                  <PlayButton soundId={sound.id} label={sound.label} />
+                  <PlayButton
+                    soundId={sound.id}
+                    version={sound.version}
+                    label={sound.label}
+                  />
                   <span className="truncate">{sound.label}</span>
                 </li>
               ))}

@@ -10,9 +10,13 @@ let current: { audio: HTMLAudioElement; stop: () => void } | null = null
 
 export function PlayButton({
   soundId,
+  version,
   label,
 }: {
   soundId: string
+  /** Changes when the file is replaced; it is in the url, so a browser that
+   * kept the old file fetches the new one. */
+  version: string
   label: string
 }) {
   const [playing, setPlaying] = React.useState(false)
@@ -24,7 +28,7 @@ export function PlayButton({
       return
     }
     current?.stop()
-    const audio = new Audio(`/door/sounds/files/${soundId}`)
+    const audio = new Audio(`/door/sounds/files/${soundId}?v=${version}`)
     const stop = () => {
       audio.pause()
       setPlaying(false)
