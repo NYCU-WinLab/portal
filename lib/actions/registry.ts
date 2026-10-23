@@ -54,6 +54,11 @@ import {
 } from "@/lib/actions/door"
 import { getMyDoorGreeting, setDoorSuffix } from "@/lib/actions/door-greetings"
 import {
+  createDoorToken,
+  listDoorTokens,
+  revokeDoorToken,
+} from "@/lib/actions/door-tokens"
+import {
   deleteDoorSound,
   getDoorSound,
   listDoorSounds,
@@ -323,4 +328,7 @@ export const actions: Action[] = [
   revokeAdmin,
   listHomePins,
   setHomePin,
+  listDoorTokens,
+  createDoorToken,
+  revokeDoorToken,
 ]

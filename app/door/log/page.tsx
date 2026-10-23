@@ -23,7 +23,12 @@ export const dynamic = "force-dynamic"
 
 const PAGE_SIZE = 100
 
-const sources = { web: "網頁", mcp: "MCP", card: "刷卡" } as const
+const sources = {
+  web: "網頁",
+  mcp: "MCP",
+  api: "API",
+  card: "刷卡",
+} as const
 
 const day = new Intl.DateTimeFormat("zh-TW", {
   timeZone: "Asia/Taipei",

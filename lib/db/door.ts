@@ -21,6 +21,27 @@ import { user } from "@/lib/db/auth-schema"
 // a press, the card holder's for a swipe ("卡片" when the card had none).
 // A card swipe's at is the reader's clock; ok is null for reader events that
 // are neither a grant nor a known denial.
+// A member's key for POST /api/door/open, from a script or a phone shortcut.
+// Only the SHA-256 of the token is kept; prefix is its first characters, to
+// tell keys apart on /door/tokens. A revoked key stays, for the log.
+export const doorTokens = pgTable(
+  "door_tokens",
+  {
+    id: uuid().defaultRandom().primaryKey(),
+    userId: uuid()
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    name: text().notNull(),
+    tokenHash: text().notNull().unique(),
+    prefix: text().notNull(),
+    createdAt: timestamp({ withTimezone: true }).defaultNow().notNull(),
+    lastUsedAt: timestamp({ withTimezone: true }),
+    revokedAt: timestamp({ withTimezone: true }),
+    revokedBy: uuid().references(() => user.id, { onDelete: "set null" }),
+  },
+  (table) => [index().on(table.userId)]
+)
+
 export const doorEvents = pgTable(
   "door_events",
   {
@@ -38,11 +59,18 @@ export const doorEvents = pgTable(
     // The bridge's id for a swipe, so a batch sent twice is stored once.
     sourceEventId: text().unique(),
     receivedAt: timestamp({ withTimezone: true }),
+    // An opening through POST /api/door/open: which token, from where.
+    tokenId: uuid().references(() => doorTokens.id, { onDelete: "set null" }),
+    ip: text(),
   },
   (table) => [
     index().on(table.at),
     index().on(table.userId),
-    check("door_events_source", sql`${table.source} in ('web', 'mcp', 'card')`),
+    index().on(table.tokenId, table.at),
+    check(
+      "door_events_source",
+      sql`${table.source} in ('web', 'mcp', 'api', 'card')`
+    ),
     check(
       "door_events_card_shape",
       sql`(${table.source} = 'card') = (${table.sourceEventId} is not null and ${table.cardId} is not null)`
