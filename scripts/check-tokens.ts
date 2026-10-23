@@ -83,6 +83,8 @@ for (const root of roots) {
   for await (const path of files(root)) {
     // globals.css defines the tokens themselves.
     if (path === join("app", "globals.css")) continue
+    // Mail clients read neither: lib/mail-body.ts keeps hex copies.
+    if (path === join("lib", "mail-body.ts")) continue
     const lines = (await readFile(path, "utf8")).split("\n")
     const isComponent = !path.startsWith(pageRoot)
     const rules = isComponent ? patterns : [...patterns, ...pagePatterns]

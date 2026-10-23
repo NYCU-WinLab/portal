@@ -3,6 +3,7 @@ import { z } from "zod"
 
 import { defineAction, type Actor } from "@/lib/actions/define"
 import { queueMail } from "@/lib/actions/mail"
+import { mailBody } from "@/lib/mail-body"
 import { db } from "@/lib/db"
 import {
   approveDocuments,
@@ -406,7 +407,11 @@ export const submitApproveDocument = defineAction({
         to: [],
         bcc: emails.map((row) => row.email),
         subject: `[WinLab 簽核] 請簽核：${doc.title}`,
-        text: `${creator?.name ?? "有人"}請你簽核「${doc.title}」。\n\n${link(doc.id)}`,
+        ...mailBody({
+          title: doc.title,
+          paragraphs: [`${creator?.name ?? "有人"}請你簽核這份文件。`],
+          action: { label: "簽核", url: link(doc.id) },
+        }),
       })
     })
     return { id: doc.id, signers: signerIds.length }
@@ -543,7 +548,11 @@ export const signApproveDocument = defineAction({
           await queueMail(tx, {
             to: [creator.email],
             subject: `[WinLab 簽核] 已簽核完成：${doc.title}`,
-            text: `「${doc.title}」所有人都簽好了。\n\n${link(doc.id)}`,
+            ...mailBody({
+              title: doc.title,
+              paragraphs: ["所有人都簽好了。"],
+              action: { label: "查看文件", url: link(doc.id) },
+            }),
           })
       }
       return { signed: true, completed: left.count === 0 }

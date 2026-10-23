@@ -4,6 +4,7 @@ import { z } from "zod"
 import { requireAdmin } from "@/lib/actions/authz"
 import { defineAction } from "@/lib/actions/define"
 import { queueMail } from "@/lib/actions/mail"
+import { mailBody } from "@/lib/mail-body"
 import { db } from "@/lib/db"
 import { receipts, user } from "@/lib/db/schema"
 import { processUpload } from "@/lib/pdf-sign"
@@ -147,15 +148,18 @@ export const uploadReceipt = defineAction({
       const mailId = await queueMail(tx, {
         to: [ACCOUNTING],
         subject: `[WinLab 收據] ${input.name}`,
-        text: [
-          `${uploader?.name ?? "有人"}上傳了一張收據。`,
-          "",
-          `名稱：${input.name}`,
-          `計畫：${input.project ?? "未填"}`,
-          `存入：${depositAccounts[input.depositAccount]}`,
-          "",
-          `${process.env.BETTER_AUTH_URL}/receipts`,
-        ].join("\n"),
+        ...mailBody({
+          title: input.name,
+          paragraphs: [`${uploader?.name ?? "有人"}上傳了一張收據。`],
+          rows: [
+            ["計畫", input.project ?? "未填"],
+            ["存入", depositAccounts[input.depositAccount]],
+          ],
+          action: {
+            label: "查看收據",
+            url: `${process.env.BETTER_AUTH_URL}/receipts`,
+          },
+        }),
       })
       const [created] = await tx
         .insert(receipts)

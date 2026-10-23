@@ -17,6 +17,7 @@ import {
   seriesBookings,
 } from "@/lib/actions/rooms"
 import { sweepMeetingRequests } from "@/lib/actions/rooms-meetings"
+import { mailBody } from "@/lib/mail-body"
 import { db } from "@/lib/db"
 import { roomBookings, roomDailyRuns, roomSeries, user } from "@/lib/db/schema"
 import { epicIssues, getEpic } from "@/lib/gitlab"
@@ -169,13 +170,18 @@ async function bookOccurrence(series: Series, date: string) {
     await queueMail(db, {
       to: [owner.email],
       subject: `[WinLab 會議] 固定會議沒訂到教室：${series.title}`,
-      text: [
-        `${dayLabel(date)} ${series.startTime} 到 ${endTime} ${series.title}`,
-        "",
-        `原因：${reason}`,
-        "",
-        `請到 ${process.env.BETTER_AUTH_URL}/rooms 自己借，或改成線上。`,
-      ].join("\n"),
+      ...mailBody({
+        title: series.title,
+        rows: [
+          ["時間", `${dayLabel(date)} ${series.startTime} 到 ${endTime}`],
+          ["原因", reason],
+        ],
+        paragraphs: ["請自己借教室，或改成線上。"],
+        action: {
+          label: "借教室",
+          url: `${process.env.BETTER_AUTH_URL}/rooms`,
+        },
+      }),
     })
     return `${dayLabel(date)}：${reason}`
   }
