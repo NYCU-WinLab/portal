@@ -57,6 +57,24 @@ function headline(meeting: ScheduledMeeting) {
     : `${day} ${kindLabel[meeting.kind]}`
 }
 
+// Room for the date and name in a recording's file name.
+const TOPIC_TITLE_MAX = 100
+
+/**
+ * "2026-10-26 宋承叡 <paper title>": the recording file, and the file-index
+ * issue made from it, say who presented what.
+ */
+function recordingTopic(meeting: ScheduledMeeting) {
+  const title = meeting.title?.trim()
+  const what = [
+    meeting.presenter?.name,
+    title && title.length > TOPIC_TITLE_MAX
+      ? `${title.slice(0, TOPIC_TITLE_MAX).trimEnd()}…`
+      : title,
+  ].filter(Boolean)
+  return `${meeting.date} ${what.length ? what.join(" ") : "Lab Meeting"}`
+}
+
 function nextWeekRow(next: ScheduledMeeting | undefined): [string, string][] {
   if (!next) return []
   if (next.kind === "holiday")
@@ -233,7 +251,7 @@ async function announce(
       endTime: addMinutes(meeting.startsAt, MEETING_MINUTES)!,
       room: null,
       place: meeting.location,
-      title: composeTopic(RECORDING_PREFIX, `Lab Meeting ${meeting.date}`),
+      title: composeTopic(RECORDING_PREFIX, recordingTopic(meeting)),
       attendees: [ANNOUNCE],
       organizer,
       online: true,
