@@ -88,6 +88,7 @@ import {
   listMailGroupChanges,
   listMailGroupManagers,
   listMailGroups,
+  listMyMailGroups,
   removeMailGroupMember,
   setMailGroupManager,
 } from "@/lib/actions/groups"
@@ -311,6 +312,7 @@ export const actions: Action[] = [
   signApproveDocument,
   deleteApproveDocument,
   listMailGroups,
+  listMyMailGroups,
   getMailGroup,
   addMailGroupMembers,
   removeMailGroupMember,

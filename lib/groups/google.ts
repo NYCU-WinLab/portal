@@ -371,6 +371,40 @@ export async function listParentGroups(
   return out
 }
 
+/**
+ * The groups an address is a direct member of: a member's mailbox (in or
+ * outside the domain) or a group's. Same `userKey` + `domain` query as
+ * listParentGroups; an address Google does not know has none.
+ */
+export async function listGroupsOf(
+  api: GroupsApi,
+  address: string
+): Promise<ManagedGroup[]> {
+  const out: ManagedGroup[] = []
+  let pageToken = ""
+  do {
+    const q = new URLSearchParams({
+      userKey: address,
+      domain: api.domain,
+      maxResults: PAGE_SIZE,
+    })
+    if (pageToken) q.set("pageToken", pageToken)
+    const res = await call(api, `groups?${q}`)
+    if (res.status === 404) return []
+    if (!res.ok) await fail(res)
+    const data = await readJson<{
+      groups?: RawGroup[]
+      nextPageToken?: string
+    }>(res)
+    for (const g of data.groups ?? []) {
+      const group = toGroup(g)
+      if (group) out.push(group)
+    }
+    pageToken = data.nextPageToken ?? ""
+  } while (pageToken)
+  return out
+}
+
 export async function listMembers(
   api: GroupsApi,
   groupId: string
