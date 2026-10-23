@@ -17,7 +17,7 @@ import { type DoorEvent, listDoorEvents } from "@/lib/actions/door"
 import { requireActor } from "@/lib/auth/session"
 import { cn } from "@/lib/utils"
 
-import { doorAdminNav, doorPage } from "../nav"
+import { doorNav, doorPage } from "../nav"
 
 export const dynamic = "force-dynamic"
 
@@ -90,7 +90,7 @@ export default async function DoorLogPage({
   const oldest = events.at(-1)
 
   return (
-    <PortalShell page={doorPage} nav={doorAdminNav}>
+    <PortalShell page={doorPage} nav={doorNav(true)}>
       <div className="flex flex-col gap-12">
         <PageHeader title="開門紀錄" />
         {today && (

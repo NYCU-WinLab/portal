@@ -4,8 +4,10 @@ export const doorPage = {
   tip: "實驗室的門",
 }
 
-/** Only door admins get a nav: the log is theirs alone. */
-export const doorAdminNav = [
+/** Every member gets the door and the sound pool; the log is door admins'
+ * alone. */
+export const doorNav = (admin: boolean) => [
   { label: "開門", href: "/door", tip: "按一下開門" },
-  { label: "紀錄", href: "/door/log", tip: "誰開了門" },
+  { label: "音效", href: "/door/sounds", tip: "開門時播的音效" },
+  ...(admin ? [{ label: "紀錄", href: "/door/log", tip: "誰開了門" }] : []),
 ]

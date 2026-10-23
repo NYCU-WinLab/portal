@@ -1,6 +1,6 @@
 // What the LED panel and speaker at the door (idm-display) say when a member
-// comes in: the suffix after their name and their own short sound. The
-// panel reads them from /api/door/greetings with DISPLAY_API_SECRET and
+// comes in: the suffix after their name and a sound from their playlist.
+// The panel reads them from /api/door/greetings with DISPLAY_API_SECRET and
 // downloads each sound from a link signed with the same secret.
 import { createHmac, timingSafeEqual } from "node:crypto"
 
@@ -23,6 +23,12 @@ export function suffixProblem(suffix: string) {
 }
 
 export const SOUND_MAX_BYTES = 3 * 1024 * 1024
+/** Sounds one member can have in the pool, which keeps it in the
+ * database's reach (3 MB each). */
+export const SOUND_UPLOADS_MAX = 10
+/** Sounds on one playlist. */
+export const PLAYLIST_MAX = 20
+export const SOUND_LABEL_MAX = 40
 /** idm-display cuts every sound here and levels its loudness. */
 export const SOUND_MAX_SECONDS = 30
 
@@ -61,39 +67,28 @@ export function panelName(name: string) {
 
 const LINK_SECONDS = 60 * 60
 
-const signature = (
-  secret: string,
-  userId: string,
-  version: string,
-  expires: number
-) =>
+const signature = (secret: string, soundId: string, expires: number) =>
   createHmac("sha256", secret)
-    .update(`${userId}.${version}.${expires}`)
+    .update(`${soundId}.${expires}`)
     .digest("base64url")
 
-/** An hour-long link to a member's sound; the panel fetches it without a
+/** An hour-long link to a pool sound; the panel fetches it without a
  * header, and re-reads greetings every few minutes. */
-export function soundLink(userId: string, version: string) {
+export function soundLink(soundId: string) {
   const secret = process.env.DISPLAY_API_SECRET!
   const expires = Math.floor(Date.now() / 1000) + LINK_SECONDS
   const query = new URLSearchParams({
-    v: version,
     exp: String(expires),
-    sig: signature(secret, userId, version, expires),
+    sig: signature(secret, soundId, expires),
   })
-  return `${process.env.BETTER_AUTH_URL}/api/door/sounds/${userId}?${query}`
+  return `${process.env.BETTER_AUTH_URL}/api/door/sounds/${soundId}?${query}`
 }
 
-export function soundLinkValid(
-  userId: string,
-  version: string,
-  expires: number,
-  sig: string
-) {
+export function soundLinkValid(soundId: string, expires: number, sig: string) {
   const secret = process.env.DISPLAY_API_SECRET
   if (!secret || !Number.isSafeInteger(expires)) return false
   if (expires < Date.now() / 1000) return false
-  const expected = Buffer.from(signature(secret, userId, version, expires))
+  const expected = Buffer.from(signature(secret, soundId, expires))
   const given = Buffer.from(sig)
   return given.length === expected.length && timingSafeEqual(given, expected)
 }
