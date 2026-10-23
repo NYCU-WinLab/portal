@@ -23,6 +23,8 @@ export function suffixProblem(suffix: string) {
 }
 
 export const SOUND_MAX_BYTES = 3 * 1024 * 1024
+/** idm-display cuts every sound here and levels its loudness. */
+export const SOUND_MAX_SECONDS = 30
 
 /** The audio type the file's own bytes say, or null for anything else. */
 export function soundType(bytes: Uint8Array): string | null {

@@ -9,6 +9,7 @@ import { db } from "@/lib/db"
 import { doorCards, doorGreetings, leaves, user } from "@/lib/db/schema"
 import {
   SOUND_MAX_BYTES,
+  SOUND_MAX_SECONDS,
   panelName,
   soundLink,
   soundType,
@@ -33,7 +34,7 @@ export const getMyDoorGreeting = defineAction({
   name: "get_my_door_greeting",
   title: "我的門口歡迎",
   description:
-    "How the lab door greets the signed-in member: suffix (shown after their name on the LED panel, null for the default ！！), whether they uploaded their own sound, and whether it plays (play_sound) instead of the lab's default.",
+    "How the lab door greets the signed-in member: suffix (shown after their name on the LED panel, null for the default ！！), whether they uploaded their own sound (sound_version changes with every upload), and whether it plays (play_sound) instead of the lab's default.",
   kind: "query",
   input: z.object({}),
   run: async (actor) => {
@@ -41,6 +42,7 @@ export const getMyDoorGreeting = defineAction({
       .select({
         suffix: doorGreetings.suffix,
         soundType: doorGreetings.soundType,
+        soundVersion: doorGreetings.soundVersion,
         playSound: doorGreetings.playSound,
       })
       .from(doorGreetings)
@@ -48,7 +50,29 @@ export const getMyDoorGreeting = defineAction({
     return {
       suffix: row?.suffix ?? null,
       has_sound: Boolean(row?.soundType),
+      sound_version: row?.soundVersion ?? null,
       play_sound: row?.playSound ?? false,
+    }
+  },
+})
+
+export const getMyDoorSound = defineAction({
+  name: "get_my_door_sound",
+  title: "試聽我的門口音效",
+  description:
+    "The signed-in member's own door sound as base64 with its content type, or null when they have not uploaded one.",
+  kind: "query",
+  input: z.object({}),
+  run: async (actor) => {
+    const [row] = await db
+      .select({ sound: doorGreetings.sound, type: doorGreetings.soundType })
+      .from(doorGreetings)
+      .where(eq(doorGreetings.userId, actor.userId))
+    return {
+      sound:
+        row?.sound && row.type
+          ? { contentType: row.type, base64: row.sound.toString("base64") }
+          : null,
     }
   },
 })
@@ -72,7 +96,7 @@ export const setDoorSuffix = defineAction({
 export const uploadDoorSound = defineAction({
   name: "upload_door_sound",
   title: "上傳門口音效",
-  description: `Uploads the signed-in member's own door sound as base64 (mp3, m4a, aac, wav or ogg, up to ${SOUND_MAX_BYTES / 1024 / 1024} MB; the door plays its first 10 seconds) and turns it on. It replaces the previous one.`,
+  description: `Uploads the signed-in member's own door sound as base64 (mp3, m4a, aac, wav or ogg, up to ${SOUND_MAX_BYTES / 1024 / 1024} MB; the door plays its first ${SOUND_MAX_SECONDS} seconds) and turns it on. It replaces the previous one.`,
   kind: "mutation",
   input: z.object({
     base64: z
