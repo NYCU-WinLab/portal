@@ -120,9 +120,10 @@ export const doorGreetings = pgTable("door_greetings", {
 })
 
 // The lab's pool of door sounds: every member's upload, shared, so anyone
-// can play one or put it on their playlist. A sound's bytes never change, so
-// its id is the version the panel caches it by. is_default marks the ones
-// played for a member with an empty playlist; door admins pick them.
+// can play one or put it on their playlist. version changes whenever its
+// file is replaced, and the panel and the players cache by it. is_default
+// marks the ones played for a member with an empty playlist; door admins
+// pick them.
 export const doorSounds = pgTable(
   "door_sounds",
   {
@@ -131,6 +132,7 @@ export const doorSounds = pgTable(
     uploaderId: uuid().references(() => user.id, { onDelete: "set null" }),
     sound: bytea().notNull(),
     soundType: text().notNull(),
+    version: uuid().defaultRandom().notNull(),
     isDefault: boolean().default(false).notNull(),
     createdAt: timestamp({ withTimezone: true }).defaultNow().notNull(),
   },

@@ -28,6 +28,21 @@ const label = z
       )
   )
 
+const audio = z
+  .base64("檔案要是 base64")
+  .max(Math.ceil((SOUND_MAX_BYTES * 4) / 3) + 4, "音檔超過 3 MB")
+
+/** The bytes of an uploaded sound and the audio type they say, or why
+ * they are refused. */
+function decodeSound(base64: string) {
+  const sound = Buffer.from(base64, "base64")
+  if (!sound.length) throw new Error("音檔是空的")
+  if (sound.length > SOUND_MAX_BYTES) throw new Error("音檔超過 3 MB")
+  const type = soundType(sound)
+  if (!type) throw new Error("只接受 mp3、m4a、aac、wav、ogg 音檔")
+  return { sound, type }
+}
+
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0]
 
 /** One upload or playlist change at a time per member, so the caps hold
@@ -51,6 +66,7 @@ async function ownSound(actor: Actor, soundId: string) {
 
 export type DoorSound = {
   id: string
+  version: string
   label: string
   uploader: string | null
   mine: boolean
@@ -77,6 +93,7 @@ export const listDoorSounds = defineAction({
       db
         .select({
           id: doorSounds.id,
+          version: doorSounds.version,
           label: doorSounds.label,
           uploaderId: doorSounds.uploaderId,
           uploader: user.name,
@@ -98,6 +115,7 @@ export const listDoorSounds = defineAction({
     return {
       sounds: rows.map((row): DoorSound => ({
         id: row.id,
+        version: row.version,
         label: row.label,
         uploader: row.uploader,
         mine: row.uploaderId === actor.userId,
@@ -115,16 +133,24 @@ export const getDoorSound = defineAction({
   name: "get_door_sound",
   title: "試聽門口音效",
   description:
-    "One sound from the door sound pool as base64 with its content type, to listen to it.",
+    "One sound from the door sound pool as base64 with its content type and version (it changes when the file is replaced), to listen to it.",
   kind: "query",
   input: z.object({ id }),
   run: async (_actor, { id: soundId }) => {
     const [row] = await db
-      .select({ sound: doorSounds.sound, type: doorSounds.soundType })
+      .select({
+        sound: doorSounds.sound,
+        type: doorSounds.soundType,
+        version: doorSounds.version,
+      })
       .from(doorSounds)
       .where(eq(doorSounds.id, soundId))
     if (!row) throw new Error("找不到這個音效")
-    return { contentType: row.type, base64: row.sound.toString("base64") }
+    return {
+      contentType: row.type,
+      version: row.version,
+      base64: row.sound.toString("base64"),
+    }
   },
 })
 
@@ -134,18 +160,9 @@ export const uploadDoorSound = defineAction({
   title: "上傳門口音效",
   description: `Adds a sound to the lab's door sound pool as base64 (mp3, m4a, aac, wav or ogg, up to ${SOUND_MAX_BYTES / 1024 / 1024} MB; the door plays its first ${SOUND_MAX_SECONDS} seconds) with a label, and puts it on the signed-in member's playlist. A member can have ${SOUND_UPLOADS_MAX} sounds in the pool.`,
   kind: "mutation",
-  input: z.object({
-    label,
-    base64: z
-      .base64("檔案要是 base64")
-      .max(Math.ceil((SOUND_MAX_BYTES * 4) / 3) + 4, "音檔超過 3 MB"),
-  }),
+  input: z.object({ label, base64: audio }),
   run: async (actor, input) => {
-    const sound = Buffer.from(input.base64, "base64")
-    if (!sound.length) throw new Error("音檔是空的")
-    if (sound.length > SOUND_MAX_BYTES) throw new Error("音檔超過 3 MB")
-    const type = soundType(sound)
-    if (!type) throw new Error("只接受 mp3、m4a、aac、wav、ogg 音檔")
+    const { sound, type } = decodeSound(input.base64)
     return db.transaction(async (tx) => {
       await lockMember(tx, actor.userId)
       const [{ n }] = await tx
@@ -191,6 +208,26 @@ export const renameDoorSound = defineAction({
       .set({ label: input.label })
       .where(eq(doorSounds.id, input.id))
     return { id: input.id, label: input.label }
+  },
+})
+
+export const replaceDoorSound = defineAction({
+  name: "replace_door_sound",
+  refreshesDoorPanel: true,
+  title: "換門口音效的音檔",
+  description: `Replaces the audio file of a sound in the door sound pool with new base64 audio (same formats and ${SOUND_MAX_BYTES / 1024 / 1024} MB limit as upload_door_sound). The sound keeps its id, label, default mark and every playlist it is on, so every member who has it hears the new file from the next door open. Only its uploader or a door admin may.`,
+  kind: "mutation",
+  input: z.object({ id, base64: audio }),
+  run: async (actor, input) => {
+    const { sound, type } = decodeSound(input.base64)
+    await ownSound(actor, input.id)
+    const [row] = await db
+      .update(doorSounds)
+      .set({ sound, soundType: type, version: crypto.randomUUID() })
+      .where(eq(doorSounds.id, input.id))
+      .returning({ id: doorSounds.id, version: doorSounds.version })
+    if (!row) throw new Error("找不到這個音效")
+    return row
   },
 })
 
@@ -280,9 +317,10 @@ export async function panelSound(soundId: string) {
   return row ? { bytes: row.sound, type: row.type } : null
 }
 
-/** Every playlist, by member, and the defaults: what the panel plays. */
+/** Every playlist, by member, the defaults and each sound's version: what
+ * the panel plays. */
 export async function panelPlaylists() {
-  const [items, defaults] = await Promise.all([
+  const [items, defaults, versions] = await Promise.all([
     db
       .select({
         userId: doorPlaylistItems.userId,
@@ -295,6 +333,9 @@ export async function panelPlaylists() {
       .from(doorSounds)
       .where(eq(doorSounds.isDefault, true))
       .orderBy(doorSounds.createdAt),
+    db
+      .select({ id: doorSounds.id, version: doorSounds.version })
+      .from(doorSounds),
   ])
   const playlists = new Map<string, string[]>()
   for (const item of items)
@@ -302,5 +343,9 @@ export async function panelPlaylists() {
       ...(playlists.get(item.userId) ?? []),
       item.soundId,
     ])
-  return { playlists, defaults: defaults.map((row) => row.id) }
+  return {
+    playlists,
+    defaults: defaults.map((row) => row.id),
+    versions: new Map(versions.map((row) => [row.id, row.version])),
+  }
 }

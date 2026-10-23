@@ -6,6 +6,7 @@ import { type Action, errorMessage, runAction } from "@/lib/actions/define"
 import {
   deleteDoorSound,
   renameDoorSound,
+  replaceDoorSound,
   setDoorPlaylist,
   setDoorSoundDefault,
   uploadDoorSound,
@@ -30,6 +31,8 @@ async function call(action: Action, input: unknown) {
 export const upload = async (input: unknown) => call(uploadDoorSound, input)
 export const rename = async (id: string, label: string) =>
   call(renameDoorSound, { id, label })
+export const replace = async (id: string, base64: string) =>
+  call(replaceDoorSound, { id, base64 })
 export const remove = async (id: string) => call(deleteDoorSound, { id })
 export const savePlaylist = async (sound_ids: string[]) =>
   call(setDoorPlaylist, { sound_ids })

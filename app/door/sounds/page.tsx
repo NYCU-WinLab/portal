@@ -48,7 +48,11 @@ export default async function DoorSoundsPage() {
             )}
           </FocusTitle>
         </Focus>
-        <SoundList sounds={sounds} canEditAll={can_edit_all} />
+        <SoundList
+          sounds={sounds}
+          canEditAll={can_edit_all}
+          maxSeconds={SOUND_MAX_SECONDS}
+        />
       </div>
     </PortalShell>
   )

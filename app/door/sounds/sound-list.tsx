@@ -1,7 +1,13 @@
 "use client"
 
 import * as React from "react"
-import { CheckIcon, PencilIcon, PlusIcon, Trash2Icon } from "lucide-react"
+import {
+  CheckIcon,
+  FileAudioIcon,
+  PencilIcon,
+  PlusIcon,
+  Trash2Icon,
+} from "lucide-react"
 import { toast } from "sonner"
 
 import { ConfirmDialog } from "@/components/confirm-dialog"
@@ -16,7 +22,14 @@ import { Switch } from "@/components/ui/switch"
 import type { DoorSound } from "@/lib/actions/door-sounds"
 import { report } from "@/lib/report"
 
-import { markDefault, remove, rename, savePlaylist, upload } from "./actions"
+import {
+  markDefault,
+  remove,
+  rename,
+  replace,
+  savePlaylist,
+  upload,
+} from "./actions"
 import { PlayButton } from "./play-button"
 
 const LIMIT = 3 * 1024 * 1024
@@ -88,15 +101,70 @@ export function UploadSound({ maxSeconds }: { maxSeconds: number }) {
   )
 }
 
+// A new file for a sound already in the pool: it keeps its name, default
+// mark and playlists, so whoever has it hears the new file.
+function ReplaceSound({
+  sound,
+  maxSeconds,
+}: {
+  sound: DoorSound
+  maxSeconds: number
+}) {
+  const [files, setFiles] = React.useState<File[]>([])
+
+  async function submit() {
+    const [file] = files
+    if (!file) {
+      toast.error("請選音檔")
+      throw new Error("no file")
+    }
+    await report(replace(sound.id, await base64(file)), "已換音檔")
+  }
+
+  return (
+    <FormDialog
+      trigger={
+        <Button variant="ghost" size="icon" aria-label="換音檔">
+          <FileAudioIcon />
+        </Button>
+      }
+      onOpenChange={(open) => {
+        if (open) setFiles([])
+      }}
+      title={`換「${sound.label}」的音檔`}
+      submitLabel="換"
+      onSubmit={submit}
+    >
+      <div className="flex flex-col gap-2">
+        <Label htmlFor={`door-sound-file-${sound.id}`}>
+          {sound.listeners > 0
+            ? `${sound.listeners} 人在用，他們也會聽到新的，門口播前 ${maxSeconds} 秒`
+            : `新音檔，門口播前 ${maxSeconds} 秒`}
+        </Label>
+        <FileUpload
+          id={`door-sound-file-${sound.id}`}
+          value={files}
+          onValueChange={(next) => setFiles(next.slice(-1))}
+          accept=".mp3,.m4a,.aac,.wav,.ogg,audio/*"
+          acceptLabel="mp3、m4a、aac、wav、ogg"
+          maxSize={LIMIT}
+        />
+      </div>
+    </FormDialog>
+  )
+}
+
 // The pool, newest first. Each row plays the sound and puts it on or takes
 // it off the member's playlist; its uploader and door admins also rename
 // and delete it, and door admins mark the defaults.
 export function SoundList({
   sounds,
   canEditAll,
+  maxSeconds,
 }: {
   sounds: DoorSound[]
   canEditAll: boolean
+  maxSeconds: number
 }) {
   // The playlist as the member sees it, ahead of the refresh, so two quick
   // taps both count.
@@ -130,7 +198,11 @@ export function SoundList({
             key={sound.id}
             className="flex min-h-14 items-center gap-4 border-b border-border py-2"
           >
-            <PlayButton soundId={sound.id} label={sound.label} />
+            <PlayButton
+              soundId={sound.id}
+              version={sound.version}
+              label={sound.label}
+            />
             <span className="flex min-w-0 flex-1 flex-col">
               <span className="truncate">{sound.label}</span>
               <span className="truncate text-muted-foreground">
@@ -182,6 +254,7 @@ export function SoundList({
                       />
                     </FormField>
                   </FormDialog>
+                  <ReplaceSound sound={sound} maxSeconds={maxSeconds} />
                   <ConfirmDialog
                     trigger={
                       <Button variant="ghost" size="icon" aria-label="刪除">

@@ -232,6 +232,13 @@
       "when": 1792771323361,
       "tag": "0032_drop_door_greeting_sound",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1792771939287,
+      "tag": "0033_door_sound_version",
+      "breakpoints": true
     }
   ]
 }
