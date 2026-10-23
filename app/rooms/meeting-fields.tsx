@@ -190,6 +190,7 @@ export function MeetingFields({
         </Label>
         <MemberCombobox
           id="meeting-attendees"
+          className="w-full"
           multiple
           members={members}
           value={value.attendees}
@@ -249,10 +250,6 @@ export function MeetingFields({
           onChange={(event) => set({ agenda: event.target.value })}
         />
       </FormField>
-      <p className="text-muted-foreground">
-        會在 WinLab 的 Teams 頻道開會議，自動錄影並產生逐字稿與 AI
-        摘要，頻道成員都看得到。
-      </p>
     </>
   )
 }

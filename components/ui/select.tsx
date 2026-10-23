@@ -42,9 +42,12 @@ function SelectTrigger({
       {...props}
     >
       {children}
-      <SelectPrimitive.Icon
-        render={<ChevronDownIcon className="text-muted-foreground" />}
-      />
+      {/* Icon's default content is the text "▼"; passing the svg as children
+          replaces it, while render would keep "▼" inside the svg and in the
+          trigger's text. */}
+      <SelectPrimitive.Icon className="flex text-muted-foreground">
+        <ChevronDownIcon />
+      </SelectPrimitive.Icon>
     </SelectPrimitive.Trigger>
   )
 }
@@ -77,7 +80,7 @@ function SelectContent({
           data-slot="select-content"
           data-align-trigger={alignItemWithTrigger}
           className={cn(
-            "relative isolate z-50 max-h-(--available-height) w-menu min-w-40 origin-(--transform-origin) overflow-x-hidden overflow-y-auto rounded-menu border border-border bg-transparent text-foreground shadow-md backdrop-blur-md duration-overlay data-[align-trigger=true]:zoom-in-100 data-[align-trigger=true]:zoom-out-100 data-[side=bottom]:slide-in-from-top-2 data-[side=top]:slide-in-from-bottom-2 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
+            "relative isolate z-50 max-h-(--available-height) w-menu min-w-40 origin-(--transform-origin) overflow-x-hidden overflow-y-auto rounded-menu border border-border bg-overlay text-foreground shadow-md backdrop-blur-md duration-overlay data-[align-trigger=true]:zoom-in-100 data-[align-trigger=true]:zoom-out-100 data-[side=bottom]:slide-in-from-top-2 data-[side=top]:slide-in-from-bottom-2 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
             className
           )}
           {...props}

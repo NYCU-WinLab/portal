@@ -28,7 +28,7 @@ const Toaster = ({ ...props }: ToasterProps) => {
         unstyled: true,
         classNames: {
           toast:
-            "flex w-full items-center gap-3 rounded-surface border border-border bg-transparent p-6 text-body text-foreground shadow-lg backdrop-blur-md",
+            "flex w-full items-center gap-3 rounded-surface border border-border bg-overlay p-6 text-body text-foreground shadow-lg backdrop-blur-md",
           icon: "flex size-6 shrink-0 items-center justify-center self-start",
           content: "flex flex-1 flex-col",
           title: "font-medium",
