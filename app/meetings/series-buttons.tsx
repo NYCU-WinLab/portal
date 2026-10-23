@@ -1,5 +1,6 @@
 "use client"
 
+import { Trash2Icon } from "lucide-react"
 import { toast } from "sonner"
 
 import { ConfirmDialog } from "@/components/confirm-dialog"
@@ -37,7 +38,11 @@ export function SeriesButtons({
         {active ? "暫停" : "恢復"}
       </Button>
       <ConfirmDialog
-        trigger={<Button variant="ghost">刪除</Button>}
+        trigger={
+          <Button variant="ghost" size="icon" aria-label="刪除">
+            <Trash2Icon />
+          </Button>
+        }
         title={`刪除「${title}」？`}
         confirmLabel="刪除"
         onConfirm={remove}
