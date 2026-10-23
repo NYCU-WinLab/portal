@@ -31,10 +31,11 @@ const part = z
   .max(200)
   .transform((value) => value.normalize("NFC").trim().replace(/\s+/g, " "))
   .refine((value) => [...value].length <= PART_MAX, `最多 ${PART_MAX} 個字`)
-const time = z
-  .string()
-  .regex(/^([01]\d|2[0-3]):[0-5]\d$/, "時間要像 22:00")
-  .transform((value) => Number(value.slice(0, 2)) * 60 + Number(value.slice(3)))
+// A plain string in the schema: a transform would make MCP clients see a
+// number and turn "06:00" into one before it is sent.
+const time = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "時間要像 22:00")
+const minutes = (value: string) =>
+  Number(value.slice(0, 2)) * 60 + Number(value.slice(3))
 const fields = z.object({
   before: part.describe('Said before the name, e.g. "晚安，"; may be empty.'),
   after: part.describe(
@@ -98,8 +99,8 @@ async function save(
 const values = (input: z.infer<typeof fields>, userId: string) => ({
   before: input.before,
   after: input.after,
-  startsAt: input.starts_at,
-  endsAt: input.ends_at,
+  startsAt: minutes(input.starts_at),
+  endsAt: minutes(input.ends_at),
   days: mask(input.days),
   enabled: input.enabled,
   updatedBy: userId,
