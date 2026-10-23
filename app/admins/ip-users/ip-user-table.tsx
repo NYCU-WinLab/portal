@@ -1,5 +1,6 @@
 "use client"
 
+import { PencilIcon, Trash2Icon } from "lucide-react"
 import * as React from "react"
 
 import { ConfirmDialog } from "@/components/confirm-dialog"
@@ -38,7 +39,13 @@ function EntryForm({ entry }: { entry?: Entry }) {
   return (
     <FormDialog
       trigger={
-        entry ? <Button variant="ghost">改</Button> : <Button>新增 IP</Button>
+        entry ? (
+          <Button variant="ghost" size="icon" aria-label="編輯">
+            <PencilIcon />
+          </Button>
+        ) : (
+          <Button>新增 IP</Button>
+        )
       }
       title={entry ? entry.ip : "新增 IP"}
       submitLabel="儲存"
@@ -157,18 +164,24 @@ export function IpUserTable({ entries }: { entries: Entry[] }) {
                 e.category as keyof typeof IP_USER_CATEGORIES
               ] ?? e.category}
             </span>
-            <EntryForm entry={e} />
-            <ConfirmDialog
-              trigger={<Button variant="ghost">刪</Button>}
-              title={`刪除 ${e.ip}？`}
-              confirmLabel="刪除"
-              onConfirm={() =>
-                report(
-                  remove({ id: e.id, expected_revision: e.revision }),
-                  "已刪除"
-                )
-              }
-            />
+            <div className="flex shrink-0 gap-1">
+              <EntryForm entry={e} />
+              <ConfirmDialog
+                trigger={
+                  <Button variant="ghost" size="icon" aria-label="刪除">
+                    <Trash2Icon />
+                  </Button>
+                }
+                title={`刪除 ${e.ip}？`}
+                confirmLabel="刪除"
+                onConfirm={() =>
+                  report(
+                    remove({ id: e.id, expected_revision: e.revision }),
+                    "已刪除"
+                  )
+                }
+              />
+            </div>
           </li>
         ))}
       </ul>
