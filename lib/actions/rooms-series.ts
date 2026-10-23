@@ -161,6 +161,21 @@ async function bookOccurrence(series: Series, date: string, notify = true) {
     )
   if (held) return null
   const endTime = addMinutes(series.startTime, series.durationMinutes)!
+  // The creator may have booked the week by hand, as the failure mail asks;
+  // that booking carries no series, and a second one would hold two rooms.
+  const [byHand] = await db
+    .select({ id: roomBookings.id })
+    .from(roomBookings)
+    .where(
+      and(
+        eq(roomBookings.requestedBy, series.createdBy),
+        eq(roomBookings.date, date),
+        eq(roomBookings.status, "booked"),
+        lt(roomBookings.startTime, endTime),
+        gt(roomBookings.endTime, series.startTime)
+      )
+    )
+  if (byHand) return null
   const [owner] = await db
     .select({ id: user.id, name: user.name, email: user.email })
     .from(user)
@@ -348,7 +363,7 @@ export const setStandingMeetingActive = defineAction({
   name: "set_standing_meeting_active",
   title: "暫停或恢復固定會議",
   description:
-    "Pauses (active false) or resumes (active true) one of the member's own standing meetings. A paused series books nothing new; occurrences already booked stay, and are cancelled with cancel_meeting.",
+    "Pauses (active false) or resumes (active true) one of the member's own standing meetings. A paused series books nothing new; occurrences already booked stay, and are cancelled with cancel_meeting. Resuming books, at the next daily run, every week within the coming 7 days that has no booking; to skip one week, keep it running and cancel that week's booking instead.",
   kind: "mutation",
   input: z.object({ id: z.uuid(), active: z.boolean() }),
   run: async (actor, { id, active }) => {
@@ -424,7 +439,11 @@ export async function runDailyRooms() {
   for (const series of active)
     for (const date of occurrencesBetween(rule(series), from, to))
       if (!settled.has(`${series.id} ${date}`))
-        await bookOccurrence(series, date, date === to || date === from)
+        // One week that throws outside bookOccurrence's own handling must
+        // not cost the other series, or the Teams sweep below, their day.
+        await bookOccurrence(series, date, date === to || date === from).catch(
+          (error) => emitErrorLog(error, { "room_series.id": series.id, date })
+        )
   await sweepMeetingRequests()
   await announceChange("room_daily_run").catch(() => {})
 }
