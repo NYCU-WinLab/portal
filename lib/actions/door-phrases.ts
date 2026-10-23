@@ -156,6 +156,7 @@ export const listDoorPhrases = defineAction({
 
 export const createDoorPhrase = defineAction({
   name: "create_door_phrase",
+  refreshesDoorPanel: true,
   title: "新增門口問候語",
   description:
     "Adds a rule to the door's spoken greeting schedule (door admins). Enabled rules may not overlap on any weekday; the door speaks it in CC's cloned voice once the voice job has made its clips, and in the stock voice until then.",
@@ -172,6 +173,7 @@ export const createDoorPhrase = defineAction({
 
 export const updateDoorPhrase = defineAction({
   name: "update_door_phrase",
+  refreshesDoorPanel: true,
   title: "修改門口問候語",
   description:
     "Replaces one rule of the door's spoken greeting schedule (door admins); set enabled false to pause it without deleting it.",
@@ -188,6 +190,7 @@ export const updateDoorPhrase = defineAction({
 
 export const deleteDoorPhrase = defineAction({
   name: "delete_door_phrase",
+  refreshesDoorPanel: true,
   title: "刪除門口問候語",
   description:
     "Deletes one rule of the door's spoken greeting schedule (door admins).",

@@ -63,6 +63,7 @@ export const getMyDoorGreeting = defineAction({
 
 export const setDoorSuffix = defineAction({
   name: "set_door_suffix",
+  refreshesDoorPanel: true,
   title: "設定門口後綴",
   description:
     "Sets what the door's LED panel shows after the signed-in member's name, at most 3 CJK characters or 6 ASCII characters; null or an empty string goes back to the default ！！.",
@@ -79,6 +80,7 @@ export const setDoorSuffix = defineAction({
 
 export const setDoorSpeakName = defineAction({
   name: "set_door_speak_name",
+  refreshesDoorPanel: true,
   title: "開門念名字",
   description:
     'Sets whether the lab door says "Hi <given name>" before the signed-in member\'s door sound (speak true, the default) or plays only the sound (false). Self only.',

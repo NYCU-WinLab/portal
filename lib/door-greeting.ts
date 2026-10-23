@@ -23,11 +23,12 @@ export function suffixProblem(suffix: string) {
 }
 
 export const SOUND_MAX_BYTES = 3 * 1024 * 1024
-/** Sounds one member can have in the pool, which keeps it in the
- * database's reach (3 MB each). */
-export const SOUND_UPLOADS_MAX = 10
-/** Sounds on one playlist. */
-export const PLAYLIST_MAX = 20
+/** Sounds one member can have in the pool. Real sounds average about
+ * 300 KB (25 in the pool came to 7.6 MB on 2026-10-23), so 50 stays well
+ * inside Postgres even at the 3 MB worst case. */
+export const SOUND_UPLOADS_MAX = 50
+/** Sounds on one playlist: as many as a member can upload. */
+export const PLAYLIST_MAX = SOUND_UPLOADS_MAX
 export const SOUND_LABEL_MAX = 40
 /** idm-display cuts every sound here and levels its loudness. */
 export const SOUND_MAX_SECONDS = 30
