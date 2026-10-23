@@ -3,7 +3,7 @@
 // time picks whatever is free by then. A daily run in the server process
 // does it; a new series books its first week at once, which the daily run
 // (looking only 7 days out) would never reach.
-import { and, asc, eq } from "drizzle-orm"
+import { and, asc, eq, gte, inArray, lte } from "drizzle-orm"
 import { z } from "zod"
 
 import { announceChange } from "@/lib/actions/changes"
@@ -117,7 +117,7 @@ export const listStandingMeetings = defineAction({
  * free room is open, as the old portal did), else tells the creator. Skips
  * an occurrence already held. Returns the failure, or null.
  */
-async function bookOccurrence(series: Series, date: string) {
+async function bookOccurrence(series: Series, date: string, notify = true) {
   const [held] = await db
     .select({ id: roomBookings.id })
     .from(roomBookings)
@@ -170,22 +170,23 @@ async function bookOccurrence(series: Series, date: string) {
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error)
     emitErrorLog(error, { "room_series.id": series.id })
-    await queueMail(db, {
-      to: [owner.email],
-      subject: `[WinLab 會議] 固定會議沒訂到教室：${series.title}`,
-      ...mailBody({
-        title: series.title,
-        rows: [
-          ["時間", `${dayLabel(date)} ${series.startTime} 到 ${endTime}`],
-          ["原因", reason],
-        ],
-        paragraphs: ["請自己借教室，或改成線上。"],
-        action: {
-          label: "借教室",
-          url: `${process.env.BETTER_AUTH_URL}/meetings`,
-        },
-      }),
-    })
+    if (notify)
+      await queueMail(db, {
+        to: [owner.email],
+        subject: `[WinLab 會議] 固定會議沒訂到教室：${series.title}`,
+        ...mailBody({
+          title: series.title,
+          rows: [
+            ["時間", `${dayLabel(date)} ${series.startTime} 到 ${endTime}`],
+            ["原因", reason],
+          ],
+          paragraphs: ["請自己借教室，或改成線上。"],
+          action: {
+            label: "借教室",
+            url: `${process.env.BETTER_AUTH_URL}/meetings`,
+          },
+        }),
+      })
     return `${dayLabel(date)}：${reason}`
   }
 }
@@ -341,7 +342,7 @@ export const deleteStandingMeeting = defineAction({
 
 /**
  * The daily run, once a day from 04:30 Taipei: books every active series'
- * occurrence 7 days out, then settles and reports Teams meetings that
+ * occurrences up to 7 days out, then settles and reports Teams meetings that
  * failed. The day is claimed in room_daily_runs first, so a restart or a
  * second process never runs it twice.
  */
@@ -353,13 +354,44 @@ export async function runDailyRooms() {
     .onConflictDoNothing()
     .returning()
   if (!claimed.length) return
-  const date = addDays(today, LEAD_DAYS)
-  const due = (
-    await db.select().from(roomSeries).where(eq(roomSeries.active, true))
-  ).filter((series) =>
-    occurrencesBetween(rule(series), date, date).includes(date)
+  // Day 7 is the new one. The days before it are booked too when nothing
+  // holds them, so a run that never happened (the server was down, or the
+  // series was paused then) is made up; their failures were mailed when
+  // they were day 7, so only day 7 mails again.
+  const from = addDays(today, 1)
+  const to = addDays(today, LEAD_DAYS)
+  const active = await db
+    .select()
+    .from(roomSeries)
+    .where(eq(roomSeries.active, true))
+  // Any row, kept or cancelled, settles a day: a week the creator
+  // cancelled stays cancelled.
+  const settled = new Set(
+    active.length
+      ? (
+          await db
+            .select({
+              seriesId: roomBookings.seriesId,
+              date: roomBookings.date,
+            })
+            .from(roomBookings)
+            .where(
+              and(
+                inArray(
+                  roomBookings.seriesId,
+                  active.map((series) => series.id)
+                ),
+                gte(roomBookings.date, from),
+                lte(roomBookings.date, to)
+              )
+            )
+        ).map((row) => `${row.seriesId} ${row.date}`)
+      : []
   )
-  for (const series of due) await bookOccurrence(series, date)
+  for (const series of active)
+    for (const date of occurrencesBetween(rule(series), from, to))
+      if (!settled.has(`${series.id} ${date}`))
+        await bookOccurrence(series, date, date === to)
   await sweepMeetingRequests()
   await announceChange("room_daily_run").catch(() => {})
 }
