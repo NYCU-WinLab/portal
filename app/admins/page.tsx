@@ -7,6 +7,7 @@ import { adminAppKeys, adminApps } from "@/lib/apps"
 import { requireActor } from "@/lib/auth/session"
 
 import { GrantDialog } from "./grant-dialog"
+import { adminsNav, adminsPage } from "./nav"
 import { RevokeButton } from "./revoke-button"
 
 export const dynamic = "force-dynamic"
@@ -20,13 +21,7 @@ export default async function AdminsPage() {
   const members = canEdit ? await runAction(listMembers, actor, {}) : []
 
   return (
-    <PortalShell
-      page={{ label: "Admins", href: "/admins", tip: "各 app 的管理員" }}
-      nav={[
-        { label: "管理員", href: "/admins", tip: "各 app 的管理員" },
-        { label: "IP 使用者", href: "/admins/ip-users", tip: "網段位址登記" },
-      ]}
-    >
+    <PortalShell page={adminsPage} nav={adminsNav}>
       <div className="flex flex-col gap-12">
         <PageHeader
           title="管理員"

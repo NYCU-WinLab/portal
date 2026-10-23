@@ -6,9 +6,8 @@ import {
 } from "@/components/focus"
 import { PageHeader } from "@/components/page-header"
 import { PortalShell } from "@/components/portal-shell"
-import { StatusPage } from "@/components/status-page"
 import { NumberTicker } from "@/components/ui/number-ticker"
-import { isAdmin } from "@/lib/actions/authz"
+import { requireAdminPage } from "@/lib/actions/authz"
 import { runAction } from "@/lib/actions/define"
 import { listDoorVoiceClips } from "@/lib/actions/door-phrases"
 import { requireActor } from "@/lib/auth/session"
@@ -20,15 +19,10 @@ export const dynamic = "force-dynamic"
 
 export default async function DoorVoicePage() {
   const actor = await requireActor("/door/voice")
-  if (!(await isAdmin(actor, "door")))
-    return (
-      <PortalShell page={doorPage} layout="spotlight">
-        <StatusPage title="門口語音只有 Door 管理員能看" />
-      </PortalShell>
-    )
+  await requireAdminPage(actor, "door")
   const { clips, missing } = await runAction(listDoorVoiceClips, actor, {})
   return (
-    <PortalShell page={doorPage} nav={doorNav(true)}>
+    <PortalShell page={doorPage} nav={doorNav}>
       <div className="flex flex-col gap-12">
         <PageHeader title="語音" />
         <Focus>

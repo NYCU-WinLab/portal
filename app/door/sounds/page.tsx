@@ -22,7 +22,7 @@ export default async function DoorSoundsPage() {
   const { sounds, can_edit_all } = await runAction(listDoorSounds, actor, {})
   const mine = sounds.filter((sound) => sound.onMyPlaylist)
   return (
-    <PortalShell page={doorPage} nav={doorNav(can_edit_all)}>
+    <PortalShell page={doorPage} nav={doorNav}>
       <div className="flex flex-col gap-12">
         <PageHeader
           title="音效池"

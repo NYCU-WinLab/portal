@@ -1,5 +1,9 @@
-// Services in groups, each group in alphabetical order. An href that starts
-// with https is another lab service and gets the ↗ mark.
+// Services in groups, each group in alphabetical order. A service with
+// admin shows only to that app's admins. An href that starts
+// with https is another lab service: it gets the ↗ mark and opens in a new
+// tab.
+import type { AdminApp } from "@/lib/apps"
+
 export type Service = {
   /** Stable id, stored in home_pins. */
   key: string
@@ -7,6 +11,8 @@ export type Service = {
   name: string
   emoji: string
   href: string
+  /** Shown only to this app's admins: the app has nothing for others. */
+  admin?: AdminApp
 }
 
 export const serviceGroups: { title: string; apps: Service[] }[] = [
@@ -74,6 +80,7 @@ export const serviceGroups: { title: string; apps: Service[] }[] = [
         name: "收據",
         emoji: "🧾",
         href: "/receipts",
+        admin: "receipts",
       },
       {
         key: "reimburse",
@@ -147,6 +154,13 @@ export const serviceGroups: { title: string; apps: Service[] }[] = [
         name: "程式碼",
         emoji: "🦊",
         href: "https://gitlab.winlab.tw",
+      },
+      {
+        key: "harbor",
+        label: "Harbor",
+        name: "映像倉庫",
+        emoji: "📦",
+        href: "https://harbor.winlab.tw",
       },
       {
         key: "llm",

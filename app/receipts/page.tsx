@@ -9,8 +9,7 @@ import {
 import { NumberTicker } from "@/components/ui/number-ticker"
 import { PageHeader } from "@/components/page-header"
 import { PortalShell } from "@/components/portal-shell"
-import { StatusPage } from "@/components/status-page"
-import { isAdmin } from "@/lib/actions/authz"
+import { requireAdminPage } from "@/lib/actions/authz"
 import { runAction } from "@/lib/actions/define"
 import { listReceipts } from "@/lib/actions/receipts"
 import { requireActor } from "@/lib/auth/session"
@@ -23,12 +22,7 @@ export const dynamic = "force-dynamic"
 
 export default async function ReceiptsPage() {
   const actor = await requireActor("/receipts")
-  if (!(await isAdmin(actor, "receipts")))
-    return (
-      <PortalShell page={receiptsPage} layout="spotlight">
-        <StatusPage title="收據只有 Receipts 管理員能看" />
-      </PortalShell>
-    )
+  await requireAdminPage(actor, "receipts")
   const { receipts, projects } = await runAction(listReceipts, actor, {})
   const pending = receipts.filter((receipt) => receipt.status === "pending")
 

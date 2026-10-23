@@ -9,9 +9,8 @@ import {
 } from "@/components/focus"
 import { PageHeader, SectionHeader } from "@/components/page-header"
 import { PortalShell } from "@/components/portal-shell"
-import { StatusPage } from "@/components/status-page"
 import { NumberTicker } from "@/components/ui/number-ticker"
-import { isAdmin } from "@/lib/actions/authz"
+import { requireAdminPage } from "@/lib/actions/authz"
 import { runAction } from "@/lib/actions/define"
 import { type DoorEvent, listDoorEvents } from "@/lib/actions/door"
 import { requireActor } from "@/lib/auth/session"
@@ -54,12 +53,7 @@ export default async function DoorLogPage({
   searchParams,
 }: PageProps<"/door/log">) {
   const actor = await requireActor("/door/log")
-  if (!(await isAdmin(actor, "door")))
-    return (
-      <PortalShell page={doorPage} layout="spotlight">
-        <StatusPage title="開門紀錄只有 Door 管理員能看" />
-      </PortalShell>
-    )
+  await requireAdminPage(actor, "door")
   const params = await searchParams
   const source =
     typeof params.source === "string" && Object.hasOwn(sources, params.source)
@@ -95,7 +89,7 @@ export default async function DoorLogPage({
   const oldest = events.at(-1)
 
   return (
-    <PortalShell page={doorPage} nav={doorNav(true)}>
+    <PortalShell page={doorPage} nav={doorNav}>
       <div className="flex flex-col gap-12">
         <PageHeader title="開門紀錄" />
         {today && (
