@@ -1,11 +1,12 @@
 "use client"
 
-import { PencilIcon, Trash2Icon } from "lucide-react"
+import { PencilIcon, PlusIcon, Trash2Icon } from "lucide-react"
 import * as React from "react"
 
 import { ConfirmDialog } from "@/components/confirm-dialog"
 import { EmptyState } from "@/components/empty-state"
 import { FormDialog, FormField } from "@/components/form-dialog"
+import { SectionHeader } from "@/components/page-header"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -30,16 +31,27 @@ export const dayLabel = (days: number[]) =>
         ? "週末"
         : `週${days.map((day) => WEEKDAYS[day - 1]).join("、")}`
 
+/** The time slot a new phrase starts in: its group's, or empty for a new one. */
+type Slot = Pick<DoorPhrase, "starts_at" | "ends_at" | "days" | "first_visit">
+
+// First-visit phrases sort first ("0"), then slots by start time.
+const slotKey = (p: Slot) =>
+  `${p.first_visit ? 0 : 1}-${p.starts_at}-${p.ends_at}-${p.days.join()}`
+
 function PhraseForm({
   phrase,
+  slot,
   sample,
   trigger,
 }: {
   phrase?: DoorPhrase
+  slot?: Slot
   sample: string
   trigger: React.ReactElement
 }) {
-  const [days, setDays] = React.useState(phrase?.days ?? ALL_DAYS)
+  const start = phrase ?? slot
+  const [days, setDays] = React.useState(start?.days ?? ALL_DAYS)
+  const [first, setFirst] = React.useState(start?.first_visit ?? false)
   const [before, setBefore] = React.useState(phrase?.before ?? "")
   const [after, setAfter] = React.useState(phrase?.after ?? "")
 
@@ -51,6 +63,7 @@ function PhraseForm({
       ends_at: text(data, "ends_at"),
       days,
       enabled: phrase?.enabled ?? true,
+      first_visit: first,
     }
     await report(
       phrase ? update({ ...input, id: phrase.id }) : create(input),
@@ -63,7 +76,8 @@ function PhraseForm({
       trigger={trigger}
       onOpenChange={(open) => {
         if (open) {
-          setDays(phrase?.days ?? ALL_DAYS)
+          setDays(start?.days ?? ALL_DAYS)
+          setFirst(start?.first_visit ?? false)
           setBefore(phrase?.before ?? "")
           setAfter(phrase?.after ?? "")
         }
@@ -100,17 +114,21 @@ function PhraseForm({
           <Input
             name="starts_at"
             type="time"
-            defaultValue={phrase?.starts_at ?? "22:00"}
+            defaultValue={start?.starts_at ?? "22:00"}
           />
         </FormField>
         <FormField label="結束" required>
           <Input
             name="ends_at"
             type="time"
-            defaultValue={phrase?.ends_at ?? "06:00"}
+            defaultValue={start?.ends_at ?? "06:00"}
           />
         </FormField>
       </div>
+      <Label className="flex items-center justify-between gap-4">
+        只在今天第一次進門說，一天從 06:00 算
+        <Switch checked={first} onCheckedChange={setFirst} />
+      </Label>
       <div className="flex flex-col gap-2">
         <Label>星期，以開始那天算</Label>
         <div role="group" aria-label="星期" className="flex flex-wrap gap-2">
@@ -145,8 +163,55 @@ export function AddPhrase({ sample }: { sample: string }) {
   return <PhraseForm sample={sample} trigger={<Button>新增</Button>} />
 }
 
-// The pool, by start time. A phrase in force right now carries a badge;
-// the door picks one of those at random at each opening.
+function PhraseRow({ phrase, sample }: { phrase: DoorPhrase; sample: string }) {
+  return (
+    <li className="flex min-h-14 items-center gap-4 border-b border-border py-2">
+      <span className="min-w-0 flex-1 truncate">
+        {phrase.before}
+        {sample}
+        {phrase.after || "。"}
+      </span>
+      <Label className="flex shrink-0 items-center gap-2 text-muted-foreground">
+        啟用
+        <Switch
+          checked={phrase.enabled}
+          onCheckedChange={(enabled) =>
+            report(
+              update({ ...phrase, enabled }),
+              enabled ? "已啟用" : "已停用"
+            ).catch(() => {})
+          }
+        />
+      </Label>
+      <div className="flex shrink-0 gap-1">
+        <PhraseForm
+          phrase={phrase}
+          sample={sample}
+          trigger={
+            <Button variant="ghost" size="icon" aria-label="修改">
+              <PencilIcon />
+            </Button>
+          }
+        />
+        <ConfirmDialog
+          trigger={
+            <Button variant="ghost" size="icon" aria-label="刪除">
+              <Trash2Icon />
+            </Button>
+          }
+          title="刪除這條問候語？"
+          confirmLabel="刪除"
+          variant="destructive"
+          onConfirm={() => report(remove(phrase.id), "已刪除")}
+        />
+      </div>
+    </li>
+  )
+}
+
+// The pool, one group per time slot: phrases with the same time and days,
+// and the first-visit ones on their own, first. The door picks one phrase
+// of the slot in force at random; a group in force carries a badge.
 export function PhraseList({
   phrases,
   now,
@@ -157,62 +222,48 @@ export function PhraseList({
   sample: string
 }) {
   if (phrases.length === 0) return <EmptyState noun="問候語" />
+  const groups = new Map<string, DoorPhrase[]>()
+  for (const phrase of phrases)
+    groups.set(slotKey(phrase), [
+      ...(groups.get(slotKey(phrase)) ?? []),
+      phrase,
+    ])
+  const ordered = [...groups.entries()].sort(([a], [b]) => a.localeCompare(b))
   return (
-    <ul className="flex stagger-rise flex-col">
-      {phrases.map((phrase) => (
-        <li
-          key={phrase.id}
-          className="flex min-h-14 items-center gap-4 border-b border-border py-2"
-        >
-          <span className="flex min-w-0 flex-1 flex-col">
-            <span className="truncate">
-              {phrase.before}
-              {sample}
-              {phrase.after || "。"}
-            </span>
-            <span className="truncate text-muted-foreground">
-              {`${phrase.starts_at} 到 ${phrase.ends_at}，${dayLabel(phrase.days)}`}
-            </span>
-          </span>
-          {now.includes(phrase.id) && <Badge variant="muted">現在</Badge>}
-          <>
-            <Label className="flex shrink-0 items-center gap-2 text-muted-foreground">
-              啟用
-              <Switch
-                checked={phrase.enabled}
-                onCheckedChange={(enabled) =>
-                  report(
-                    update({ ...phrase, enabled }),
-                    enabled ? "已啟用" : "已停用"
-                  ).catch(() => {})
-                }
-              />
-            </Label>
-            <div className="flex shrink-0 gap-1">
-              <PhraseForm
-                phrase={phrase}
-                sample={sample}
-                trigger={
-                  <Button variant="ghost" size="icon" aria-label="修改">
-                    <PencilIcon />
-                  </Button>
-                }
-              />
-              <ConfirmDialog
-                trigger={
-                  <Button variant="ghost" size="icon" aria-label="刪除">
-                    <Trash2Icon />
-                  </Button>
-                }
-                title="刪除這條問候語？"
-                confirmLabel="刪除"
-                variant="destructive"
-                onConfirm={() => report(remove(phrase.id), "已刪除")}
-              />
-            </div>
-          </>
-        </li>
-      ))}
-    </ul>
+    <div className="flex stagger-rise flex-col gap-10">
+      {ordered.map(([key, group]) => {
+        const slot = group[0]
+        const time = `${slot.starts_at} 到 ${slot.ends_at}，${dayLabel(slot.days)}`
+        const title = slot.first_visit ? `今天第一次進門，${time}` : time
+        return (
+          <section key={key} className="flex flex-col gap-2">
+            <SectionHeader
+              title={title}
+              actions={
+                <div className="flex items-center gap-2">
+                  {group.some((p) => now.includes(p.id)) && (
+                    <Badge variant="muted">現在</Badge>
+                  )}
+                  <PhraseForm
+                    slot={slot}
+                    sample={sample}
+                    trigger={
+                      <Button variant="ghost" size="icon" aria-label="加一句">
+                        <PlusIcon />
+                      </Button>
+                    }
+                  />
+                </div>
+              }
+            />
+            <ul className="flex flex-col">
+              {group.map((phrase) => (
+                <PhraseRow key={phrase.id} phrase={phrase} sample={sample} />
+              ))}
+            </ul>
+          </section>
+        )
+      })}
+    </div>
   )
 }

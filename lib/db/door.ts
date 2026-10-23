@@ -169,7 +169,9 @@ export const doorPlaylistItems = pgTable(
 // after midnight in Asia/Taipei; ends_at at or before starts_at runs past
 // midnight into the next day. days is a bitmask of the weekday the range
 // starts on, Monday 1 to Sunday 64. Door admins keep the schedule; when no
-// enabled rule matches, the door says "Hi <name>".
+// enabled rule matches, the door says "Hi <name>". first_visit phrases are
+// said only on a member's first opening of the day (from 06:00), and win
+// over the others in force then.
 export const doorPhrases = pgTable(
   "door_phrases",
   {
@@ -180,6 +182,7 @@ export const doorPhrases = pgTable(
     endsAt: smallint().notNull(),
     days: smallint().default(127).notNull(),
     enabled: boolean().default(true).notNull(),
+    firstVisit: boolean().default(false).notNull(),
     createdBy: uuid().references(() => user.id, { onDelete: "set null" }),
     updatedBy: uuid().references(() => user.id, { onDelete: "set null" }),
     createdAt: timestamp({ withTimezone: true }).defaultNow().notNull(),

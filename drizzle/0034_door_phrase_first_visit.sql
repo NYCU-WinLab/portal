@@ -1,0 +1,1 @@
+ALTER TABLE "door_phrases" ADD COLUMN "first_visit" boolean DEFAULT false NOT NULL;
