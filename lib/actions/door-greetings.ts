@@ -99,9 +99,8 @@ export const setDoorSpeakName = defineAction({
  * Keyed by the name the panel shows (the member's name and the holder name
  * on each of their cards): suffix, and playlist, the pool sound ids the
  * door picks one of at random. pool links every listed sound, default
- * lists the ones for everyone else. sound is the format before playlists,
- * each member's first sound, for a panel that has not moved on yet. color
- * stays empty; per-member colors were dropped in the move. quiet lists the
+ * lists the ones for everyone else. color stays empty; per-member colors
+ * were dropped in the move. quiet lists the
  * names the door greets without saying "Hi <name>". phrases is the
  * spoken greeting schedule the door picks from at open time, and voice
  * links the clips in CC's voice by text.
@@ -154,8 +153,6 @@ export async function panelGreetings() {
   const quiet = new Set<string>()
   const owners = new Map<string, string>()
   const playlist: Record<string, string[]> = {}
-  const sound: Record<string, { url: string; mode: string; version: string }> =
-    {}
   const pool: Record<string, { url: string; version: string }> = {}
   const link = (soundId: string) =>
     (pool[soundId] ??= { url: soundLink(soundId), version: soundId })
@@ -179,7 +176,6 @@ export async function panelGreetings() {
       if (list.length && !(label in playlist)) {
         playlist[label] = list
         list.forEach(link)
-        sound[label] = { ...pool[list[0]], mode: "sound_only" }
       }
     }
   }
@@ -187,7 +183,6 @@ export async function panelGreetings() {
   return {
     suffix,
     color: {},
-    sound,
     playlist,
     pool,
     default: defaults,
