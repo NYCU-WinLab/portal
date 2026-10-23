@@ -13,24 +13,24 @@ import { NextMeeting } from "./meetings/next-meeting"
 
 export const dynamic = "force-dynamic"
 
-// Apps as they move over from portal.winlab.tw.
+// Apps in alphabetical order.
 const apps = [
-  { label: "Bulletin", href: "/bulletin" },
-  { label: "Meetings", href: "/meetings" },
-  { label: "Leave", href: "/leave" },
-  { label: "Bento", href: "/bento" },
-  { label: "Reimburse", href: "/reimburse" },
-  { label: "Trip", href: "/trip" },
-  { label: "Receipts", href: "/receipts" },
-  { label: "Approve", href: "/approve" },
-  { label: "Rooms", href: "/rooms" },
-  { label: "Door", href: "/door" },
-  { label: "Groups", href: "/groups" },
-  { label: "Games", href: "/games" },
-  { label: "Gallery", href: "https://gallery.winlab.tw" },
-  { label: "Developers", href: "/developers" },
-  { label: "Profile", href: "/profile" },
   { label: "Admins", href: "/admins" },
+  { label: "Approve", href: "/approve" },
+  { label: "Bento", href: "/bento" },
+  { label: "Bulletin", href: "/bulletin" },
+  { label: "Developers", href: "/developers" },
+  { label: "Door", href: "/door" },
+  { label: "Gallery", href: "https://gallery.winlab.tw" },
+  { label: "Games", href: "/games" },
+  { label: "Groups", href: "/groups" },
+  { label: "Leave", href: "/leave" },
+  { label: "Meetings", href: "/meetings" },
+  { label: "Profile", href: "/profile" },
+  { label: "Receipts", href: "/receipts" },
+  { label: "Reimburse", href: "/reimburse" },
+  { label: "Rooms", href: "/rooms" },
+  { label: "Trip", href: "/trip" },
 ]
 
 // A post shows on the home page for a week, then lives on /bulletin.
