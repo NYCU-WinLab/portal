@@ -21,8 +21,8 @@ export type MemberStats = {
   leaveScheduled: number
 }
 
-export const listMeetingStats = defineAction({
-  name: "list_meeting_stats",
+export const listLabMeetingStats = defineAction({
+  name: "list_lab_meeting_stats",
   title: "報告、提問與請假次數",
   description:
     "How many times each member presented, asked questions and was away at the Monday lab meeting, each split into what already happened and what is scheduled from today in Taipei. A meetings admin gets every member with any record; anyone else gets only themselves.",

@@ -5,7 +5,7 @@ import { listMembers } from "@/lib/actions/admins"
 import { isAdmin } from "@/lib/actions/authz"
 import { runAction } from "@/lib/actions/define"
 import { listPresenters } from "@/lib/actions/presenters"
-import { type MemberStats, listMeetingStats } from "@/lib/actions/stats"
+import { type MemberStats, listLabMeetingStats } from "@/lib/actions/stats"
 import { requireActor } from "@/lib/auth/session"
 
 import { meetingsNav, meetingsPage } from "../nav"
@@ -36,7 +36,7 @@ export default async function PresentersPage() {
   const [members, stats] = admin
     ? await Promise.all([
         runAction(listMembers, actor, {}),
-        runAction(listMeetingStats, actor, {}),
+        runAction(listLabMeetingStats, actor, {}),
       ])
     : [[], { members: [] as MemberStats[] }]
   const listed = new Set(presenters.map((row) => row.userId))

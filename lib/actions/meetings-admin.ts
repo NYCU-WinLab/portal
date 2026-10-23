@@ -97,8 +97,8 @@ export const generateSemester = defineAction({
   },
 })
 
-export const addMeeting = defineAction({
-  name: "add_meeting",
+export const addLabMeeting = defineAction({
+  name: "add_lab_meeting",
   title: "新增一週",
   description: `Admins only. Adds one meeting on date; its week label comes from the semester (generate_semester). kind is regular (default), thesis, speaker or holiday; holiday says why there is no meeting.`,
   kind: "mutation",
@@ -128,8 +128,8 @@ export const addMeeting = defineAction({
   },
 })
 
-export const updateMeeting = defineAction({
-  name: "update_meeting",
+export const updateLabMeeting = defineAction({
+  name: "update_lab_meeting",
   title: "編輯會議",
   description:
     "Admins only. Changes any part of one week: moves it to newDate, changes its kind, holiday reason, presenterId (a member id, or null to open the week), paperId (from list_papers, regular weeks only), title (thesis and speaker weeks), slides and recording links, notes, location and startsAt (HH:MM). Leave a field out to keep it.",
@@ -189,8 +189,8 @@ export const updateMeeting = defineAction({
   },
 })
 
-export const deleteMeeting = defineAction({
-  name: "delete_meeting",
+export const deleteLabMeeting = defineAction({
+  name: "delete_lab_meeting",
   title: "刪除一週",
   description:
     "Admins only. Removes the meeting on date with its questioners. Other weeks do not move.",
@@ -222,8 +222,8 @@ const swapped = [
   "notes",
 ] as const
 
-export const swapMeetings = defineAction({
-  name: "swap_meetings",
+export const swapLabMeetings = defineAction({
+  name: "swap_lab_meetings",
   title: "交換兩週",
   description:
     "Admins only. Swaps who presents, and what, between two weeks of the same semester; dates, place and time stay. Holiday and speaker weeks cannot be swapped.",

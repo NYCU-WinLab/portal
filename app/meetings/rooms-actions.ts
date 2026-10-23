@@ -4,16 +4,15 @@ import { revalidatePath } from "next/cache"
 
 import { errorMessage, runAction } from "@/lib/actions/define"
 import {
-  bookRoom,
-  cancelRoomBooking,
+  bookMeeting,
+  cancelMeeting,
   getEpicDeliverables,
   listGroupEpics,
   listRoomAvailability,
 } from "@/lib/actions/rooms"
 import {
-  createRoomSeries,
-  deleteRoomSeries,
-  setRoomSeriesActive,
+  deleteStandingMeeting,
+  setStandingMeetingActive,
 } from "@/lib/actions/rooms-series"
 import { requireActor } from "@/lib/auth/session"
 
@@ -48,29 +47,26 @@ export async function loadDeliverables(group: string, epic: string) {
   )
 }
 
-export async function bookRoomAction(input: unknown) {
+export async function bookMeetingAction(input: unknown) {
   const actor = await requireActor("/meetings")
-  return attempt("/meetings", () => runAction(bookRoom, actor, input))
+  return attempt("/meetings", () => runAction(bookMeeting, actor, input))
 }
 
-export async function cancelBookingAction(id: string) {
+export async function cancelMeetingAction(id: string) {
   const actor = await requireActor("/meetings")
-  return attempt("/meetings", () => runAction(cancelRoomBooking, actor, { id }))
-}
-
-export async function createSeriesAction(input: unknown) {
-  const actor = await requireActor("/meetings")
-  return attempt("/meetings", () => runAction(createRoomSeries, actor, input))
+  return attempt("/meetings", () => runAction(cancelMeeting, actor, { id }))
 }
 
 export async function setSeriesActiveAction(id: string, active: boolean) {
   const actor = await requireActor("/meetings")
   return attempt("/meetings", () =>
-    runAction(setRoomSeriesActive, actor, { id, active })
+    runAction(setStandingMeetingActive, actor, { id, active })
   )
 }
 
 export async function deleteSeriesAction(id: string) {
   const actor = await requireActor("/meetings")
-  return attempt("/meetings", () => runAction(deleteRoomSeries, actor, { id }))
+  return attempt("/meetings", () =>
+    runAction(deleteStandingMeeting, actor, { id })
+  )
 }

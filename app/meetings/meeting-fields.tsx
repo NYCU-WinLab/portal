@@ -47,7 +47,7 @@ export const emptyMeeting: MeetingValue = {
   agenda: "",
 }
 
-/** The value as book_room and create_room_series take it. */
+/** The value as book_meeting takes it. */
 export const meetingInput = (value: MeetingValue) => ({
   title: value.title,
   group: value.group,

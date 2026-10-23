@@ -9,7 +9,7 @@ import { getProfile } from "@/lib/actions/profile"
 import { getReimburseStats } from "@/lib/actions/reimburse"
 import { getMySignature, getMySignatureImage } from "@/lib/actions/signature"
 import { getTripStats } from "@/lib/actions/trip"
-import { listMeetingStats } from "@/lib/actions/stats"
+import { listLabMeetingStats } from "@/lib/actions/stats"
 import { requireActor } from "@/lib/auth/session"
 import { ntd } from "@/lib/money"
 import { accountConsoleUrl } from "@/lib/keycloak"
@@ -36,7 +36,7 @@ export default async function ProfilePage() {
       runAction(getProfile, actor, {}).catch((error: unknown) => ({
         error: errorMessage(error),
       })),
-      runAction(listMeetingStats, actor, {}),
+      runAction(listLabMeetingStats, actor, {}),
       runAction(getBentoStats, actor, {}),
       runAction(getReimburseStats, actor, {}),
       runAction(getMySignature, actor, {}),
