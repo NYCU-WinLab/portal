@@ -52,7 +52,7 @@ export default async function DoorLogPage({
   if (!(await isAdmin(actor, "door")))
     return (
       <PortalShell page={doorPage} layout="spotlight">
-        <StatusPage title="開門紀錄只有門禁管理員能看" />
+        <StatusPage title="開門紀錄只有 Door 管理員能看" />
       </PortalShell>
     )
   const params = await searchParams

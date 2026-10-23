@@ -43,7 +43,7 @@ export function RevokeButton({
             <XIcon />
           </TooltipTrigger>
         }
-        title={`移除 ${name} 的${label}管理員？`}
+        title={`移除 ${name} 的 ${label} 管理員？`}
         confirmLabel="移除"
         onConfirm={revoke}
       />

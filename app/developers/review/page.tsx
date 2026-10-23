@@ -24,7 +24,7 @@ export default async function ReviewPage() {
       <div className="flex flex-col gap-12">
         <PageHeader title="審核資料權限" />
         {!admin ? (
-          <p className="text-muted-foreground">只有全站管理員可以審核</p>
+          <p className="text-muted-foreground">只有 Portal 管理員可以審核</p>
         ) : requests.length === 0 ? (
           <EmptyState noun="待審申請" />
         ) : (

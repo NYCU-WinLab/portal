@@ -183,6 +183,13 @@
       "when": 1792758647709,
       "tag": "0025_meeting_mail",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1792761044171,
+      "tag": "0026_drop_approve_admin",
+      "breakpoints": true
     }
   ]
 }
