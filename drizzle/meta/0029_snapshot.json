@@ -1,5 +1,5 @@
 {
-  "id": "ef963e1a-7445-4791-b9de-a8e5c46f281d",
+  "id": "980034de-8d5c-484a-be6e-7931206585f8",
   "prevId": "675b54a8-c2df-4129-819f-36162b7dd5bd",
   "version": "7",
   "dialect": "postgresql",
@@ -3896,17 +3896,11 @@
           "method": "btree",
           "with": {}
         },
-        "door_events_token_id_at_index": {
-          "name": "door_events_token_id_at_index",
+        "door_events_token_id_index": {
+          "name": "door_events_token_id_index",
           "columns": [
             {
               "expression": "token_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "at",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -4268,6 +4262,19 @@
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
+        },
+        "window_started_at": {
+          "name": "window_started_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "window_count": {
+          "name": "window_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
         },
         "revoked_at": {
           "name": "revoked_at",

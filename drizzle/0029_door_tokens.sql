@@ -6,6 +6,8 @@ CREATE TABLE "door_tokens" (
 	"prefix" text NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"last_used_at" timestamp with time zone,
+	"window_started_at" timestamp with time zone,
+	"window_count" integer DEFAULT 0 NOT NULL,
 	"revoked_at" timestamp with time zone,
 	"revoked_by" uuid,
 	CONSTRAINT "door_tokens_tokenHash_unique" UNIQUE("token_hash")
@@ -18,5 +20,5 @@ ALTER TABLE "door_tokens" ADD CONSTRAINT "door_tokens_user_id_users_id_fk" FOREI
 ALTER TABLE "door_tokens" ADD CONSTRAINT "door_tokens_revoked_by_users_id_fk" FOREIGN KEY ("revoked_by") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 CREATE INDEX "door_tokens_user_id_index" ON "door_tokens" USING btree ("user_id");--> statement-breakpoint
 ALTER TABLE "door_events" ADD CONSTRAINT "door_events_token_id_door_tokens_id_fk" FOREIGN KEY ("token_id") REFERENCES "public"."door_tokens"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-CREATE INDEX "door_events_token_id_at_index" ON "door_events" USING btree ("token_id","at");--> statement-breakpoint
+CREATE INDEX "door_events_token_id_index" ON "door_events" USING btree ("token_id");--> statement-breakpoint
 ALTER TABLE "door_events" ADD CONSTRAINT "door_events_source" CHECK ("door_events"."source" in ('web', 'mcp', 'api', 'card'));

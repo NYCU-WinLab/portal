@@ -1,24 +1,24 @@
 import { createHash, randomBytes } from "node:crypto"
 
-import { and, count, desc, eq, gt, isNull, lt, or, sql } from "drizzle-orm"
+import { and, count, desc, eq, isNull, lt, or, sql } from "drizzle-orm"
 import { z } from "zod"
 
 import { isAdmin, requireAdmin } from "@/lib/actions/authz"
 import { defineAction } from "@/lib/actions/define"
-import { isLabMember } from "@/lib/auth/member"
+import { isLabMemberNow } from "@/lib/auth/member"
 import { db } from "@/lib/db"
-import { doorEvents, doorTokens, user } from "@/lib/db/schema"
+import { doorTokens, user } from "@/lib/db/schema"
 
 // Door tokens open the door through POST /api/door/open, and nothing else.
 // A token is "wdt_" and 43 base64url characters (32 random bytes); only its
 // SHA-256 is stored. It has no expiry: it works until its owner or a door
-// admin revokes it, or the owner leaves the lab (Keycloak), which every call
-// checks.
+// admin revokes it, or the owner leaves the lab: every call asks Keycloak,
+// uncached, and refuses when Keycloak does not answer.
 
 const PREFIX = "wdt_"
 const TOKEN = /^wdt_[A-Za-z0-9_-]{43}$/
 const MAX_PER_MEMBER = 10
-// One opening per token every 5 seconds, at most 30 an hour.
+// One opening per token every 5 seconds, at most 30 in an hour-long window.
 const MIN_GAP_SECONDS = 5
 const PER_HOUR = 30
 
@@ -123,7 +123,7 @@ export const revokeDoorToken = defineAction({
 
 export type DoorTokenCheck =
   | { ok: true; userId: string; tokenId: string }
-  | { ok: false; status: 401 | 403; error: string }
+  | { ok: false; status: 401 | 403 | 503; error: string }
   | { ok: false; status: 429; error: string; retryAfter: number }
 
 /** Checks a bearer token for POST /api/door/open and claims this call's
@@ -142,30 +142,24 @@ export async function checkDoorToken(token: string): Promise<DoorTokenCheck> {
       and(eq(doorTokens.tokenHash, hash(token)), isNull(doorTokens.revokedAt))
     )
   if (!row) return unauthorized
-  if (!(await isLabMember(row.userId)))
-    return { ok: false, status: 403, error: "not a lab member" }
+  let member: boolean
+  try {
+    member = await isLabMemberNow(row.userId)
+  } catch {
+    return { ok: false, status: 503, error: "cannot confirm membership now" }
+  }
+  if (!member) return { ok: false, status: 403, error: "not a lab member" }
 
-  const [{ lastHour }] = await db
-    .select({ lastHour: count() })
-    .from(doorEvents)
-    .where(
-      and(
-        eq(doorEvents.tokenId, row.id),
-        gt(doorEvents.at, sql`now() - interval '1 hour'`)
-      )
-    )
-  if (lastHour >= PER_HOUR)
-    return {
-      ok: false,
-      status: 429,
-      error: `at most ${PER_HOUR} openings an hour per token`,
-      retryAfter: 3600,
-    }
-  // Claiming the slot in one statement keeps two calls at once from both
-  // getting through.
+  // One statement checks both limits and claims the slot, so calls that
+  // arrive together, or while the relay is slow, cannot share one.
+  const fresh = sql`(${doorTokens.windowStartedAt} is null or ${doorTokens.windowStartedAt} <= now() - interval '1 hour')`
   const [claimed] = await db
     .update(doorTokens)
-    .set({ lastUsedAt: sql`now()` })
+    .set({
+      lastUsedAt: sql`now()`,
+      windowStartedAt: sql`case when ${fresh} then now() else ${doorTokens.windowStartedAt} end`,
+      windowCount: sql`case when ${fresh} then 1 else ${doorTokens.windowCount} + 1 end`,
+    })
     .where(
       and(
         eq(doorTokens.id, row.id),
@@ -176,16 +170,33 @@ export async function checkDoorToken(token: string): Promise<DoorTokenCheck> {
             doorTokens.lastUsedAt,
             sql`now() - make_interval(secs => ${MIN_GAP_SECONDS})`
           )
-        )
+        ),
+        or(fresh, lt(doorTokens.windowCount, PER_HOUR))
       )
     )
     .returning({ id: doorTokens.id })
-  if (!claimed)
-    return {
-      ok: false,
-      status: 429,
-      error: `one opening every ${MIN_GAP_SECONDS} seconds per token`,
-      retryAfter: MIN_GAP_SECONDS,
-    }
+  if (!claimed) {
+    const [state] = await db
+      .select({
+        full: sql<boolean>`not ${fresh} and ${doorTokens.windowCount} >= ${PER_HOUR}`,
+        resetIn: sql<number>`greatest(1, ceil(extract(epoch from ${doorTokens.windowStartedAt} + interval '1 hour' - now())))::int`,
+      })
+      .from(doorTokens)
+      .where(eq(doorTokens.id, row.id))
+    if (!state) return unauthorized
+    return state.full
+      ? {
+          ok: false,
+          status: 429,
+          error: `at most ${PER_HOUR} openings an hour per token`,
+          retryAfter: state.resetIn,
+        }
+      : {
+          ok: false,
+          status: 429,
+          error: `one opening every ${MIN_GAP_SECONDS} seconds per token`,
+          retryAfter: MIN_GAP_SECONDS,
+        }
+  }
   return { ok: true, userId: row.userId, tokenId: row.id }
 }

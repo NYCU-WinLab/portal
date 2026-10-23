@@ -36,6 +36,11 @@ export const doorTokens = pgTable(
     prefix: text().notNull(),
     createdAt: timestamp({ withTimezone: true }).defaultNow().notNull(),
     lastUsedAt: timestamp({ withTimezone: true }),
+    // The rate limit: openings claimed since windowStartedAt, reset an hour
+    // after it. Claimed before the relay is called, so a slow door cannot
+    // let extra calls through.
+    windowStartedAt: timestamp({ withTimezone: true }),
+    windowCount: integer().default(0).notNull(),
     revokedAt: timestamp({ withTimezone: true }),
     revokedBy: uuid().references(() => user.id, { onDelete: "set null" }),
   },
@@ -66,7 +71,7 @@ export const doorEvents = pgTable(
   (table) => [
     index().on(table.at),
     index().on(table.userId),
-    index().on(table.tokenId, table.at),
+    index().on(table.tokenId),
     check(
       "door_events_source",
       sql`${table.source} in ('web', 'mcp', 'api', 'card')`
