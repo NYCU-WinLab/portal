@@ -134,6 +134,13 @@
       "when": 1792744619691,
       "tag": "0018_rooms",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1792748601530,
+      "tag": "0019_door_greetings",
+      "breakpoints": true
     }
   ]
 }
