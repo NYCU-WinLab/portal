@@ -69,6 +69,7 @@ import {
   setMailGroupManager,
 } from "@/lib/actions/groups"
 import { listGameLeaderboard, recordGameScore } from "@/lib/actions/games"
+import { deleteIpUser, listIpUsers, saveIpUser } from "@/lib/actions/ip-users"
 import { createLeave, deleteLeave, listLeaves } from "@/lib/actions/leave"
 import {
   getNextMeeting,
@@ -277,6 +278,9 @@ export const actions: Action[] = [
   listCohorts,
   listGameLeaderboard,
   recordGameScore,
+  listIpUsers,
+  saveIpUser,
+  deleteIpUser,
   listMembers,
   listAdmins,
   grantAdmin,
