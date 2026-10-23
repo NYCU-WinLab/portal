@@ -177,3 +177,50 @@ export const doorPlaylistItems = pgTable(
     index().on(table.soundId),
   ]
 )
+
+// What the door says around a member's name, by the time of day: before +
+// name + after ("晚安，" 詠翔 "。這麼晚來，很認真喔。"). Times are minutes
+// after midnight in Asia/Taipei; ends_at at or before starts_at runs past
+// midnight into the next day. days is a bitmask of the weekday the range
+// starts on, Monday 1 to Sunday 64. Door admins keep the schedule; when no
+// enabled rule matches, the door says "Hi <name>".
+export const doorPhrases = pgTable(
+  "door_phrases",
+  {
+    id: uuid().defaultRandom().primaryKey(),
+    before: text().default("").notNull(),
+    after: text().default("").notNull(),
+    startsAt: smallint().notNull(),
+    endsAt: smallint().notNull(),
+    days: smallint().default(127).notNull(),
+    enabled: boolean().default(true).notNull(),
+    createdBy: uuid().references(() => user.id, { onDelete: "set null" }),
+    updatedBy: uuid().references(() => user.id, { onDelete: "set null" }),
+    createdAt: timestamp({ withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp({ withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    check(
+      "door_phrases_text",
+      sql`${table.before} <> '' or ${table.after} <> ''`
+    ),
+    check(
+      "door_phrases_minutes",
+      sql`${table.startsAt} between 0 and 1439 and ${table.endsAt} between 0 and 1439 and ${table.startsAt} <> ${table.endsAt}`
+    ),
+    check("door_phrases_days", sql`${table.days} between 1 and 127`),
+  ]
+)
+
+// The door's spoken parts in CC's cloned voice, one clip per text ("晚安，",
+// "詠翔，", "詠翔。"). The voice job on furnace lists the texts the door
+// needs, makes the missing ones and uploads them; idm-display splices the
+// parts of a greeting when every one has a clip. A clip's bytes never
+// change, so its id is the version the door caches it by.
+export const doorVoiceClips = pgTable("door_voice_clips", {
+  id: uuid().defaultRandom().primaryKey(),
+  text: text().notNull().unique(),
+  audio: bytea().notNull(),
+  audioType: text().notNull(),
+  createdAt: timestamp({ withTimezone: true }).defaultNow().notNull(),
+})

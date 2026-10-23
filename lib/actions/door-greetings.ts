@@ -2,6 +2,7 @@ import { eq, inArray, isNotNull, or, sql } from "drizzle-orm"
 import { z } from "zod"
 
 import { defineAction } from "@/lib/actions/define"
+import { panelPhrases, panelVoice } from "@/lib/actions/door-phrases"
 import { panelPlaylists } from "@/lib/actions/door-sounds"
 import { readSchedule } from "@/lib/actions/meetings-shared"
 import { db } from "@/lib/db"
@@ -99,22 +100,30 @@ export const setDoorSpeakName = defineAction({
  * lists the ones for everyone else. sound is the format before playlists,
  * each member's first sound, for a panel that has not moved on yet. color
  * stays empty; per-member colors were dropped in the move. quiet lists the
- * names the door greets without saying "Hi <name>".
+ * names the door greets without saying "Hi <name>". phrases is the
+ * spoken greeting schedule the door picks from at open time, and voice
+ * links the clips in CC's voice by text.
  */
 export async function panelGreetings() {
-  const [suffixRows, { playlists, defaults }] = await Promise.all([
-    db
-      .select({
-        userId: doorGreetings.userId,
-        suffix: doorGreetings.suffix,
-        speakName: doorGreetings.speakName,
-      })
-      .from(doorGreetings)
-      .where(
-        or(isNotNull(doorGreetings.suffix), eq(doorGreetings.speakName, false))
-      ),
-    panelPlaylists(),
-  ])
+  const [suffixRows, { playlists, defaults }, phrases, voice] =
+    await Promise.all([
+      db
+        .select({
+          userId: doorGreetings.userId,
+          suffix: doorGreetings.suffix,
+          speakName: doorGreetings.speakName,
+        })
+        .from(doorGreetings)
+        .where(
+          or(
+            isNotNull(doorGreetings.suffix),
+            eq(doorGreetings.speakName, false)
+          )
+        ),
+      panelPlaylists(),
+      panelPhrases(),
+      panelVoice(),
+    ])
   const suffixes = new Map(
     suffixRows.flatMap((row) =>
       row.suffix ? [[row.userId, row.suffix] as const] : []
@@ -181,6 +190,8 @@ export async function panelGreetings() {
     pool,
     default: defaults,
     quiet: [...quiet].sort(),
+    phrases,
+    voice,
   }
 }
 

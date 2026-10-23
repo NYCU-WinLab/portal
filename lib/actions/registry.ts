@@ -58,6 +58,12 @@ import {
   setDoorSuffix,
 } from "@/lib/actions/door-greetings"
 import {
+  createDoorPhrase,
+  deleteDoorPhrase,
+  listDoorPhrases,
+  updateDoorPhrase,
+} from "@/lib/actions/door-phrases"
+import {
   createDoorToken,
   listDoorTokens,
   revokeDoorToken,
@@ -334,4 +340,8 @@ export const actions: Action[] = [
   listDoorTokens,
   createDoorToken,
   revokeDoorToken,
+  listDoorPhrases,
+  createDoorPhrase,
+  updateDoorPhrase,
+  deleteDoorPhrase,
 ]
