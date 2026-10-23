@@ -26,7 +26,7 @@ export function Managers({
     <div className="flex flex-col gap-4">
       <ul className="flex flex-col">
         {managers.length === 0 && (
-          <li className="text-muted-foreground">只有全站管理員</li>
+          <li className="text-muted-foreground">只有 Portal 管理員</li>
         )}
         {managers.map((m) => (
           <li

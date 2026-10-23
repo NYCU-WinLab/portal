@@ -26,7 +26,7 @@ export default async function ReceiptsPage() {
   if (!(await isAdmin(actor, "receipts")))
     return (
       <PortalShell page={receiptsPage} layout="spotlight">
-        <StatusPage title="收據只有收據管理員能看" />
+        <StatusPage title="收據只有 Receipts 管理員能看" />
       </PortalShell>
     )
   const { receipts, projects } = await runAction(listReceipts, actor, {})

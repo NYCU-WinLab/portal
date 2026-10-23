@@ -62,7 +62,7 @@ export function AppActions({
                 ],
                 purpose: String(data.get("purpose") ?? ""),
               }),
-              "已送出，等全站管理員審核"
+              "已送出，等 Portal 管理員審核"
             )
           }
         >
@@ -105,7 +105,7 @@ export function AppActions({
       {enabled ? (
         <ConfirmDialog
           trigger={<Button variant="outline">停用</Button>}
-          title={`停用「${app.name}」？所有授權會失效${admin ? "" : "，只有全站管理員能再啟用"}`}
+          title={`停用「${app.name}」？所有授權會失效${admin ? "" : "，只有 Portal 管理員能再啟用"}`}
           confirmLabel="停用"
           onConfirm={() => report(setEnabled(app.id, false), "已停用")}
         />

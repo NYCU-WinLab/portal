@@ -15,7 +15,7 @@ import {
 import type { GroupsResult } from "@/lib/groups/types"
 
 export const PERMISSION_MESSAGE =
-  "portal 的 Google 服務帳號沒有權限操作群組（admin 角色、API 或 WIF 設定有誤），請通知 portal 管理員。"
+  "portal 的 Google 服務帳號沒有權限操作群組（admin 角色、API 或 WIF 設定有誤），請通知 Portal 管理員。"
 
 export function isFatal(err: unknown): boolean {
   return (
