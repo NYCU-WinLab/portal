@@ -106,7 +106,7 @@ export const setDoorSpeakName = defineAction({
  * links the clips in CC's voice by text.
  */
 export async function panelGreetings() {
-  const [suffixRows, { playlists, defaults }, phrases, voice] =
+  const [suffixRows, { playlists, defaults, versions }, phrases, voice] =
     await Promise.all([
       db
         .select({
@@ -155,7 +155,10 @@ export async function panelGreetings() {
   const playlist: Record<string, string[]> = {}
   const pool: Record<string, { url: string; version: string }> = {}
   const link = (soundId: string) =>
-    (pool[soundId] ??= { url: soundLink(soundId), version: soundId })
+    (pool[soundId] ??= {
+      url: soundLink(soundId),
+      version: versions.get(soundId) ?? soundId,
+    })
   for (const userId of ids) {
     const name = names.get(userId)
     if (name === undefined) continue

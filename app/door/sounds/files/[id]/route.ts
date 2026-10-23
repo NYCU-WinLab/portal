@@ -3,9 +3,10 @@ import { getDoorSound } from "@/lib/actions/door-sounds"
 import { getSession } from "@/lib/auth/session"
 
 // A pool sound, for members signed in; the players on /door/sounds and
-// /profile load it. Its bytes never change, so it caches for a day.
+// /profile load it. The browser keeps it and asks again each time, so a
+// replaced file plays at once and an unchanged one costs a 304.
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await getSession()
@@ -17,11 +18,15 @@ export async function GET(
     { id }
   ).catch(() => null)
   if (!sound) return new Response("Not found", { status: 404 })
+  const etag = `"${sound.version}"`
+  const headers = {
+    "Cache-Control": "private, no-cache",
+    ETag: etag,
+    "X-Content-Type-Options": "nosniff",
+  }
+  if (request.headers.get("if-none-match") === etag)
+    return new Response(null, { status: 304, headers })
   return new Response(Buffer.from(sound.base64, "base64"), {
-    headers: {
-      "Content-Type": sound.contentType,
-      "Cache-Control": "private, max-age=86400",
-      "X-Content-Type-Options": "nosniff",
-    },
+    headers: { ...headers, "Content-Type": sound.contentType },
   })
 }
