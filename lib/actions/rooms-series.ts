@@ -173,7 +173,7 @@ async function bookOccurrence(series: Series, date: string) {
     return null
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error)
-    emitErrorLog(error, { "room_series.id": series.id })
+    emitErrorLog(error, { "standing_meetings.id": series.id })
     await queueMail(db, {
       to: [owner.email],
       subject: `[WinLab 會議] 固定會議沒訂到教室：${series.title}`,
@@ -349,7 +349,7 @@ export const deleteStandingMeeting = defineAction({
 /**
  * The daily run, once a day from 04:30 Taipei: books every active series'
  * occurrence 7 days out, then settles and reports Teams meetings that
- * failed. The day is claimed in room_daily_runs first, so a restart or a
+ * failed. The day is claimed in meeting_daily_runs first, so a restart or a
  * second process never runs it twice.
  */
 export async function runDailyRooms() {
