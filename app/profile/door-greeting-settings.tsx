@@ -19,13 +19,16 @@ import {
 // their name, and their own sound instead of the lab's.
 export function DoorGreetingSettings({
   suffix,
-  hasSound,
+  soundVersion,
   playSound,
+  maxSeconds,
 }: {
   suffix: string | null
-  hasSound: boolean
+  soundVersion: string | null
   playSound: boolean
+  maxSeconds: number
 }) {
+  const hasSound = soundVersion !== null
   const [text, setText] = React.useState(suffix ?? "")
   const [busy, setBusy] = React.useState(false)
   const file = React.useRef<HTMLInputElement>(null)
@@ -82,34 +85,49 @@ export function DoorGreetingSettings({
         />
       </FieldRow>
       <FieldRow label="音效">
-        <div className="flex gap-2">
-          <input
-            ref={file}
-            type="file"
-            accept=".mp3,.m4a,.aac,.wav,.ogg,audio/*"
-            hidden
-            onChange={(event) => {
-              const chosen = event.target.files?.[0]
-              if (chosen) void upload(chosen)
-            }}
-          />
-          <Button
-            variant="outline"
-            disabled={busy}
-            onClick={() => file.current?.click()}
-          >
-            {busy ? "上傳中…" : hasSound ? "換一個" : "上傳"}
-          </Button>
-          {hasSound && (
-            <Button
-              variant="ghost"
-              onClick={() =>
-                report(removeDoorSound(), "已刪除").catch(() => {})
-              }
-            >
-              刪除
-            </Button>
+        <div className="flex flex-col gap-2">
+          {soundVersion && (
+            <audio
+              key={soundVersion}
+              controls
+              preload="none"
+              src={`/profile/door-sound?v=${soundVersion}`}
+              aria-label="試聽"
+              className="h-9 w-full max-w-sm"
+            />
           )}
+          <div className="flex gap-2">
+            <input
+              ref={file}
+              type="file"
+              accept=".mp3,.m4a,.aac,.wav,.ogg,audio/*"
+              hidden
+              onChange={(event) => {
+                const chosen = event.target.files?.[0]
+                if (chosen) void upload(chosen)
+              }}
+            />
+            <Button
+              variant="outline"
+              disabled={busy}
+              onClick={() => file.current?.click()}
+            >
+              {busy ? "上傳中…" : hasSound ? "換一個" : "上傳"}
+            </Button>
+            {hasSound && (
+              <Button
+                variant="ghost"
+                onClick={() =>
+                  report(removeDoorSound(), "已刪除").catch(() => {})
+                }
+              >
+                刪除
+              </Button>
+            )}
+          </div>
+          <p className="text-muted-foreground">
+            mp3、m4a、aac、wav、ogg，3 MB 以內，門口播前 {maxSeconds} 秒
+          </p>
         </div>
       </FieldRow>
     </FieldList>

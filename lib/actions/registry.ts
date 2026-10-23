@@ -54,6 +54,7 @@ import {
 import {
   deleteDoorSound,
   getMyDoorGreeting,
+  getMyDoorSound,
   setDoorSound,
   setDoorSuffix,
   uploadDoorSound,
@@ -193,6 +194,7 @@ export const actions: Action[] = [
   listDoorEvents,
   listDoorCards,
   getMyDoorGreeting,
+  getMyDoorSound,
   setDoorSuffix,
   uploadDoorSound,
   setDoorSound,

@@ -5,6 +5,7 @@ import { buttonVariants } from "@/components/ui/button"
 import { errorMessage, runAction } from "@/lib/actions/define"
 import { getBentoStats } from "@/lib/actions/bento"
 import { getMyDoorGreeting } from "@/lib/actions/door-greetings"
+import { SOUND_MAX_SECONDS } from "@/lib/door-greeting"
 import { getProfile } from "@/lib/actions/profile"
 import { getReimburseStats } from "@/lib/actions/reimburse"
 import { getMySignature, getMySignatureImage } from "@/lib/actions/signature"
@@ -95,7 +96,8 @@ export default async function ProfilePage() {
           <SectionHeader title="門口歡迎" />
           <DoorGreetingSettings
             suffix={door.suffix}
-            hasSound={door.has_sound}
+            soundVersion={door.sound_version}
+            maxSeconds={SOUND_MAX_SECONDS}
             playSound={door.play_sound}
           />
         </section>
