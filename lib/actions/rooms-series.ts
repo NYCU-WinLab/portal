@@ -58,8 +58,8 @@ const rule = (series: Series) => ({
   anchorDate: series.anchorDate,
 })
 
-export const listRoomSeries = defineAction({
-  name: "list_room_series",
+export const listStandingMeetings = defineAction({
+  name: "list_standing_meetings",
   title: "固定會議",
   description:
     "Every standing meeting on /meetings: title, weekday (0 Sunday), start time, duration, every week or every other week, attendees, whether the advisor is invited, whether it is active, who made it, and its next occurrence with the room already held for it (booked false until the daily run books it, 7 days ahead). Every member sees every series; only its creator can pause or delete it.",
@@ -189,112 +189,116 @@ async function bookOccurrence(series: Series, date: string) {
   }
 }
 
-export const createRoomSeries = defineAction({
-  name: "create_room_series",
-  title: "新增固定會議",
-  description:
-    "Creates a standing meeting for the member: every week or every other week on weekday (0 Sunday … 6 Saturday) at start_time (Asia/Taipei HH:MM on the 30-minute grid) for duration_minutes (30 to 300, within 08:00 to 22:00). Each occurrence gets a room 7 days ahead (free first, else paid), a recorded Teams meeting and a calendar invite; the occurrences in the coming week are booked at once, and failures are returned and mailed to the member. attendees, group, include_advisor and title work as in book_room; epic may only be a sync epic. Confirm everything with the member first.",
-  kind: "mutation",
-  input: z.object({
-    weekday: z.number().int().min(0).max(6),
-    start_date: z
-      .string()
-      .refine(isCalendarDay, "日期要是 YYYY-MM-DD")
-      .optional()
-      .describe(
-        "the first occurrence, on weekday; default the next one after today"
-      ),
-    start_time: z.string().regex(/^\d{2}:\d{2}$/, "時間要是 HH:MM"),
-    duration_minutes: z
-      .number()
-      .int()
-      .min(SERIES_MIN_MINUTES)
-      .max(SERIES_MAX_MINUTES),
-    interval_weeks: z.union([z.literal(1), z.literal(2)]).default(1),
-    title: z.string().trim().max(80).default(DEFAULT_TOPIC),
-    attendees: z.array(z.string().trim().min(1)).max(100).default([]),
-    group: z.string().trim().min(1).nullish(),
-    invite_group_members: z.boolean().default(true),
-    include_advisor: z.boolean(),
-    agenda: z.string().trim().max(2000).nullish(),
-    epic: z.string().trim().min(1).nullish(),
-  }),
-  run: async (actor, input) => {
-    const endTime = addMinutes(input.start_time, input.duration_minutes)
-    const problem = endTime
-      ? spanProblem(input.start_time, endTime)
-      : "超過當天可借的時間"
-    if (problem) throw new Error(problem)
-    const group = input.group ?? null
-    // The advisor joins each occurrence, read fresh, not frozen here.
-    const attendees = await resolveAttendees({
-      attendees: input.attendees,
-      group,
-      inviteGroup: input.invite_group_members,
-      includeAdvisor: false,
-    })
-    let issueRefs: string[] = []
-    let deliverables: string[] = []
-    if (input.epic) {
-      if (!group) throw new Error("要先選專案群組才能選 Epic")
-      const path = (await projectGroups()).find(
-        (g) => g.name === group
-      )?.gitlabPath
-      if (!path) throw new Error("這個群組沒有連到 GitLab")
-      const iid = epicIid(input.epic, path)
-      const epic = iid === null ? null : await getEpic(path, iid)
-      if (!epic) throw new Error("Epic 不存在或不屬於這個群組")
-      if (epic.kind !== "sync") throw new Error("固定會議只能選 Sync 類的 Epic")
-      issueRefs = [`${path}&${epic.iid}`]
-      deliverables = deliverablesOf(
-        (await epicIssues(path, epic)).flatMap((i) => i.deliverables)
-      )
-    }
-    // Frozen now: a series keeps filing under the same project all term.
-    const prefix = topicPrefix(group, attendees)
-    const today = todayInTaipei()
-    if (input.start_date !== undefined) {
-      if (weekdayOf(input.start_date) !== input.weekday)
-        throw new Error("第一場的日期要在那個星期")
-      if (input.start_date < today) throw new Error("不能從過去的日期開始")
-    }
-    const [series] = await db
-      .insert(roomSeries)
-      .values({
-        title: composeTopic(prefix, input.title),
-        weekday: input.weekday,
-        startTime: input.start_time,
-        durationMinutes: input.duration_minutes,
-        intervalWeeks: input.interval_weeks,
-        // Fixes which weeks an every-other-week series meets.
-        anchorDate: input.start_date ?? nextWeekday(today, input.weekday),
-        attendees,
-        includeAdvisor: input.include_advisor,
-        meetingPrefix: prefix,
-        groupName: group,
-        agenda: input.agenda || null,
-        issueRefs,
-        deliverables,
-        createdBy: actor.userId,
-      })
-      .returning()
-    // Through 7 days out, as the daily run may already have looked at day 7
-    // before this series existed. Today only when picked: its slot was free
-    // on the grid a moment ago, while a default start is never today.
-    const errors: string[] = []
-    let booked = 0
-    for (const date of occurrencesBetween(
-      rule(series),
-      input.start_date ?? addDays(today, 1),
-      addDays(today, LEAD_DAYS)
-    )) {
-      const error = await bookOccurrence(series, date)
-      if (error) errors.push(error)
-      else booked++
-    }
-    return { id: series.id, booked, errors }
-  },
+export const standingMeetingInput = z.object({
+  weekday: z.number().int().min(0).max(6),
+  start_date: z
+    .string()
+    .refine(isCalendarDay, "日期要是 YYYY-MM-DD")
+    .optional()
+    .describe(
+      "the first occurrence, on weekday; default the next one after today"
+    ),
+  start_time: z.string().regex(/^\d{2}:\d{2}$/, "時間要是 HH:MM"),
+  duration_minutes: z
+    .number()
+    .int()
+    .min(SERIES_MIN_MINUTES)
+    .max(SERIES_MAX_MINUTES),
+  interval_weeks: z.union([z.literal(1), z.literal(2)]).default(1),
+  title: z.string().trim().max(80).default(DEFAULT_TOPIC),
+  attendees: z.array(z.string().trim().min(1)).max(100).default([]),
+  group: z.string().trim().min(1).nullish(),
+  invite_group_members: z.boolean().default(true),
+  include_advisor: z.boolean(),
+  agenda: z.string().trim().max(2000).nullish(),
+  epic: z.string().trim().min(1).nullish(),
 })
+
+/**
+ * Creates a standing meeting: every week or every other week from
+ * start_date. Each occurrence gets a room 7 days ahead (free first, else
+ * paid), a recorded Teams meeting and a calendar invite; the occurrences in
+ * the coming week are booked at once, and failures are returned and mailed
+ * to the member. book_meeting with repeat calls it.
+ */
+export async function createStandingMeeting(
+  actorId: string,
+  input: z.infer<typeof standingMeetingInput>
+) {
+  const endTime = addMinutes(input.start_time, input.duration_minutes)
+  const problem = endTime
+    ? spanProblem(input.start_time, endTime)
+    : "超過當天可借的時間"
+  if (problem) throw new Error(problem)
+  const group = input.group ?? null
+  // The advisor joins each occurrence, read fresh, not frozen here.
+  const attendees = await resolveAttendees({
+    attendees: input.attendees,
+    group,
+    inviteGroup: input.invite_group_members,
+    includeAdvisor: false,
+  })
+  let issueRefs: string[] = []
+  let deliverables: string[] = []
+  if (input.epic) {
+    if (!group) throw new Error("要先選專案群組才能選 Epic")
+    const path = (await projectGroups()).find(
+      (g) => g.name === group
+    )?.gitlabPath
+    if (!path) throw new Error("這個群組沒有連到 GitLab")
+    const iid = epicIid(input.epic, path)
+    const epic = iid === null ? null : await getEpic(path, iid)
+    if (!epic) throw new Error("Epic 不存在或不屬於這個群組")
+    if (epic.kind !== "sync") throw new Error("固定會議只能選 Sync 類的 Epic")
+    issueRefs = [`${path}&${epic.iid}`]
+    deliverables = deliverablesOf(
+      (await epicIssues(path, epic)).flatMap((i) => i.deliverables)
+    )
+  }
+  // Frozen now: a series keeps filing under the same project all term.
+  const prefix = topicPrefix(group, attendees)
+  const today = todayInTaipei()
+  if (input.start_date !== undefined) {
+    if (weekdayOf(input.start_date) !== input.weekday)
+      throw new Error("第一場的日期要在那個星期")
+    if (input.start_date < today) throw new Error("不能從過去的日期開始")
+  }
+  const [series] = await db
+    .insert(roomSeries)
+    .values({
+      title: composeTopic(prefix, input.title),
+      weekday: input.weekday,
+      startTime: input.start_time,
+      durationMinutes: input.duration_minutes,
+      intervalWeeks: input.interval_weeks,
+      // Fixes which weeks an every-other-week series meets.
+      anchorDate: input.start_date ?? nextWeekday(today, input.weekday),
+      attendees,
+      includeAdvisor: input.include_advisor,
+      meetingPrefix: prefix,
+      groupName: group,
+      agenda: input.agenda || null,
+      issueRefs,
+      deliverables,
+      createdBy: actorId,
+    })
+    .returning()
+  // Through 7 days out, as the daily run may already have looked at day 7
+  // before this series existed. Today only when picked: its slot was free
+  // on the grid a moment ago, while a default start is never today.
+  const errors: string[] = []
+  let booked = 0
+  for (const date of occurrencesBetween(
+    rule(series),
+    input.start_date ?? addDays(today, 1),
+    addDays(today, LEAD_DAYS)
+  )) {
+    const error = await bookOccurrence(series, date)
+    if (error) errors.push(error)
+    else booked++
+  }
+  return { id: series.id, booked, errors }
+}
 
 async function ownSeries(actorId: string, id: string) {
   const [series] = await db
@@ -306,11 +310,11 @@ async function ownSeries(actorId: string, id: string) {
   return series
 }
 
-export const setRoomSeriesActive = defineAction({
-  name: "set_room_series_active",
+export const setStandingMeetingActive = defineAction({
+  name: "set_standing_meeting_active",
   title: "暫停或恢復固定會議",
   description:
-    "Pauses (active false) or resumes (active true) one of the member's own standing meetings. A paused series books nothing new; occurrences already booked stay, and are cancelled with cancel_room_booking.",
+    "Pauses (active false) or resumes (active true) one of the member's own standing meetings. A paused series books nothing new; occurrences already booked stay, and are cancelled with cancel_meeting.",
   kind: "mutation",
   input: z.object({ id: z.uuid(), active: z.boolean() }),
   run: async (actor, { id, active }) => {
@@ -320,11 +324,11 @@ export const setRoomSeriesActive = defineAction({
   },
 })
 
-export const deleteRoomSeries = defineAction({
-  name: "delete_room_series",
+export const deleteStandingMeeting = defineAction({
+  name: "delete_standing_meeting",
   title: "刪除固定會議",
   description:
-    "Deletes one of the member's own standing meetings. Occurrences already booked stay booked; cancel them one by one with cancel_room_booking.",
+    "Deletes one of the member's own standing meetings. Occurrences already booked stay booked; cancel them one by one with cancel_meeting.",
   kind: "mutation",
   input: z.object({ id: z.uuid() }),
   run: async (actor, { id }) => {

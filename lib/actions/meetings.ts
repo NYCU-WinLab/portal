@@ -34,8 +34,8 @@ export const optionalText = (max: number) =>
 const kindDescription =
   "kind is regular (a member presents a paper from the list), thesis (a master's thesis talk, title written by the presenter), speaker (an invited talk, no member presents) or holiday (no meeting; holiday says why)."
 
-export const listMeetings = defineAction({
-  name: "list_meetings",
+export const listLabMeetings = defineAction({
+  name: "list_lab_meetings",
   title: "實驗室會議排程",
   description: `The Monday lab meeting schedule: for each week its date, label (the week counted from the semester's first week of classes: 第 3 週, or 寒假 / 暑假; null before the semester is set up), semester, kind, presenter, paper or title, slides and recording links, notes, place, start time and questioners. ${kindDescription} past=false (default) gives today in Taipei onward, soonest first; past=true gives earlier weeks, latest first.`,
   kind: "query",
@@ -51,8 +51,8 @@ export const listMeetings = defineAction({
   },
 })
 
-export const getNextMeeting = defineAction({
-  name: "get_next_meeting",
+export const getNextLabMeeting = defineAction({
+  name: "get_next_lab_meeting",
   title: "下一場實驗室會議",
   description:
     "The next Monday lab meeting that is not a holiday, from today in Taipei: date, presenter, paper or title, place, start time and questioners. null when nothing is scheduled.",
@@ -77,8 +77,8 @@ export async function requirePaper(tx: Tx, paperId: string) {
   if (!paper) throw new Error("這篇不在論文清單裡")
 }
 
-export const updateMyMeeting = defineAction({
-  name: "update_my_meeting",
+export const updateMyLabMeeting = defineAction({
+  name: "update_my_lab_meeting",
   title: "編輯我的報告",
   description:
     "Changes the week the signed-in member presents (an admin may use it on any member's week): paperId from list_papers on a regular week, title on a thesis or speaker week, slides and recording links, notes. Leave a field out to keep it; an empty string clears a link or note.",

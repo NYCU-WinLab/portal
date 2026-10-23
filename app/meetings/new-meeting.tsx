@@ -28,7 +28,6 @@ import {
   SLOT_MINUTES,
   addMinutes,
   dayLabel,
-  weekdayOf,
 } from "@/lib/rooms/time"
 
 import {
@@ -38,11 +37,7 @@ import {
   type MeetingValue,
   type RoomGroup,
 } from "./meeting-fields"
-import {
-  bookRoomAction,
-  createSeriesAction,
-  loadAvailability,
-} from "./rooms-actions"
+import { bookMeetingAction, loadAvailability } from "./rooms-actions"
 
 const DAYS = 14
 
@@ -165,50 +160,38 @@ function MeetingDialog({
     ...new Set([...DURATION_PRESETS, minutes].filter((m) => m <= left)),
   ].sort((a, b) => a - b)
 
-  async function submitSeries() {
-    const { result, error } = await createSeriesAction({
-      weekday: weekdayOf(day.date),
-      start_date: day.date,
-      start_time: start,
-      duration_minutes: minutes,
-      interval_weeks: repeat,
-      ...meetingInput(meeting),
-    })
-    if (error) {
-      toast.error(error)
-      throw new Error(error)
-    }
-    if (result!.errors.length)
-      toast.warning(`已建立，但沒訂到：${result!.errors.join("；")}`)
-    else
-      toast.success(
-        result!.booked
-          ? `已建立，先訂好 ${result!.booked} 場`
-          : "已建立，開會前 7 天會自動訂"
-      )
-  }
-
   async function submit() {
-    if (repeat) return submitSeries()
-    if (!online && !room) {
+    if (!repeat && !online && !room) {
       toast.error("這段時間沒有教室從頭到尾都空著")
       throw new Error("no room")
     }
-    if (!online && room?.paid && !allowPaid) {
+    if (!repeat && !online && room?.paid && !allowPaid) {
       toast.error("只剩付費教室，要借請打開「同意付費」")
       throw new Error("paid")
     }
-    const { result, error } = await bookRoomAction({
+    const { result, error } = await bookMeetingAction({
       date: day.date,
       start_time: start,
       end_time: end,
-      online_only: online,
+      online_only: !repeat && online,
       allow_paid: allowPaid,
+      repeat: ["none", "weekly", "biweekly"][repeat],
       ...meetingInput(meeting),
     })
     if (error) {
       toast.error(error)
       throw new Error(error)
+    }
+    if ("standing_meeting" in result!) {
+      if (result.errors.length)
+        toast.warning(`已建立，但沒訂到：${result.errors.join("；")}`)
+      else
+        toast.success(
+          result.booked
+            ? `已建立，先訂好 ${result.booked} 場`
+            : "已建立，開會前 7 天會自動訂"
+        )
+      return
     }
     toast.success(
       result!.room

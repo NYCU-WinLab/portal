@@ -2,12 +2,16 @@ import { and, asc, eq, gte, inArray, lte, sql } from "drizzle-orm"
 import { z } from "zod"
 
 import { defineAction } from "@/lib/actions/define"
+import {
+  createStandingMeeting,
+  standingMeetingInput,
+} from "@/lib/actions/rooms-series"
 import { queueMail } from "@/lib/actions/mail"
 import {
-  cancelMeeting,
+  cancelTeamsMeeting,
   joinUrl,
   meetingsOf,
-  requestMeeting,
+  requestTeamsMeeting,
 } from "@/lib/actions/rooms-meetings"
 import type { Mail } from "@/lib/mail"
 import { mailBody } from "@/lib/mail-body"
@@ -49,9 +53,11 @@ import {
   addDays,
   dayLabel,
   isCalendarDay,
+  minutesOf,
   spanProblem,
   taipeiIso,
   todayInTaipei,
+  weekdayOf,
 } from "@/lib/rooms/time"
 
 const day = z.string().refine(isCalendarDay, "日期要是 YYYY-MM-DD")
@@ -75,7 +81,7 @@ export const listRoomAvailability = defineAction({
   name: "list_room_availability",
   title: "教室空檔",
   description:
-    "Free and busy time in the CS department's meeting rooms for up to 14 days from date (Asia/Taipei), read live from the department system, the grid 新增會議 on /meetings draws. Each run of the 30-minute grid lists the free-tier rooms open, the paid ones, and the rooms the lab's shared account already holds; lab_bookings says who booked those through the portal and what for. Every member gets the same answer. Book a slot with book_room.",
+    "Free and busy time in the CS department's meeting rooms for up to 14 days from date (Asia/Taipei), read live from the department system, the grid 新增會議 on /meetings draws. Each run of the 30-minute grid lists the free-tier rooms open, the paid ones, and the rooms the lab's shared account already holds; lab_bookings says who booked those through the portal and what for. Every member gets the same answer. Book a slot with book_meeting.",
   kind: "query",
   input: z.object({
     date: day.optional(),
@@ -127,7 +133,7 @@ async function bookingsBetween(from: string, to: string) {
       groupName: roomBookings.groupName,
       attendees: roomBookings.attendees,
       seriesId: roomBookings.seriesId,
-      meetingId: roomBookings.meetingId,
+      labMeetingId: roomBookings.meetingId,
       requestedBy: roomBookings.requestedBy,
       requestedByName: user.name,
       cancelledAt: roomBookings.cancelledAt,
@@ -143,11 +149,11 @@ async function bookingsBetween(from: string, to: string) {
   }))
 }
 
-export const listRoomBookings = defineAction({
-  name: "list_room_bookings",
-  title: "會議預約",
+export const listMeetings = defineAction({
+  name: "list_meetings",
+  title: "會議",
   description:
-    "The meetings booked through the portal from date (default today, Asia/Taipei) for days days: room (null for an online-only meeting), date, start and end, status booked or cancelled (cancelled rows stay), title, agenda, project group, attendees, who booked it, and the Teams meeting's state (pending, success with join_url, or failed with the reason). Every member sees every booking; only the member who booked one can cancel it with cancel_room_booking.",
+    "Every meeting booked through the portal from date (default today, Asia/Taipei) for days days, the lab meeting's weekly Teams meeting included (lab_meeting_id set; its program is in list_lab_meetings): room (null for an online-only meeting), date, start and end, status booked or cancelled (cancelled rows stay), title, agenda, project group, attendees, who booked it, and the Teams meeting's state (pending, success with join_url, or failed with the reason). Every member sees every booking; only the member who booked one can cancel it with cancel_meeting.",
   kind: "query",
   input: z.object({
     date: day.optional(),
@@ -159,11 +165,11 @@ export const listRoomBookings = defineAction({
   },
 })
 
-export const listRoomGroups = defineAction({
-  name: "list_room_groups",
+export const listProjectGroups = defineAction({
+  name: "list_project_groups",
   title: "專案群組",
   description:
-    "The lab's project groups in Keycloak (/winlab-projects), each with its slug name (the Teams topic prefix and what book_room's group takes), a label, whether it is linked to a GitLab group (only then can a meeting belong to an epic), the members who can be invited, and the names of members with no email.",
+    "The lab's project groups in Keycloak (/winlab-projects), each with its slug name (the Teams topic prefix and what book_meeting's group takes), a label, whether it is linked to a GitLab group (only then can a meeting belong to an epic), the members who can be invited, and the names of members with no email.",
   kind: "query",
   input: z.object({}),
   run: async () => ({
@@ -185,7 +191,7 @@ export const listGroupEpics = defineAction({
   name: "list_group_epics",
   title: "群組 Epic",
   description:
-    "The open GitLab epics of one project group (by its slug name from list_room_groups), most recently updated first: iid, title, description, url and kind. kind sync is a standing container (a series may only use these), meeting is one tracked meeting, report is a review over an iteration. Pass an iid as book_room's epic.",
+    "The open GitLab epics of one project group (by its slug name from list_project_groups), most recently updated first: iid, title, description, url and kind. kind sync is a standing container (a series may only use these), meeting is one tracked meeting, report is a review over an iteration. Pass an iid as book_meeting's epic.",
   kind: "query",
   input: z.object({ group: z.string().trim().min(1) }),
   run: async (_actor, { group }) => {
@@ -469,7 +475,7 @@ export async function placeBooking(input: NewBooking) {
       )
     throw error
   }
-  await requestMeeting(booking)
+  await requestTeamsMeeting(booking)
   return booking
 }
 
@@ -497,11 +503,11 @@ export function roomFor(
   return picked
 }
 
-export const bookRoom = defineAction({
-  name: "book_room",
-  title: "預約會議",
+export const bookMeeting = defineAction({
+  name: "book_meeting",
+  title: "新增會議",
   description:
-    "Books a meeting as the member, 新增會議 on /meetings: a CS department room through the lab's shared account (the room /meetings would pick: open for the whole span, free before paid; a paid room only with allow_paid true, since the department charges for it), or no room with online_only. Every booking also gets a Teams meeting in the WinLab channel, recorded automatically with a transcript and an AI summary the channel can see, and every attendee and the member get a calendar invite by mail. Times are Asia/Taipei HH:MM on the 30-minute grid between 08:00 and 22:00; check list_room_availability first. attendees are portal user ids, emails or usernames; group is a project group's slug from list_room_groups, whose members are invited too unless invite_group_members is false, and which names the project the recording files under. epic (an iid from list_group_epics) needs a group linked to GitLab. include_advisor has no default because it mails the advisor. Never book the Monday lab meeting here; the portal books it itself. Read back the date, time, room or online, title, attendees, advisor and the recording, and get the member's yes first.",
+    "Books a meeting as the member, 新增會議 on /meetings: a CS department room through the lab's shared account (the room /meetings would pick: open for the whole span, free before paid; a paid room only with allow_paid true, since the department charges for it), or no room with online_only. Every booking also gets a Teams meeting in the WinLab channel, recorded automatically with a transcript and an AI summary the channel can see, and every attendee and the member get a calendar invite by mail. Times are Asia/Taipei HH:MM on the 30-minute grid between 08:00 and 22:00; check list_room_availability first. attendees are portal user ids, emails or usernames; group is a project group's slug from list_project_groups, whose members are invited too unless invite_group_members is false, and which names the project the recording files under. epic (an iid from list_group_epics) needs a group linked to GitLab. include_advisor has no default because it mails the advisor. repeat weekly or biweekly makes it a standing meeting from date on instead (list_standing_meetings): each occurrence gets a room 7 days ahead, free first, else paid, so online_only is refused; epic may then only be a sync epic, and the answer is the standing meeting's id, how many occurrences were booked at once and why others were not. Never book the Monday lab meeting here; the portal books it itself. Read back the date, time, room or online, title, attendees, advisor and the recording, and get the member's yes first.",
   kind: "mutation",
   input: z.object({
     date: day,
@@ -516,11 +522,36 @@ export const bookRoom = defineAction({
     include_advisor: z.boolean(),
     agenda: z.string().trim().max(2000).nullish(),
     epic: z.string().trim().min(1).nullish(),
+    repeat: z.enum(["none", "weekly", "biweekly"]).default("none"),
   }),
   run: async (actor, input) => {
     const problem = spanProblem(input.start_time, input.end_time)
     if (problem) throw new Error(problem)
     if (input.date < todayInTaipei()) throw new Error("不能借過去的日期")
+    if (input.repeat !== "none") {
+      if (input.online_only)
+        throw new Error("固定會議每場都會借教室，不能只開線上")
+      const standing = await createStandingMeeting(
+        actor.userId,
+        standingMeetingInput.parse({
+          weekday: weekdayOf(input.date),
+          start_date: input.date,
+          start_time: input.start_time,
+          // spanProblem passed, so both are on the grid.
+          duration_minutes:
+            minutesOf(input.end_time)! - minutesOf(input.start_time)!,
+          interval_weeks: input.repeat === "weekly" ? 1 : 2,
+          title: input.title,
+          attendees: input.attendees,
+          group: input.group,
+          invite_group_members: input.invite_group_members,
+          include_advisor: input.include_advisor,
+          agenda: input.agenda,
+          epic: input.epic,
+        })
+      )
+      return { standing_meeting: standing.id, ...standing }
+    }
     if (!input.online_only && !bookingConfigured())
       throw new Error("Portal 還沒設定系上借用帳號，只能開線上會議")
     const group = input.group ?? null
@@ -566,11 +597,11 @@ export const bookRoom = defineAction({
   },
 })
 
-export const cancelRoomBooking = defineAction({
-  name: "cancel_room_booking",
-  title: "取消預約",
+export const cancelMeeting = defineAction({
+  name: "cancel_meeting",
+  title: "取消會議",
   description:
-    "Cancels one of the member's own bookings (by id from list_room_bookings): releases the department room, takes down its Teams meeting and mails everyone the cancellation. Only the member who booked it; fails on someone else's or one already cancelled. teams_error is set when the Teams meeting could not be taken down: it will still start and record unless someone deletes it in Teams.",
+    "Cancels one of the member's own bookings (by id from list_meetings): releases the department room, takes down its Teams meeting and mails everyone the cancellation. Only the member who booked it; fails on someone else's or one already cancelled. teams_error is set when the Teams meeting could not be taken down: it will still start and record unless someone deletes it in Teams.",
   kind: "mutation",
   input: z.object({ id: z.uuid("id 是預約的 id") }),
   run: async (actor, { id }) => {
@@ -619,7 +650,7 @@ export async function cancelBooking(booking: Booking, cancelledBy: string) {
     await queueMail(tx, inviteMail(row, organizer, "CANCEL"))
     return row
   })
-  const teamsError = await cancelMeeting(cancelled)
+  const teamsError = await cancelTeamsMeeting(cancelled)
   return { cancelled: true, teams_error: teamsError }
 }
 

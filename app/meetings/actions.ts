@@ -3,15 +3,15 @@
 import { revalidatePath } from "next/cache"
 
 import { type Action, errorMessage, runAction } from "@/lib/actions/define"
-import { updateMyMeeting } from "@/lib/actions/meetings"
+import { updateMyLabMeeting } from "@/lib/actions/meetings"
 import {
-  addMeeting,
-  deleteMeeting,
+  addLabMeeting,
+  deleteLabMeeting,
   fillPresenters,
   generateSemester,
   setQuestioners,
-  swapMeetings,
-  updateMeeting,
+  swapLabMeetings,
+  updateLabMeeting,
 } from "@/lib/actions/meetings-admin"
 import {
   addPaper,
@@ -44,12 +44,13 @@ async function call(action: Action, input: unknown): Promise<Result> {
   return {}
 }
 
-export const updateMine = async (input: unknown) => call(updateMyMeeting, input)
+export const updateMine = async (input: unknown) =>
+  call(updateMyLabMeeting, input)
 export const generate = async (input: unknown) => call(generateSemester, input)
-export const add = async (input: unknown) => call(addMeeting, input)
-export const update = async (input: unknown) => call(updateMeeting, input)
-export const remove = async (input: unknown) => call(deleteMeeting, input)
-export const swap = async (input: unknown) => call(swapMeetings, input)
+export const add = async (input: unknown) => call(addLabMeeting, input)
+export const update = async (input: unknown) => call(updateLabMeeting, input)
+export const remove = async (input: unknown) => call(deleteLabMeeting, input)
+export const swap = async (input: unknown) => call(swapLabMeetings, input)
 export const fill = async () => call(fillPresenters, {})
 export const questioners = async (input: unknown) => call(setQuestioners, input)
 export const paperAdd = async (input: unknown) => call(addPaper, input)

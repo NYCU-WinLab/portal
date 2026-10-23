@@ -5,7 +5,7 @@ import { PortalShell } from "@/components/portal-shell"
 import { listAnnouncements } from "@/lib/actions/bulletin"
 import { runAction } from "@/lib/actions/define"
 import { listHomePins } from "@/lib/actions/home"
-import { getNextMeeting } from "@/lib/actions/meetings"
+import { getNextLabMeeting } from "@/lib/actions/meetings"
 import { whoami } from "@/lib/actions/users"
 import { requireActor } from "@/lib/auth/session"
 import { givenName } from "@/lib/names"
@@ -24,7 +24,7 @@ export default async function Home() {
   const actor = await requireActor("/")
   const [member, { meeting }, { announcements }, pins] = await Promise.all([
     runAction(whoami, actor, {}),
-    runAction(getNextMeeting, actor, {}),
+    runAction(getNextLabMeeting, actor, {}),
     runAction(listAnnouncements, actor, { limit: 1 }),
     runAction(listHomePins, actor, {}),
   ])

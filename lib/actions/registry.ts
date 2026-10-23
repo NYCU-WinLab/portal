@@ -91,18 +91,18 @@ import {
 } from "@/lib/actions/developers"
 import { createLeave, deleteLeave, listLeaves } from "@/lib/actions/leave"
 import {
-  getNextMeeting,
-  listMeetings,
-  updateMyMeeting,
+  getNextLabMeeting,
+  listLabMeetings,
+  updateMyLabMeeting,
 } from "@/lib/actions/meetings"
 import {
-  addMeeting,
-  deleteMeeting,
+  addLabMeeting,
+  deleteLabMeeting,
   fillPresenters,
   generateSemester,
   setQuestioners,
-  swapMeetings,
-  updateMeeting,
+  swapLabMeetings,
+  updateLabMeeting,
 } from "@/lib/actions/meetings-admin"
 import {
   addPaper,
@@ -159,21 +159,20 @@ import {
   updateReimburseIngress,
 } from "@/lib/actions/reimburse"
 import {
-  bookRoom,
-  cancelRoomBooking,
+  bookMeeting,
+  cancelMeeting,
   getEpicDeliverables,
   listGroupEpics,
   listRoomAvailability,
-  listRoomBookings,
-  listRoomGroups,
+  listMeetings,
+  listProjectGroups,
 } from "@/lib/actions/rooms"
 import {
-  createRoomSeries,
-  deleteRoomSeries,
-  listRoomSeries,
-  setRoomSeriesActive,
+  deleteStandingMeeting,
+  listStandingMeetings,
+  setStandingMeetingActive,
 } from "@/lib/actions/rooms-series"
-import { listMeetingStats } from "@/lib/actions/stats"
+import { listLabMeetingStats } from "@/lib/actions/stats"
 import { whoami } from "@/lib/actions/users"
 
 /** Every action, in the order MCP lists them. */
@@ -205,18 +204,18 @@ export const actions: Action[] = [
   deleteDoorSound,
   setDoorPlaylist,
   setDoorSoundDefault,
-  listMeetings,
-  getNextMeeting,
-  updateMyMeeting,
+  listLabMeetings,
+  getNextLabMeeting,
+  updateMyLabMeeting,
   listPapers,
   listPaperTags,
   listPresenters,
-  listMeetingStats,
+  listLabMeetingStats,
   generateSemester,
-  addMeeting,
-  updateMeeting,
-  deleteMeeting,
-  swapMeetings,
+  addLabMeeting,
+  updateLabMeeting,
+  deleteLabMeeting,
+  swapLabMeetings,
   fillPresenters,
   setQuestioners,
   addPaper,
@@ -272,16 +271,15 @@ export const actions: Action[] = [
   setMySignature,
   setSignatureSettings,
   listRoomAvailability,
-  listRoomBookings,
-  listRoomGroups,
+  listMeetings,
+  listProjectGroups,
   listGroupEpics,
   getEpicDeliverables,
-  bookRoom,
-  cancelRoomBooking,
-  listRoomSeries,
-  createRoomSeries,
-  setRoomSeriesActive,
-  deleteRoomSeries,
+  bookMeeting,
+  cancelMeeting,
+  listStandingMeetings,
+  setStandingMeetingActive,
+  deleteStandingMeeting,
   listApproveDocuments,
   getApproveDocument,
   getApproveFile,

@@ -78,7 +78,7 @@ async function ask(
 }
 
 /** Asks for the Teams meeting of a booking just made. */
-export async function requestMeeting(booking: Booking) {
+export async function requestTeamsMeeting(booking: Booking) {
   if (!booking.online || !meetingPipelineConfigured()) return
   await ask(booking, "create", {
     START_TIME: taipeiOffsetIso(booking.date, booking.startTime),
@@ -108,7 +108,7 @@ const cancelVariables = (
  * handed over, never existed, or is still being made (its callback then
  * sees the booking cancelled and takes it down itself).
  */
-export async function cancelMeeting(booking: Booking) {
+export async function cancelTeamsMeeting(booking: Booking) {
   if (!booking.online || !meetingPipelineConfigured()) return null
   const created = await db
     .select()

@@ -6,11 +6,11 @@ import { PortalShell } from "@/components/portal-shell"
 import { listMembers } from "@/lib/actions/admins"
 import { isAdmin } from "@/lib/actions/authz"
 import { runAction } from "@/lib/actions/define"
-import { listMeetings } from "@/lib/actions/meetings"
+import { listLabMeetings } from "@/lib/actions/meetings"
 import type { ScheduledMeeting } from "@/lib/actions/meetings-shared"
 import { listPapers } from "@/lib/actions/papers"
-import { listRoomBookings, listRoomGroups } from "@/lib/actions/rooms"
-import { listRoomSeries } from "@/lib/actions/rooms-series"
+import { listMeetings, listProjectGroups } from "@/lib/actions/rooms"
+import { listStandingMeetings } from "@/lib/actions/rooms-series"
 import { requireActor } from "@/lib/auth/session"
 import { dateLabel, taipeiToday } from "@/lib/leave-dates"
 import { addDays, addMinutes } from "@/lib/rooms/time"
@@ -30,10 +30,10 @@ const weekdays = "日一二三四五六"
 // How far ahead the list shows other meetings; lab weeks run all term.
 const BOOKING_DAYS = 60
 
-type Booking = Awaited<
-  ReturnType<typeof listRoomBookings.run>
->["bookings"][number]
-type Series = Awaited<ReturnType<typeof listRoomSeries.run>>["series"][number]
+type Booking = Awaited<ReturnType<typeof listMeetings.run>>["bookings"][number]
+type Series = Awaited<
+  ReturnType<typeof listStandingMeetings.run>
+>["series"][number]
 
 // The date, then the week for a lab meeting or the time for any other.
 function When({ date, aside }: { date: string; aside: React.ReactNode }) {
@@ -263,14 +263,14 @@ export default async function MeetingsPage() {
     groups,
     members,
   ] = await Promise.all([
-    runAction(listMeetings, actor, {}),
-    runAction(listMeetings, actor, { past: true }),
+    runAction(listLabMeetings, actor, {}),
+    runAction(listLabMeetings, actor, { past: true }),
     runAction(listPapers, actor, {}),
     isAdmin(actor, "meetings"),
-    runAction(listRoomBookings, actor, { date: today, days: BOOKING_DAYS }),
-    runAction(listRoomSeries, actor, {}),
+    runAction(listMeetings, actor, { date: today, days: BOOKING_DAYS }),
+    runAction(listStandingMeetings, actor, {}),
     // Keycloak being down leaves booking without groups, not broken.
-    runAction(listRoomGroups, actor, {}).then(
+    runAction(listProjectGroups, actor, {}).then(
       ({ groups }) => groups,
       () => []
     ),
@@ -284,7 +284,7 @@ export default async function MeetingsPage() {
   const timeline: Entry[] = [
     ...meetings.map((lab) => ({ at: `${lab.date} ${lab.startsAt}`, lab })),
     ...bookings
-      .filter((b) => b.status === "booked" && !b.meetingId)
+      .filter((b) => b.status === "booked" && !b.labMeetingId)
       .map((booking) => ({
         at: `${booking.date} ${booking.startTime}`,
         booking,

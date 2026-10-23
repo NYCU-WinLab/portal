@@ -2,7 +2,7 @@ import { EmptyState } from "@/components/empty-state"
 import { PageHeader } from "@/components/page-header"
 import { PortalShell } from "@/components/portal-shell"
 import { runAction } from "@/lib/actions/define"
-import { listMeetingStats } from "@/lib/actions/stats"
+import { listLabMeetingStats } from "@/lib/actions/stats"
 import { requireActor } from "@/lib/auth/session"
 
 import { leaveNav, leavePage } from "../nav"
@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic"
 // yourself otherwise.
 export default async function LeaveStatsPage() {
   const actor = await requireActor("/leave/stats")
-  const { members } = await runAction(listMeetingStats, actor, {})
+  const { members } = await runAction(listLabMeetingStats, actor, {})
   const rows = members
     .filter((row) => row.leaves + row.leaveScheduled > 0)
     .sort((a, b) => b.leaves - a.leaves || a.name.localeCompare(b.name))
