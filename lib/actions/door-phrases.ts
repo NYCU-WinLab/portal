@@ -279,8 +279,8 @@ export async function missingVoiceTexts() {
   return { needed: needed.length, missing: needed.filter((t) => !done.has(t)) }
 }
 
-/** Stores one clip the voice job made; a second upload of a text replaces
- * it under a new id, so the door fetches it again. */
+/** Stores one clip the voice job made. POST only accepts a text that is
+ * still missing, so a clip is replaced only after its row is deleted. */
 export async function storeVoiceClip(
   text: string,
   audio: Buffer,

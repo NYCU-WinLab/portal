@@ -11,11 +11,12 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import type { DoorPhrase } from "@/lib/actions/door-phrases"
-import { WEEKDAYS } from "@/lib/door-greeting"
 import { report } from "@/lib/report"
 
 import { create, remove, update } from "./actions"
 
+// Kept here: lib/door-greeting imports node:crypto, which a client component must not pull in.
+const WEEKDAYS = ["一", "二", "三", "四", "五", "六", "日"] as const
 const ALL_DAYS = [1, 2, 3, 4, 5, 6, 7]
 const text = (data: FormData, key: string) => String(data.get(key) ?? "")
 

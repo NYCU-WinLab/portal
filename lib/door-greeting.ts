@@ -161,8 +161,6 @@ export const DEFAULT_BEFORE = "Hi，"
 export const clock = (minutes: number) =>
   `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`
 
-export const WEEKDAYS = ["一", "二", "三", "四", "五", "六", "日"] as const
-
 /** The minutes of the week a rule covers, as [start, end) ranges on a
  * 0..10080 line (Monday 00:00 is 0), split where they wrap past Sunday. */
 export function weekRanges(rule: {
