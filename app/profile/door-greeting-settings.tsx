@@ -6,18 +6,21 @@ import Link from "next/link"
 import { FieldList, FieldRow } from "@/components/field-list"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Switch } from "@/components/ui/switch"
 import { report } from "@/lib/report"
 
 import { PlayButton } from "../door/sounds/play-button"
-import { saveDoorSuffix } from "./actions"
+import { saveDoorSpeakName, saveDoorSuffix } from "./actions"
 
 // What the door says when the member comes in: the panel's suffix after
-// their name, and the playlist it picks a sound from (kept on /door/sounds).
+// their name, whether the door says "Hi <name>" first, and the playlist it picks a sound from (kept on /door/sounds).
 export function DoorGreetingSettings({
   suffix,
+  speakName,
   playlist,
 }: {
   suffix: string | null
+  speakName: boolean
   playlist: { id: string; label: string }[]
 }) {
   const [text, setText] = React.useState(suffix ?? "")
@@ -43,6 +46,18 @@ export function DoorGreetingSettings({
             儲存
           </Button>
         </form>
+      </FieldRow>
+      <FieldRow label="念我的名字">
+        <Switch
+          checked={speakName}
+          aria-label="念我的名字"
+          onCheckedChange={(checked) =>
+            report(
+              saveDoorSpeakName(checked),
+              checked ? "開門會先念 Hi 你的名字" : "開門只播音效"
+            ).catch(() => {})
+          }
+        />
       </FieldRow>
       <FieldRow label="開門音效">
         <div className="flex flex-col gap-2">

@@ -1,4 +1,4 @@
-import { eq, inArray, isNotNull, sql } from "drizzle-orm"
+import { eq, inArray, isNotNull, or, sql } from "drizzle-orm"
 import { z } from "zod"
 
 import { defineAction } from "@/lib/actions/define"
@@ -33,13 +33,16 @@ export const getMyDoorGreeting = defineAction({
   name: "get_my_door_greeting",
   title: "我的門口歡迎",
   description:
-    "How the lab door greets the signed-in member: suffix (shown after their name on the LED panel, null for the default ！！) and their playlist, the pool sounds the door picks from at random (empty plays one of the lab's defaults).",
+    'How the lab door greets the signed-in member: suffix (shown after their name on the LED panel, null for the default ！！), speak_name (whether the door says "Hi <given name>" before the sound) and their playlist, the pool sounds the door picks from at random (empty plays one of the lab\'s defaults).',
   kind: "query",
   input: z.object({}),
   run: async (actor) => {
     const [[row], playlist] = await Promise.all([
       db
-        .select({ suffix: doorGreetings.suffix })
+        .select({
+          suffix: doorGreetings.suffix,
+          speakName: doorGreetings.speakName,
+        })
         .from(doorGreetings)
         .where(eq(doorGreetings.userId, actor.userId)),
       db
@@ -49,7 +52,11 @@ export const getMyDoorGreeting = defineAction({
         .where(eq(doorPlaylistItems.userId, actor.userId))
         .orderBy(doorPlaylistItems.createdAt),
     ])
-    return { suffix: row?.suffix ?? null, playlist }
+    return {
+      suffix: row?.suffix ?? null,
+      speak_name: row?.speakName ?? true,
+      playlist,
+    }
   },
 })
 
@@ -69,6 +76,19 @@ export const setDoorSuffix = defineAction({
   },
 })
 
+export const setDoorSpeakName = defineAction({
+  name: "set_door_speak_name",
+  title: "開門念名字",
+  description:
+    'Sets whether the lab door says "Hi <given name>" before the signed-in member\'s door sound (speak true, the default) or plays only the sound (false). Self only.',
+  kind: "mutation",
+  input: z.object({ speak: z.boolean() }),
+  run: async (actor, { speak }) => {
+    await upsert(actor.userId, { speakName: speak })
+    return { speak_name: speak }
+  },
+})
+
 // What the door panel reads (not actions: the panel is a machine with its
 // own secret, /api/door/greetings and /api/door/meeting).
 
@@ -78,18 +98,34 @@ export const setDoorSuffix = defineAction({
  * door picks one of at random. pool links every listed sound, default
  * lists the ones for everyone else. sound is the format before playlists,
  * each member's first sound, for a panel that has not moved on yet. color
- * stays empty; per-member colors were dropped in the move.
+ * stays empty; per-member colors were dropped in the move. quiet lists the
+ * names the door greets without saying "Hi <name>".
  */
 export async function panelGreetings() {
   const [suffixRows, { playlists, defaults }] = await Promise.all([
     db
-      .select({ userId: doorGreetings.userId, suffix: doorGreetings.suffix })
+      .select({
+        userId: doorGreetings.userId,
+        suffix: doorGreetings.suffix,
+        speakName: doorGreetings.speakName,
+      })
       .from(doorGreetings)
-      .where(isNotNull(doorGreetings.suffix)),
+      .where(
+        or(isNotNull(doorGreetings.suffix), eq(doorGreetings.speakName, false))
+      ),
     panelPlaylists(),
   ])
-  const suffixes = new Map(suffixRows.map((row) => [row.userId, row.suffix!]))
-  const ids = [...new Set([...suffixes.keys(), ...playlists.keys()])].sort()
+  const suffixes = new Map(
+    suffixRows.flatMap((row) =>
+      row.suffix ? [[row.userId, row.suffix] as const] : []
+    )
+  )
+  const silent = new Set(
+    suffixRows.filter((row) => !row.speakName).map((row) => row.userId)
+  )
+  const ids = [
+    ...new Set([...suffixes.keys(), ...silent, ...playlists.keys()]),
+  ].sort()
   const [members, cards] = ids.length
     ? await Promise.all([
         db
@@ -104,6 +140,8 @@ export async function panelGreetings() {
     : [[], []]
   const names = new Map(members.map((member) => [member.id, member.name]))
   const suffix: Record<string, string> = {}
+  const quiet = new Set<string>()
+  const owners = new Map<string, string>()
   const playlist: Record<string, string[]> = {}
   const sound: Record<string, { url: string; mode: string; version: string }> =
     {}
@@ -122,6 +160,10 @@ export async function panelGreetings() {
     for (const label of labels) {
       // The first member to claim a name keeps it.
       if (!label) continue
+      if (!owners.has(label)) {
+        owners.set(label, userId)
+        if (silent.has(userId)) quiet.add(label)
+      }
       if (own && !(label in suffix)) suffix[label] = own
       if (list.length && !(label in playlist)) {
         playlist[label] = list
@@ -131,7 +173,15 @@ export async function panelGreetings() {
     }
   }
   for (const soundId of defaults) link(soundId)
-  return { suffix, color: {}, sound, playlist, pool, default: defaults }
+  return {
+    suffix,
+    color: {},
+    sound,
+    playlist,
+    pool,
+    default: defaults,
+    quiet: [...quiet].sort(),
+  }
 }
 
 const kindLabel: Record<string, string> = {

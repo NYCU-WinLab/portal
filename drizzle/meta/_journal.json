@@ -211,6 +211,13 @@
       "when": 1792767244846,
       "tag": "0029_door_tokens",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1792768283688,
+      "tag": "0030_door_speak_name",
+      "breakpoints": true
     }
   ]
 }

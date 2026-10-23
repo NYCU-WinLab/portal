@@ -52,7 +52,11 @@ import {
   listDoorEvents,
   openDoor,
 } from "@/lib/actions/door"
-import { getMyDoorGreeting, setDoorSuffix } from "@/lib/actions/door-greetings"
+import {
+  getMyDoorGreeting,
+  setDoorSpeakName,
+  setDoorSuffix,
+} from "@/lib/actions/door-greetings"
 import {
   createDoorToken,
   listDoorTokens,
@@ -202,6 +206,7 @@ export const actions: Action[] = [
   listDoorCards,
   getMyDoorGreeting,
   setDoorSuffix,
+  setDoorSpeakName,
   listDoorSounds,
   getDoorSound,
   uploadDoorSound,

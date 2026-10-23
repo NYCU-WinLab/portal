@@ -123,6 +123,8 @@ export const doorGreetings = pgTable(
     soundType: text(),
     soundVersion: text(),
     playSound: boolean().default(false).notNull(),
+    // false: the door plays only the sound, without "Hi <name>" before it.
+    speakName: boolean().default(true).notNull(),
     updatedAt: timestamp({ withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
