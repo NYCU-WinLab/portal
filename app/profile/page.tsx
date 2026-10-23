@@ -4,6 +4,7 @@ import { PortalShell } from "@/components/portal-shell"
 import { buttonVariants } from "@/components/ui/button"
 import { errorMessage, runAction } from "@/lib/actions/define"
 import { getBentoStats } from "@/lib/actions/bento"
+import { getMyDoorGreeting } from "@/lib/actions/door-greetings"
 import { getProfile } from "@/lib/actions/profile"
 import { getReimburseStats } from "@/lib/actions/reimburse"
 import { getMySignature, getMySignatureImage } from "@/lib/actions/signature"
@@ -13,6 +14,7 @@ import { requireActor } from "@/lib/auth/session"
 import { ntd } from "@/lib/money"
 import { accountConsoleUrl } from "@/lib/keycloak"
 
+import { DoorGreetingSettings } from "./door-greeting-settings"
 import { SignatureSettings } from "./signature-settings"
 import { SignOutButton } from "./sign-out-button"
 
@@ -29,7 +31,7 @@ const fields = [
 
 export default async function ProfilePage() {
   const actor = await requireActor("/profile")
-  const [profile, stats, bento, ledger, signature, image, trips] =
+  const [profile, stats, bento, ledger, signature, image, trips, door] =
     await Promise.all([
       runAction(getProfile, actor, {}).catch((error: unknown) => ({
         error: errorMessage(error),
@@ -40,6 +42,7 @@ export default async function ProfilePage() {
       runAction(getMySignature, actor, {}),
       runAction(getMySignatureImage, actor, {}),
       runAction(getTripStats, actor, {}),
+      runAction(getMyDoorGreeting, actor, {}),
     ])
   const travel = trips.members.find((row) => row.userId === actor.userId)
   const paid = ledger.applicants.find((row) => row.applicantId === actor.userId)
@@ -86,6 +89,14 @@ export default async function ProfilePage() {
             image={image.dataUrl}
             stamp={signature.stamp}
             corner={signature.corner}
+          />
+        </section>
+        <section className="flex flex-col gap-6">
+          <SectionHeader title="門口歡迎" />
+          <DoorGreetingSettings
+            suffix={door.suffix}
+            hasSound={door.has_sound}
+            playSound={door.play_sound}
           />
         </section>
         {mine && (

@@ -40,6 +40,13 @@ import {
   listDoorEvents,
   openDoor,
 } from "@/lib/actions/door"
+import {
+  deleteDoorSound,
+  getMyDoorGreeting,
+  setDoorSound,
+  setDoorSuffix,
+  uploadDoorSound,
+} from "@/lib/actions/door-greetings"
 import { createLeave, deleteLeave, listLeaves } from "@/lib/actions/leave"
 import {
   getNextMeeting,
@@ -147,6 +154,11 @@ export const actions: Action[] = [
   openDoor,
   listDoorEvents,
   listDoorCards,
+  getMyDoorGreeting,
+  setDoorSuffix,
+  uploadDoorSound,
+  setDoorSound,
+  deleteDoorSound,
   listMeetings,
   getNextMeeting,
   updateMyMeeting,

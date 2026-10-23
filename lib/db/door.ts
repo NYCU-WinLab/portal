@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm"
 import {
   boolean,
   check,
+  customType,
   index,
   integer,
   pgTable,
@@ -67,5 +68,32 @@ export const doorCards = pgTable(
   (table) => [
     index().on(table.holderId),
     check("door_cards_card_id", sql`${table.cardId} ~ '^[0-9]{10}$'`),
+  ]
+)
+
+const bytea = customType<{ data: Buffer }>({ dataType: () => "bytea" })
+
+// How the door greets a member: the suffix after their name on the LED
+// panel ("歡迎 詠翔！！"), and their own short sound, played instead of the
+// lab's default when play_sound is on. version changes with every upload,
+// so the panel knows to fetch the new file.
+export const doorGreetings = pgTable(
+  "door_greetings",
+  {
+    userId: uuid()
+      .primaryKey()
+      .references(() => user.id, { onDelete: "cascade" }),
+    suffix: text(),
+    sound: bytea(),
+    soundType: text(),
+    soundVersion: text(),
+    playSound: boolean().default(false).notNull(),
+    updatedAt: timestamp({ withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    check(
+      "door_greetings_sound_shape",
+      sql`(${table.sound} is null) = (${table.soundVersion} is null) and (${table.sound} is null) = (${table.soundType} is null)`
+    ),
   ]
 )
