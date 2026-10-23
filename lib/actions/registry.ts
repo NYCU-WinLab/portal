@@ -45,6 +45,7 @@ import {
   submitApproveDocument,
 } from "@/lib/actions/approve"
 import type { Action } from "@/lib/actions/define"
+import { listHomePins, setHomePin } from "@/lib/actions/home"
 import {
   getDoorStatus,
   listDoorCards,
@@ -320,4 +321,6 @@ export const actions: Action[] = [
   listAdmins,
   grantAdmin,
   revokeAdmin,
+  listHomePins,
+  setHomePin,
 ]
