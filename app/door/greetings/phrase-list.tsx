@@ -34,8 +34,9 @@ export const dayLabel = (days: number[]) =>
 /** The time slot a new phrase starts in: its group's, or empty for a new one. */
 type Slot = Pick<DoorPhrase, "starts_at" | "ends_at" | "days" | "first_visit">
 
+// First-visit phrases sort first ("0"), then slots by start time.
 const slotKey = (p: Slot) =>
-  p.first_visit ? "first" : `${p.starts_at}-${p.ends_at}-${p.days.join()}`
+  `${p.first_visit ? 0 : 1}-${p.starts_at}-${p.ends_at}-${p.days.join()}`
 
 function PhraseForm({
   phrase,
@@ -227,16 +228,13 @@ export function PhraseList({
       ...(groups.get(slotKey(phrase)) ?? []),
       phrase,
     ])
-  const ordered = [...groups.entries()].sort(([a], [b]) =>
-    a === "first" ? -1 : b === "first" ? 1 : a.localeCompare(b)
-  )
+  const ordered = [...groups.entries()].sort(([a], [b]) => a.localeCompare(b))
   return (
     <div className="flex stagger-rise flex-col gap-10">
       {ordered.map(([key, group]) => {
         const slot = group[0]
-        const title = slot.first_visit
-          ? "今天第一次進門"
-          : `${slot.starts_at} 到 ${slot.ends_at}，${dayLabel(slot.days)}`
+        const time = `${slot.starts_at} 到 ${slot.ends_at}，${dayLabel(slot.days)}`
+        const title = slot.first_visit ? `今天第一次進門，${time}` : time
         return (
           <section key={key} className="flex flex-col gap-2">
             <SectionHeader

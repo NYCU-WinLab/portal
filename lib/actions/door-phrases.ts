@@ -163,7 +163,7 @@ export const updateDoorPhrase = defineAction({
   refreshesDoorPanel: true,
   title: "修改門口問候語",
   description:
-    "Replaces one phrase of the door's spoken greeting pool (door admins); set enabled false to pause it without deleting it.",
+    "Replaces one phrase of the door's spoken greeting pool (door admins); send every field back as list_door_phrases returns it, since a field left out goes back to its default. Set enabled false to pause it without deleting it.",
   kind: "mutation",
   input: fields.extend({ id: z.uuid("找不到這條問候語") }),
   run: async (actor, { id, ...input }) => {
