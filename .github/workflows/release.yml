@@ -46,3 +46,24 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  # Ships the new tag to portal.winlab.tw: carrel-deployd on the Carrel
+  # machine runs deploy/carrel-start.sh and rolls back if web is unhealthy.
+  deploy:
+    needs: image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          mkdir release
+          cp deploy/carrel-start.sh release/
+          echo "sha-${GITHUB_SHA::7}" > release/VERSION
+          tar czf "$RUNNER_TEMP/portal.tar.gz" -C release .
+      - uses: NYCU-WinLab/carrel-deploy@v1
+        with:
+          tenant: winfra
+          app: portal
+          artifact: ${{ runner.temp }}/portal.tar.gz

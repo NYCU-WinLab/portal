@@ -45,6 +45,8 @@ This starts Postgres, runs the migrations once, then serves the portal from `ghc
 > [!IMPORTANT]
 > Put a reverse proxy with TLS in front, at the host in `BETTER_AUTH_URL`. MCP clients only accept an HTTPS resource, and the Keycloak redirect URI must match it.
 
+portal.winlab.tw deploys on every push to `main`. The release workflow pushes the image, then sends a Carrel app release (`winfra/portal`). On the machine, carrel-deployd runs [deploy/carrel-start.sh](deploy/carrel-start.sh): it sets `PORTAL_VERSION` in `/opt/winlab-portal/.env` and waits until web is healthy. A failed health check rolls back to the previous release. The app unit has a drop-in with `Type=notify`, `NotifyAccess=all` and `TimeoutStartSec=300`, so the check waits for the new container.
+
 ## Use
 
 1. In your Keycloak realm, create a confidential OpenID Connect client with the redirect URI `<BETTER_AUTH_URL>/api/auth/callback/keycloak`, and put its ID and secret in `.env`.
