@@ -1,3 +1,5 @@
+import { ChevronDownIcon } from "lucide-react"
+
 import { AvatarStack, type StackPerson } from "@/components/avatar-stack"
 import { EmptyState } from "@/components/empty-state"
 import { ExpandRow } from "@/components/expand-row"
@@ -14,7 +16,7 @@ import { listStandingMeetings } from "@/lib/actions/rooms-series"
 import { requireActor } from "@/lib/auth/session"
 import { dateLabel, taipeiToday } from "@/lib/leave-dates"
 import { DEFAULT_TOPIC, splitTopic } from "@/lib/rooms/meeting"
-import { addDays, addMinutes } from "@/lib/rooms/time"
+import { addDays, addMinutes, occurrencesBetween } from "@/lib/rooms/time"
 
 import { AdminActions } from "./admin-actions"
 import { CancelButton } from "./cancel-button"
@@ -296,8 +298,48 @@ function SeriesRow({
   )
 }
 
+// A standing meeting's week that is not booked yet: quiet, no room.
+function StandingRow({
+  series,
+  date,
+  owners,
+  people,
+}: {
+  series: Series
+  date: string
+  owners: Owners
+  people: People
+}) {
+  return (
+    <ExpandRow
+      summary={
+        <span className="flex flex-col gap-1 text-muted-foreground sm:flex-row sm:gap-4">
+          <When date={date} aside={series.startTime} />
+          <span className="flex min-w-0 flex-1 gap-3">
+            <Topic topic={series.title} owners={owners} />
+            <span className="ml-auto shrink-0">未訂</span>
+          </span>
+        </span>
+      }
+    >
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-3 text-muted-foreground sm:pl-38">
+        <span>
+          {series.startTime} 到{" "}
+          {addMinutes(series.startTime, series.durationMinutes)}
+        </span>
+        <span>建立者 {series.createdByName}</span>
+        {series.attendees.length > 0 && (
+          <AvatarStack people={crowd(series.attendees, people)} />
+        )}
+      </div>
+    </ExpandRow>
+  )
+}
+
 type Entry =
-  { at: string; lab: ScheduledMeeting } | { at: string; booking: Booking }
+  | { at: string; lab: ScheduledMeeting }
+  | { at: string; booking: Booking }
+  | { at: string; standing: Series; date: string }
 
 const monthOf = (date: string) => `${Number(date.slice(5, 7))} 月`
 
@@ -342,7 +384,22 @@ export default async function MeetingsPage() {
     members.map((m) => [m.email.toLowerCase(), { id: m.id, name: m.name }])
   )
   // Lab weeks carry their own Teams meeting, so their bookings are left out.
+  const horizon = addDays(today, BOOKING_DAYS - 1)
+  // A standing meeting's later weeks, booked 7 days ahead, are on the list
+  // before they are booked. A day that has a booking, kept or cancelled,
+  // shows that instead.
+  const held = new Set(
+    bookings.flatMap((b) => (b.seriesId ? [`${b.seriesId} ${b.date}`] : []))
+  )
+  const upcoming = series
+    .filter((s) => s.active)
+    .flatMap((s) =>
+      occurrencesBetween(s, today, horizon)
+        .filter((date) => !held.has(`${s.id} ${date}`))
+        .map((date) => ({ at: `${date} ${s.startTime}`, standing: s, date }))
+    )
   const timeline: Entry[] = [
+    ...upcoming,
     ...meetings.map((lab) => ({ at: `${lab.date} ${lab.startsAt}`, lab })),
     ...bookings
       .filter((b) => b.status === "booked" && !b.labMeetingId)
@@ -351,7 +408,6 @@ export default async function MeetingsPage() {
         booking,
       })),
   ].sort((a, b) => a.at.localeCompare(b.at))
-  const horizon = addDays(today, BOOKING_DAYS - 1)
   const months = [
     ...new Set(
       timeline
@@ -373,7 +429,15 @@ export default async function MeetingsPage() {
   )
 
   const renderEntry = (entry: Entry) =>
-    "lab" in entry ? (
+    "standing" in entry ? (
+      <StandingRow
+        key={`${entry.standing.id}-${entry.date}`}
+        series={entry.standing}
+        date={entry.date}
+        owners={owners}
+        people={people}
+      />
+    ) : "lab" in entry ? (
       <MeetingRow
         key={`lab-${entry.lab.date}`}
         meeting={entry.lab}
@@ -475,9 +539,15 @@ export default async function MeetingsPage() {
           </section>
         )}
         {past.length > 0 && (
-          <section className="flex flex-col gap-2">
-            <SectionHeader title="過去的實驗室會議" />
-            <ul className="flex stagger-rise flex-col">
+          <details className="group flex flex-col gap-2">
+            <summary className="flex cursor-pointer list-none items-center gap-2 font-semibold [&::-webkit-details-marker]:hidden">
+              過去的實驗室會議
+              <span className="font-normal text-muted-foreground tabular-nums">
+                {past.length}
+              </span>
+              <ChevronDownIcon className="size-4 text-muted-foreground transition-transform duration-state group-open:rotate-180" />
+            </summary>
+            <ul className="mt-2 flex flex-col">
               {past.map((meeting) => (
                 <MeetingRow
                   key={meeting.date}
@@ -486,7 +556,7 @@ export default async function MeetingsPage() {
                 />
               ))}
             </ul>
-          </section>
+          </details>
         )}
       </div>
     </PortalShell>
