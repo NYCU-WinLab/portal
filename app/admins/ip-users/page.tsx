@@ -23,7 +23,7 @@ export default async function IpUsersPage() {
   const { settings, entries } = await runAction(listIpUsers, actor, {})
 
   return (
-    <PortalShell page={page} nav={nav} layout="wide">
+    <PortalShell page={page} nav={nav}>
       <div className="flex flex-col gap-8">
         <PageHeader title="IP 使用者" />
         {settings ? (

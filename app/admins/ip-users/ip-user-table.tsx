@@ -111,7 +111,7 @@ export function IpUserTable({ entries }: { entries: Entry[] }) {
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap gap-2">
         <Input
-          className="w-64"
+          className="min-w-0 flex-1"
           placeholder="搜尋 IP、使用者或備註"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
@@ -141,15 +141,21 @@ export function IpUserTable({ entries }: { entries: Entry[] }) {
             key={e.id}
             className="flex min-h-14 items-center gap-4 border-b border-border py-2"
           >
-            <span className="w-32 shrink-0 font-mono tabular-nums">{e.ip}</span>
-            <span className="w-40 shrink-0 truncate">{e.userName}</span>
-            <span className="w-24 shrink-0 text-muted-foreground">
+            <span className="w-40 shrink-0 font-mono whitespace-nowrap tabular-nums">
+              {e.ip}
+            </span>
+            <span className="flex min-w-0 flex-1 flex-col">
+              <span className="truncate">{e.userName}</span>
+              {e.notes && (
+                <span className="truncate text-muted-foreground">
+                  {e.notes}
+                </span>
+              )}
+            </span>
+            <span className="w-20 shrink-0 text-muted-foreground">
               {IP_USER_CATEGORIES[
                 e.category as keyof typeof IP_USER_CATEGORIES
               ] ?? e.category}
-            </span>
-            <span className="min-w-0 flex-1 truncate text-muted-foreground">
-              {e.notes}
             </span>
             <EntryForm entry={e} />
             <ConfirmDialog
