@@ -79,7 +79,7 @@ export function groupsApiFromEnv(): GroupsApi | null {
         return await accessToken(key)
       } catch (error) {
         throw new GroupsCredentialError(
-          "無法取得 Google 權杖，請通知 portal 管理員",
+          "無法取得 Google 權杖，請通知 Portal 管理員",
           error instanceof Error ? error.message : String(error)
         )
       }
