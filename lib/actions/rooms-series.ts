@@ -19,7 +19,12 @@ import {
 import { sweepMeetingRequests } from "@/lib/actions/rooms-meetings"
 import { mailBody } from "@/lib/mail-body"
 import { db } from "@/lib/db"
-import { roomBookings, roomDailyRuns, roomSeries, user } from "@/lib/db/schema"
+import {
+  meetings,
+  meetingDailyRuns,
+  standingMeetings,
+  user,
+} from "@/lib/db/schema"
 import { epicIssues, getEpic } from "@/lib/gitlab"
 import { projectGroups } from "@/lib/keycloak"
 import { bookingConfigured } from "@/lib/meetingroom"
@@ -50,7 +55,7 @@ import {
 
 const LEAD_DAYS = 7
 
-type Series = typeof roomSeries.$inferSelect
+type Series = typeof standingMeetings.$inferSelect
 
 const rule = (series: Series) => ({
   weekday: series.weekday,
@@ -67,10 +72,10 @@ export const listStandingMeetings = defineAction({
   input: z.object({}),
   run: async () => {
     const rows = await db
-      .select({ series: roomSeries, createdByName: user.name })
-      .from(roomSeries)
-      .innerJoin(user, eq(user.id, roomSeries.createdBy))
-      .orderBy(asc(roomSeries.weekday), asc(roomSeries.startTime))
+      .select({ series: standingMeetings, createdByName: user.name })
+      .from(standingMeetings)
+      .innerJoin(user, eq(user.id, standingMeetings.createdBy))
+      .orderBy(asc(standingMeetings.weekday), asc(standingMeetings.startTime))
     const today = todayInTaipei()
     const next = new Map(
       rows.map(({ series }) => [
@@ -118,13 +123,13 @@ export const listStandingMeetings = defineAction({
  */
 async function bookOccurrence(series: Series, date: string) {
   const [held] = await db
-    .select({ id: roomBookings.id })
-    .from(roomBookings)
+    .select({ id: meetings.id })
+    .from(meetings)
     .where(
       and(
-        eq(roomBookings.seriesId, series.id),
-        eq(roomBookings.date, date),
-        eq(roomBookings.status, "booked")
+        eq(meetings.seriesId, series.id),
+        eq(meetings.date, date),
+        eq(meetings.status, "booked")
       )
     )
   if (held) return null
@@ -168,7 +173,7 @@ async function bookOccurrence(series: Series, date: string) {
     return null
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error)
-    emitErrorLog(error, { "room_series.id": series.id })
+    emitErrorLog(error, { "standing_meetings.id": series.id })
     await queueMail(db, {
       to: [owner.email],
       subject: `[WinLab 會議] 固定會議沒訂到教室：${series.title}`,
@@ -264,7 +269,7 @@ export async function createStandingMeeting(
     if (input.start_date < today) throw new Error("不能從過去的日期開始")
   }
   const [series] = await db
-    .insert(roomSeries)
+    .insert(standingMeetings)
     .values({
       title: composeTopic(prefix, input.title),
       weekday: input.weekday,
@@ -303,8 +308,8 @@ export async function createStandingMeeting(
 async function ownSeries(actorId: string, id: string) {
   const [series] = await db
     .select()
-    .from(roomSeries)
-    .where(eq(roomSeries.id, id))
+    .from(standingMeetings)
+    .where(eq(standingMeetings.id, id))
   if (!series) throw new Error("找不到這個固定會議")
   if (series.createdBy !== actorId) throw new Error("只能改自己建立的固定會議")
   return series
@@ -319,7 +324,10 @@ export const setStandingMeetingActive = defineAction({
   input: z.object({ id: z.uuid(), active: z.boolean() }),
   run: async (actor, { id, active }) => {
     await ownSeries(actor.userId, id)
-    await db.update(roomSeries).set({ active }).where(eq(roomSeries.id, id))
+    await db
+      .update(standingMeetings)
+      .set({ active })
+      .where(eq(standingMeetings.id, id))
     return { id, active }
   },
 })
@@ -333,7 +341,7 @@ export const deleteStandingMeeting = defineAction({
   input: z.object({ id: z.uuid() }),
   run: async (actor, { id }) => {
     await ownSeries(actor.userId, id)
-    await db.delete(roomSeries).where(eq(roomSeries.id, id))
+    await db.delete(standingMeetings).where(eq(standingMeetings.id, id))
     return { deleted: true }
   },
 })
@@ -341,20 +349,23 @@ export const deleteStandingMeeting = defineAction({
 /**
  * The daily run, once a day from 04:30 Taipei: books every active series'
  * occurrence 7 days out, then settles and reports Teams meetings that
- * failed. The day is claimed in room_daily_runs first, so a restart or a
+ * failed. The day is claimed in meeting_daily_runs first, so a restart or a
  * second process never runs it twice.
  */
 export async function runDailyRooms() {
   const today = todayInTaipei()
   const claimed = await db
-    .insert(roomDailyRuns)
+    .insert(meetingDailyRuns)
     .values({ date: today })
     .onConflictDoNothing()
     .returning()
   if (!claimed.length) return
   const date = addDays(today, LEAD_DAYS)
   const due = (
-    await db.select().from(roomSeries).where(eq(roomSeries.active, true))
+    await db
+      .select()
+      .from(standingMeetings)
+      .where(eq(standingMeetings.active, true))
   ).filter((series) =>
     occurrencesBetween(rule(series), date, date).includes(date)
   )

@@ -7,11 +7,11 @@ import { joinUrl } from "@/lib/actions/rooms-meetings"
 import { db } from "@/lib/db"
 import {
   account,
-  meetingQuestioners,
-  meetings,
+  labMeetingQuestioners,
+  labMeetings,
   papers,
   presenters,
-  roomBookings,
+  meetings,
   semesters,
   user,
 } from "@/lib/db/schema"
@@ -106,23 +106,23 @@ export async function assignQuestioners(tx: Tx) {
   const today = taipeiToday()
   const schedule = await tx
     .select({
-      id: meetings.id,
-      date: meetings.date,
-      kind: meetings.kind,
-      presenterId: meetings.presenterId,
+      id: labMeetings.id,
+      date: labMeetings.date,
+      kind: labMeetings.kind,
+      presenterId: labMeetings.presenterId,
     })
-    .from(meetings)
-    .orderBy(asc(meetings.date))
+    .from(labMeetings)
+    .orderBy(asc(labMeetings.date))
   const roster = (await presenterRoster(tx)).filter((row) => row.inRotation)
   const pool = roster.map((row) => row.userId)
 
   const seatRows = await tx
     .select({
-      meetingId: meetingQuestioners.meetingId,
-      userId: meetingQuestioners.userId,
-      manual: meetingQuestioners.manual,
+      meetingId: labMeetingQuestioners.labMeetingId,
+      userId: labMeetingQuestioners.userId,
+      manual: labMeetingQuestioners.manual,
     })
-    .from(meetingQuestioners)
+    .from(labMeetingQuestioners)
   const seats = new Map<string, { userId: string; manual: boolean }[]>()
   for (const { meetingId, ...seat } of seatRows)
     seats.set(meetingId, [...(seats.get(meetingId) ?? []), seat])
@@ -142,9 +142,9 @@ export async function assignQuestioners(tx: Tx) {
     )
     seats.set(row.id, kept)
   }
-  await tx.delete(meetingQuestioners).where(
+  await tx.delete(labMeetingQuestioners).where(
     inArray(
-      meetingQuestioners.meetingId,
+      labMeetingQuestioners.labMeetingId,
       schedule.filter((row) => row.date >= today).map((row) => row.id)
     )
   )
@@ -193,12 +193,12 @@ export async function assignQuestioners(tx: Tx) {
     .filter((row) => row.date >= today)
     .flatMap((row) =>
       (seats.get(row.id) ?? []).map((seat) => ({
-        meetingId: row.id,
+        labMeetingId: row.id,
         userId: seat.userId,
         manual: seat.manual,
       }))
     )
-  if (inserts.length) await tx.insert(meetingQuestioners).values(inserts)
+  if (inserts.length) await tx.insert(labMeetingQuestioners).values(inserts)
 }
 
 /**
@@ -219,48 +219,46 @@ export async function changeSchedule<T>(change: (tx: Tx) => Promise<T>) {
 export async function readSchedule(where?: { fromDate?: string }) {
   const rows = await db
     .select({
-      id: meetings.id,
-      date: meetings.date,
-      kind: meetings.kind,
-      holiday: meetings.holiday,
-      presenterId: meetings.presenterId,
+      id: labMeetings.id,
+      date: labMeetings.date,
+      kind: labMeetings.kind,
+      holiday: labMeetings.holiday,
+      presenterId: labMeetings.presenterId,
       presenterName: user.name,
-      paperId: meetings.paperId,
+      paperId: labMeetings.paperId,
       paperTitle: papers.title,
       paperUrl: papers.url,
       paperVenue: papers.venue,
-      title: meetings.title,
-      slidesUrl: meetings.slidesUrl,
-      recordingUrl: meetings.recordingUrl,
-      notes: meetings.notes,
-      location: meetings.location,
-      startsAt: meetings.startsAt,
+      title: labMeetings.title,
+      slidesUrl: labMeetings.slidesUrl,
+      recordingUrl: labMeetings.recordingUrl,
+      notes: labMeetings.notes,
+      location: labMeetings.location,
+      startsAt: labMeetings.startsAt,
     })
-    .from(meetings)
-    .leftJoin(user, eq(user.id, meetings.presenterId))
-    .leftJoin(papers, eq(papers.id, meetings.paperId))
-    .where(where?.fromDate ? gt(meetings.date, where.fromDate) : undefined)
-    .orderBy(asc(meetings.date))
+    .from(labMeetings)
+    .leftJoin(user, eq(user.id, labMeetings.presenterId))
+    .leftJoin(papers, eq(papers.id, labMeetings.paperId))
+    .where(where?.fromDate ? gt(labMeetings.date, where.fromDate) : undefined)
+    .orderBy(asc(labMeetings.date))
   const terms = await db
     .select({ start: semesters.start, weeks: semesters.weeks })
     .from(semesters)
   const questioners = await db
     .select({
-      meetingId: meetingQuestioners.meetingId,
-      userId: meetingQuestioners.userId,
+      meetingId: labMeetingQuestioners.labMeetingId,
+      userId: labMeetingQuestioners.userId,
       name: user.name,
-      manual: meetingQuestioners.manual,
+      manual: labMeetingQuestioners.manual,
     })
-    .from(meetingQuestioners)
-    .innerJoin(user, eq(user.id, meetingQuestioners.userId))
+    .from(labMeetingQuestioners)
+    .innerJoin(user, eq(user.id, labMeetingQuestioners.userId))
     .orderBy(asc(user.name))
   // The Teams meeting the Friday announcement made for a week.
   const teams = await db
-    .select({ id: roomBookings.id, meetingId: roomBookings.meetingId })
-    .from(roomBookings)
-    .where(
-      and(isNotNull(roomBookings.meetingId), eq(roomBookings.status, "booked"))
-    )
+    .select({ id: meetings.id, meetingId: meetings.labMeetingId })
+    .from(meetings)
+    .where(and(isNotNull(meetings.labMeetingId), eq(meetings.status, "booked")))
   return rows.map((row) => ({
     id: row.id,
     date: row.date,
@@ -301,8 +299,8 @@ export type ScheduledMeeting = Awaited<ReturnType<typeof readSchedule>>[number]
 export async function meetingOn(tx: Tx, date: string) {
   const [row] = await tx
     .select()
-    .from(meetings)
-    .where(eq(meetings.date, date))
+    .from(labMeetings)
+    .where(eq(labMeetings.date, date))
     .for("update")
   if (!row) throw new Error(`${date} 沒有排會議`)
   return row

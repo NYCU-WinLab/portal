@@ -16,7 +16,7 @@ import {
 import type { Mail } from "@/lib/mail"
 import { mailBody } from "@/lib/mail-body"
 import { db } from "@/lib/db"
-import { roomBookings, user } from "@/lib/db/schema"
+import { meetings, user } from "@/lib/db/schema"
 import {
   epicIssues,
   epicsConfigured,
@@ -121,31 +121,31 @@ export const listRoomAvailability = defineAction({
 async function bookingsBetween(from: string, to: string) {
   const rows = await db
     .select({
-      id: roomBookings.id,
-      date: roomBookings.date,
-      startTime: roomBookings.startTime,
-      endTime: roomBookings.endTime,
-      room: roomBookings.room,
-      online: roomBookings.online,
-      status: roomBookings.status,
-      title: roomBookings.title,
-      agenda: roomBookings.agenda,
-      groupName: roomBookings.groupName,
-      attendees: roomBookings.attendees,
-      seriesId: roomBookings.seriesId,
-      labMeetingId: roomBookings.meetingId,
-      requestedBy: roomBookings.requestedBy,
+      id: meetings.id,
+      date: meetings.date,
+      startTime: meetings.startTime,
+      endTime: meetings.endTime,
+      room: meetings.room,
+      online: meetings.online,
+      status: meetings.status,
+      title: meetings.title,
+      agenda: meetings.agenda,
+      groupName: meetings.groupName,
+      attendees: meetings.attendees,
+      seriesId: meetings.seriesId,
+      labMeetingId: meetings.labMeetingId,
+      requestedBy: meetings.requestedBy,
       requestedByName: user.name,
-      cancelledAt: roomBookings.cancelledAt,
+      cancelledAt: meetings.cancelledAt,
     })
-    .from(roomBookings)
-    .innerJoin(user, eq(user.id, roomBookings.requestedBy))
-    .where(and(gte(roomBookings.date, from), lte(roomBookings.date, to)))
-    .orderBy(asc(roomBookings.date), asc(roomBookings.startTime))
-  const meetings = await meetingsOf(rows.map((row) => row.id))
+    .from(meetings)
+    .innerJoin(user, eq(user.id, meetings.requestedBy))
+    .where(and(gte(meetings.date, from), lte(meetings.date, to)))
+    .orderBy(asc(meetings.date), asc(meetings.startTime))
+  const teams = await meetingsOf(rows.map((row) => row.id))
   return rows.map((row) => ({
     ...row,
-    meeting: row.online ? (meetings.get(row.id) ?? null) : null,
+    meeting: row.online ? (teams.get(row.id) ?? null) : null,
   }))
 }
 
@@ -325,7 +325,7 @@ export async function resolveAttendees(input: {
   return out
 }
 
-export type Booking = typeof roomBookings.$inferSelect
+export type Booking = typeof meetings.$inferSelect
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0]
 
 /** Where a booking happens, as members read it. */
@@ -351,7 +351,7 @@ export function bookingCalendar(
       attendees: booking.attendees,
       // A mailing list stands for the whole lab: replies would all land on
       // the organizer.
-      rsvp: !booking.meetingId,
+      rsvp: !booking.labMeetingId,
       joinUrl:
         booking.online && method === "REQUEST" ? joinUrl(booking.id) : null,
     }),
@@ -416,7 +416,7 @@ export type NewBooking = {
   deliverables: string[]
   seriesId?: string
   /** The Monday lab meeting this booking is for. */
-  meetingId?: string
+  labMeetingId?: string
   place?: string
   /** Replaces the usual invite, as the lab meeting's announcement does. */
   invite?: (booking: Booking) => Mail
@@ -440,7 +440,7 @@ export async function placeBooking(input: NewBooking) {
     booking = await db.transaction(async (tx) => {
       await input.inTransaction?.(tx)
       const [created] = await tx
-        .insert(roomBookings)
+        .insert(meetings)
         .values({
           externalId,
           room: input.room,
@@ -456,7 +456,7 @@ export async function placeBooking(input: NewBooking) {
           issueRefs: input.issueRefs,
           deliverables: input.deliverables,
           seriesId: input.seriesId,
-          meetingId: input.meetingId,
+          labMeetingId: input.labMeetingId,
           place: input.place,
           requestedBy: input.organizer.id,
         })
@@ -607,12 +607,12 @@ export const cancelMeeting = defineAction({
   run: async (actor, { id }) => {
     const [booking] = await db
       .select()
-      .from(roomBookings)
-      .where(and(eq(roomBookings.id, id), eq(roomBookings.status, "booked")))
+      .from(meetings)
+      .where(and(eq(meetings.id, id), eq(meetings.status, "booked")))
     if (!booking) throw new Error("找不到這筆預約，或已經取消")
     if (booking.requestedBy !== actor.userId)
       throw new Error("只能取消自己的預約")
-    if (booking.meetingId)
+    if (booking.labMeetingId)
       throw new Error("這是週一 Lab Meeting 的會議，請到 /meetings 請管理員改")
     return cancelBooking(booking, actor.userId)
   },
@@ -633,18 +633,16 @@ export async function cancelBooking(booking: Booking, cancelledBy: string) {
   const organizer = await organizerOf(booking.requestedBy)
   const cancelled = await db.transaction(async (tx) => {
     const [row] = await tx
-      .update(roomBookings)
+      .update(meetings)
       .set({
         status: "cancelled",
         cancelledAt: sql`now()`,
         cancelledBy,
         // A CANCEL must outrank the REQUEST, or calendars ignore it.
-        inviteSequence: sql`${roomBookings.inviteSequence} + 1`,
+        inviteSequence: sql`${meetings.inviteSequence} + 1`,
       })
       // Two cancels at once: only the first changes the row.
-      .where(
-        and(eq(roomBookings.id, booking.id), eq(roomBookings.status, "booked"))
-      )
+      .where(and(eq(meetings.id, booking.id), eq(meetings.status, "booked")))
       .returning()
     if (!row) throw new Error("這筆預約已經取消")
     await queueMail(tx, inviteMail(row, organizer, "CANCEL"))
@@ -659,16 +657,16 @@ export async function seriesBookings(seriesIds: string[], dates: string[]) {
   if (!seriesIds.length || !dates.length) return []
   return db
     .select({
-      seriesId: roomBookings.seriesId,
-      date: roomBookings.date,
-      room: roomBookings.room,
+      seriesId: meetings.seriesId,
+      date: meetings.date,
+      room: meetings.room,
     })
-    .from(roomBookings)
+    .from(meetings)
     .where(
       and(
-        eq(roomBookings.status, "booked"),
-        inArray(roomBookings.seriesId, seriesIds),
-        inArray(roomBookings.date, dates)
+        eq(meetings.status, "booked"),
+        inArray(meetings.seriesId, seriesIds),
+        inArray(meetings.date, dates)
       )
     )
 }

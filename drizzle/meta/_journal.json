@@ -239,6 +239,13 @@
       "when": 1792771939287,
       "tag": "0033_door_sound_version",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1792772563825,
+      "tag": "0034_meetings_tables",
+      "breakpoints": true
     }
   ]
 }

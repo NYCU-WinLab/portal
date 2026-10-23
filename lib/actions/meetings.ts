@@ -9,7 +9,7 @@ import {
   readSchedule,
   type Tx,
 } from "@/lib/actions/meetings-shared"
-import { meetings, papers } from "@/lib/db/schema"
+import { labMeetings, papers } from "@/lib/db/schema"
 import { taipeiToday } from "@/lib/leave-dates"
 
 export const isoDate = z
@@ -99,7 +99,7 @@ export const updateMyLabMeeting = defineAction({
         !(await isAdmin(actor, "meetings"))
       )
         throw new Error(`${date} 不是你報告`)
-      const change: Partial<typeof meetings.$inferInsert> = {}
+      const change: Partial<typeof labMeetings.$inferInsert> = {}
       if (paperId !== undefined) {
         if (meeting.kind !== "regular" && paperId !== null)
           throw new Error("只有一般報告週選論文清單")
@@ -115,7 +115,10 @@ export const updateMyLabMeeting = defineAction({
         if (value !== undefined)
           change[key as keyof typeof links] = value as string | null
       if (Object.keys(change).length)
-        await tx.update(meetings).set(change).where(eq(meetings.id, meeting.id))
+        await tx
+          .update(labMeetings)
+          .set(change)
+          .where(eq(labMeetings.id, meeting.id))
       return { date }
     }),
 })

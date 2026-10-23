@@ -20,9 +20,9 @@ import { joinUrl } from "@/lib/actions/rooms-meetings"
 import { db } from "@/lib/db"
 import {
   admins,
-  meetingMailRuns,
+  labMeetingMailRuns,
+  labMeetings,
   meetings,
-  roomBookings,
   user,
 } from "@/lib/db/schema"
 import type { Mail } from "@/lib/mail"
@@ -160,7 +160,7 @@ class AlreadySent extends Error {}
  */
 async function claim(tx: Tx, date: string, kind: Kind) {
   const rows = await tx
-    .insert(meetingMailRuns)
+    .insert(labMeetingMailRuns)
     .values({ date, kind })
     .onConflictDoNothing()
     .returning()
@@ -176,12 +176,14 @@ async function claimCurrent(tx: Tx, meeting: ScheduledMeeting, kind: Kind) {
   await tx.execute(sql`select pg_advisory_xact_lock(hashtext('meetings'))`)
   const [now] = await tx
     .select({
-      startsAt: meetings.startsAt,
-      location: meetings.location,
-      kind: meetings.kind,
+      startsAt: labMeetings.startsAt,
+      location: labMeetings.location,
+      kind: labMeetings.kind,
     })
-    .from(meetings)
-    .where(and(eq(meetings.id, meeting.id), eq(meetings.date, meeting.date)))
+    .from(labMeetings)
+    .where(
+      and(eq(labMeetings.id, meeting.id), eq(labMeetings.date, meeting.date))
+    )
   if (
     !now ||
     now.startsAt.slice(0, 5) !== meeting.startsAt ||
@@ -246,12 +248,9 @@ async function organizerFor(meeting: ScheduledMeeting) {
 async function heldBooking(meetingId: string) {
   const [held] = await db
     .select()
-    .from(roomBookings)
+    .from(meetings)
     .where(
-      and(
-        eq(roomBookings.meetingId, meetingId),
-        eq(roomBookings.status, "booked")
-      )
+      and(eq(meetings.labMeetingId, meetingId), eq(meetings.status, "booked"))
     )
   return held ?? null
 }
@@ -285,7 +284,7 @@ async function announce(
       agenda: recordAgenda(meeting),
       issueRefs: [],
       deliverables: [],
-      meetingId: meeting.id,
+      labMeetingId: meeting.id,
       inTransaction: (tx) => claimCurrent(tx, meeting, "announce"),
       invite: (booking) => ({
         ...announcement(meeting, next, booking),
@@ -312,19 +311,16 @@ async function announce(
 export async function releaseWeek(tx: Tx, meetingId: string, dates: string[]) {
   const [held] = await tx
     .select()
-    .from(roomBookings)
+    .from(meetings)
     .where(
-      and(
-        eq(roomBookings.meetingId, meetingId),
-        eq(roomBookings.status, "booked")
-      )
+      and(eq(meetings.labMeetingId, meetingId), eq(meetings.status, "booked"))
     )
   await tx
-    .delete(meetingMailRuns)
+    .delete(labMeetingMailRuns)
     .where(
       and(
-        inArray(meetingMailRuns.date, dates),
-        eq(meetingMailRuns.kind, "announce")
+        inArray(labMeetingMailRuns.date, dates),
+        eq(labMeetingMailRuns.kind, "announce")
       )
     )
   return held ?? null
