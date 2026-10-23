@@ -32,10 +32,7 @@ export function ClipList({
           key={clip.id}
           className="flex min-h-14 items-center gap-4 border-b border-border py-2"
         >
-          <PlayButton
-            src={`/door/voice/files/${clip.id}`}
-            label={clip.text}
-          />
+          <PlayButton src={`/door/voice/files/${clip.id}`} label={clip.text} />
           <span className="min-w-0 flex-1 truncate">{clip.text}</span>
           <ConfirmDialog
             trigger={

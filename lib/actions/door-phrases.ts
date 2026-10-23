@@ -265,10 +265,15 @@ export async function panelPhrases() {
 
 /** Every text the door may speak as one clip: the rules' parts, the default
  * "Hi，", and each name it greets, ending in "。" and, when some rule says
- * more after the name, in "，". */
-export async function voiceTexts() {
+ * more after the name, in "，". paused also counts paused rules and members
+ * who turned the spoken Hi off, whose clips are kept for when they return. */
+export async function voiceTexts({ paused = false } = {}) {
   const [phrases, members, cards, greetings] = await Promise.all([
-    panelPhrases(),
+    paused
+      ? db
+          .select({ before: doorPhrases.before, after: doorPhrases.after })
+          .from(doorPhrases)
+      : panelPhrases(),
     db.select({ id: user.id, name: user.name }).from(user),
     db
       .select({ holderId: doorCards.holderId, name: doorCards.holderName })
@@ -287,7 +292,7 @@ export async function voiceTexts() {
   const names = new Set<string>()
   const add = (label: string, userId: string | null) => {
     const greeting = userId ? byUser.get(userId) : undefined
-    if (!label || greeting?.speakName === false) return
+    if (!label || (!paused && greeting?.speakName === false)) return
     names.add(spokenName(label, greeting?.suffix ?? null))
   }
   for (const member of members) add(panelName(member.name), member.id)
@@ -309,10 +314,12 @@ export async function panelVoice() {
   )
 }
 
-/** Deletes the clips for texts the door no longer says: a deleted rule, a
- * renamed member. The voice job calls this before it asks what is missing. */
+/** Deletes the clips for texts the door can no longer say: a deleted rule,
+ * a renamed member. A paused rule or a member who turned the spoken Hi off
+ * keeps theirs, so turning it back on, even while this runs, finds its
+ * clips. The voice job calls this before it asks what is missing. */
 export async function pruneVoiceClips() {
-  const needed = await voiceTexts()
+  const needed = await voiceTexts({ paused: true })
   // voiceTexts always holds the default "Hi，" parts; an empty list means
   // something went wrong, so keep every clip.
   if (needed.length === 0) return 0
