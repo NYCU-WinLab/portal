@@ -18,6 +18,7 @@ function readKey(): Key | null {
   try {
     return JSON.parse(Buffer.from(raw, "base64").toString("utf8")) as Key
   } catch {
+    console.error("[groups] GOOGLE_GROUPS_SA_KEY is not base64 JSON")
     return null
   }
 }
@@ -49,7 +50,10 @@ async function accessToken(key: Key) {
       signal: AbortSignal.timeout(10_000),
     }
   )
-  if (!response.ok) throw new Error(`Google token ${response.status}`)
+  if (!response.ok) {
+    cached = null
+    throw new Error(`Google token ${response.status}`)
+  }
   const body = (await response.json()) as {
     access_token: string
     expires_in: number

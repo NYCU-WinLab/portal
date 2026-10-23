@@ -8,6 +8,7 @@ import { groupManagers, groupMembershipAudit, user } from "@/lib/db/schema"
 import { type AuditInsert, splitDenied } from "@/lib/groups/audit"
 import { visibleGroups } from "@/lib/groups/authorize"
 import { fetchCohorts } from "@/lib/groups/cohorts"
+import { failure } from "@/lib/groups/failure"
 import { getGroup, listDomainGroups } from "@/lib/groups/google"
 import { groupsApiFromEnv } from "@/lib/groups/google-auth"
 import {
@@ -18,6 +19,7 @@ import {
   removeFromGroup,
 } from "@/lib/groups/membership"
 import { isManageableGroup } from "@/lib/groups/scope"
+import { labDirectory } from "@/lib/keycloak"
 
 // Google mailing lists (/groups). The member list lives only in Google;
 // the portal reads it live and changes MEMBER rows only, never a gcp-*
@@ -226,7 +228,10 @@ export const setMailGroupManager = defineAction({
     if (input.manager) {
       const api = groupsApiFromEnv()
       if (!api) throw new Error("Google 群組整合尚未設定")
-      const group = await getGroup(api, id)
+      const group = await getGroup(api, id).catch((error) => {
+        console.error("[groups] group read failed", error)
+        throw new Error("讀不到這個 Google 群組，請稍後再試")
+      })
       if (!group || !isManageableGroup(group.email, api.domain))
         throw new Error("這個群組不存在，或不開放給 portal 管理")
       await db
@@ -250,7 +255,7 @@ export const listCohorts = defineAction({
   name: "list_cohorts",
   title: "入學年度名單",
   description:
-    "The lab's cohorts from Keycloak (/lab-member/114, 113, …), newest first, each with its members' names and addresses, for adding a whole cohort to a mailing list. Managers of any list and portal admins only. null when Keycloak cannot be read in time.",
+    "The lab's cohorts from Keycloak (/lab-member/114, 113, …), newest first, each with its current members' names and addresses (alumni left out), for adding a whole cohort to a mailing list. Managers of any list and portal admins only. null when Keycloak cannot be read in time.",
   kind: "query",
   input: z.object({}),
   run: async (actor) => {
@@ -264,6 +269,19 @@ export const listCohorts = defineAction({
           .limit(1)
       ).length > 0
     if (!any) throw new Error("只有群組信管理者可以看")
-    return { cohorts: await fetchCohorts() }
+    const [cohorts, directory] = await Promise.all([
+      fetchCohorts(),
+      labDirectory().catch(() => null),
+    ])
+    // Alumni stay in their cohort group but no longer want lab mail.
+    return {
+      cohorts:
+        cohorts?.map((cohort) => ({
+          ...cohort,
+          members: cohort.members.filter(
+            (m) => directory?.get(m.id)?.status !== "alumni"
+          ),
+        })) ?? null,
+    }
   },
 })
