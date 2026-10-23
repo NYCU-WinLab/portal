@@ -9,6 +9,7 @@ import {
   meetingsOf,
   requestMeeting,
 } from "@/lib/actions/rooms-meetings"
+import type { Mail } from "@/lib/mail"
 import { mailBody } from "@/lib/mail-body"
 import { db } from "@/lib/db"
 import { roomBookings, user } from "@/lib/db/schema"
@@ -317,7 +318,35 @@ export async function resolveAttendees(input: {
   return out
 }
 
-type Booking = typeof roomBookings.$inferSelect
+export type Booking = typeof roomBookings.$inferSelect
+
+/** Where a booking happens, as members read it. */
+export const placeOf = (booking: Booking) =>
+  booking.room ? `資工系 ${booking.room}` : (booking.place ?? "線上")
+
+/** A booking's calendar event, for its invite or its cancellation. */
+export function bookingCalendar(
+  booking: Booking,
+  organizer: { name: string; email: string },
+  method: "REQUEST" | "CANCEL"
+) {
+  return {
+    ics: calendarInvite({
+      uid: `rooms-${booking.id}@portal.winlab.tw`,
+      method,
+      sequence: booking.inviteSequence,
+      title: booking.title,
+      location: placeOf(booking),
+      start: taipeiIso(booking.date, booking.startTime),
+      end: taipeiIso(booking.date, booking.endTime),
+      organizer,
+      attendees: booking.attendees,
+      joinUrl:
+        booking.online && method === "REQUEST" ? joinUrl(booking.id) : null,
+    }),
+    icsMethod: method,
+  }
+}
 
 /** The invite (or cancellation) for a booking, to the organizer and every
  * attendee, with the calendar event attached. */
@@ -341,7 +370,7 @@ function inviteMail(
       title: method === "CANCEL" ? `已取消：${booking.title}` : booking.title,
       rows: [
         ["時間", when],
-        ["地點", booking.room ? `資工系 ${booking.room}` : "線上"],
+        ["地點", placeOf(booking)],
         ["發起人", organizer.name],
         ...(booking.attendees.length
           ? [
@@ -355,19 +384,7 @@ function inviteMail(
       paragraphs: booking.agenda ? [booking.agenda] : [],
       action: link ? { label: "加入會議", url: link } : undefined,
     }),
-    ics: calendarInvite({
-      uid: `rooms-${booking.id}@portal.winlab.tw`,
-      method,
-      sequence: booking.inviteSequence,
-      title: booking.title,
-      room: booking.room,
-      start: taipeiIso(booking.date, booking.startTime),
-      end: taipeiIso(booking.date, booking.endTime),
-      organizer,
-      attendees: booking.attendees,
-      joinUrl: link,
-    }),
-    icsMethod: method,
+    ...bookingCalendar(booking, organizer, method),
   }
 }
 
@@ -387,6 +404,11 @@ export type NewBooking = {
   issueRefs: string[]
   deliverables: string[]
   seriesId?: string
+  /** The Monday lab meeting this booking is for. */
+  meetingId?: string
+  place?: string
+  /** Replaces the usual invite, as the lab meeting's announcement does. */
+  invite?: (booking: Booking) => Mail
 }
 
 /**
@@ -420,10 +442,16 @@ export async function placeBooking(input: NewBooking) {
           issueRefs: input.issueRefs,
           deliverables: input.deliverables,
           seriesId: input.seriesId,
+          meetingId: input.meetingId,
+          place: input.place,
           requestedBy: input.organizer.id,
         })
         .returning()
-      await queueMail(tx, inviteMail(created, input.organizer, "REQUEST"))
+      await queueMail(
+        tx,
+        input.invite?.(created) ??
+          inviteMail(created, input.organizer, "REQUEST")
+      )
       return created
     })
   } catch (error) {

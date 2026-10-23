@@ -170,7 +170,7 @@ export function calendarInvite(event: {
   method: "REQUEST" | "CANCEL"
   sequence: number
   title: string
-  room: string | null
+  location: string
   start: string
   end: string
   organizer: { name: string; email: string }
@@ -190,7 +190,7 @@ export function calendarInvite(event: {
     `DTSTART:${icsTime(event.start)}`,
     `DTEND:${icsTime(event.end)}`,
     `SUMMARY:${icsText(event.title)}`,
-    `LOCATION:${icsText(event.room ? `資工系 ${event.room}` : "線上會議")}`,
+    `LOCATION:${icsText(event.location)}`,
     `ORGANIZER;CN=${icsParam(event.organizer.name)}:mailto:${event.organizer.email}`,
     ...event.attendees.map(
       (a) =>

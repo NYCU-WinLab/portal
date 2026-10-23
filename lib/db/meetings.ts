@@ -135,3 +135,16 @@ export const meetingQuestioners = pgTable(
     index().on(table.userId),
   ]
 )
+
+// The weekly mails already sent, by the Monday they are about (kind title:
+// the presenter's reminder; announce: the lab's announcement), so a restart
+// or a second process never sends one twice.
+export const meetingMailRuns = pgTable(
+  "meeting_mail_runs",
+  {
+    date: date({ mode: "string" }).notNull(),
+    kind: text().notNull(),
+    ranAt: timestamp({ withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.date, table.kind] })]
+)
