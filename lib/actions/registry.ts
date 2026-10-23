@@ -33,6 +33,17 @@ import {
   listAnnouncements,
   updateAnnouncement,
 } from "@/lib/actions/bulletin"
+import {
+  createApproveDocument,
+  deleteApproveDocument,
+  getApproveDocument,
+  getApproveFile,
+  listApproveDocuments,
+  renameApproveDocument,
+  setApproveFields,
+  signApproveDocument,
+  submitApproveDocument,
+} from "@/lib/actions/approve"
 import type { Action } from "@/lib/actions/define"
 import {
   getDoorStatus,
@@ -236,6 +247,15 @@ export const actions: Action[] = [
   createRoomSeries,
   setRoomSeriesActive,
   deleteRoomSeries,
+  listApproveDocuments,
+  getApproveDocument,
+  getApproveFile,
+  createApproveDocument,
+  renameApproveDocument,
+  setApproveFields,
+  submitApproveDocument,
+  signApproveDocument,
+  deleteApproveDocument,
   listMembers,
   listAdmins,
   grantAdmin,
