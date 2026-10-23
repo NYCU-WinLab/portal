@@ -28,5 +28,5 @@ export function playUnlockSound() {
   }
   click(start, 1800, 0.035, 0.25)
   click(start + 0.09, 900, 0.07, 0.35)
-  setTimeout(() => void audio.close(), 600)
+  setTimeout(() => audio.close().catch(() => {}), 600)
 }

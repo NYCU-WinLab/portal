@@ -56,7 +56,11 @@ export function DoorButton({
     idle.current = false
     setFrame(0)
     setPhase("opening")
-    const { error } = await openDoorAction()
+    // A request that never answers (network down, server error) counts as
+    // the door not answering, so the button is ready for another press.
+    const { error } = await openDoorAction().catch(() => ({
+      error: "門禁沒有回應",
+    }))
     if (error) {
       toast.error(error)
       setReachable(false)
@@ -131,10 +135,17 @@ export function DoorButton({
         disabled={!configured || phase === "opening"}
         // The sound starts inside the tap, the only place iOS allows it.
         onClick={() => {
-          if (idle.current) playUnlockSound()
+          const pressed = idle.current
+          // The door first: the sound must never stand in its way.
           void open()
+          if (!pressed) return
+          try {
+            playUnlockSound()
+          } catch {
+            // No sound this time (no Web Audio, or too many contexts).
+          }
         }}
-        className="relative rounded-full outline-none select-none focus-visible:ring-3 focus-visible:ring-ring/50 enabled:cursor-pointer"
+        className="relative rounded-full outline-none select-none focus-visible:ring-3 focus-visible:ring-ring/50 enabled:cursor-pointer disabled:opacity-50"
       >
         <span
           key={reachable ? 0 : shakes}
