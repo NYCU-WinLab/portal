@@ -149,6 +149,12 @@ import {
   uploadReceipt,
 } from "@/lib/actions/receipts"
 import {
+  getMemberAvatar,
+  removeMemberAvatar,
+  removeMyAvatar,
+  setMyAvatar,
+} from "@/lib/actions/avatars"
+import {
   getMySignature,
   getMySignatureImage,
   setMySignature,
@@ -292,6 +298,10 @@ export const actions: Action[] = [
   getMySignatureImage,
   setMySignature,
   setSignatureSettings,
+  setMyAvatar,
+  removeMyAvatar,
+  removeMemberAvatar,
+  getMemberAvatar,
   listRoomAvailability,
   listMeetings,
   listProjectGroups,

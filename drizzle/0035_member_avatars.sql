@@ -1,0 +1,9 @@
+CREATE TABLE "member_avatars" (
+	"user_id" uuid PRIMARY KEY NOT NULL,
+	"small" "bytea" NOT NULL,
+	"large" "bytea" NOT NULL,
+	"version" uuid DEFAULT gen_random_uuid() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+ALTER TABLE "member_avatars" ADD CONSTRAINT "member_avatars_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;

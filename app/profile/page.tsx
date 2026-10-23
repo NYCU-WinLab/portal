@@ -2,6 +2,7 @@ import { FieldList, FieldRow } from "@/components/field-list"
 import { PageHeader, SectionHeader } from "@/components/page-header"
 import { PortalShell } from "@/components/portal-shell"
 import { buttonVariants } from "@/components/ui/button"
+import { getMemberAvatar } from "@/lib/actions/avatars"
 import { errorMessage, runAction } from "@/lib/actions/define"
 import { getBentoStats } from "@/lib/actions/bento"
 import { getMyDoorGreeting } from "@/lib/actions/door-greetings"
@@ -14,6 +15,7 @@ import { requireActor } from "@/lib/auth/session"
 import { ntd } from "@/lib/money"
 import { accountConsoleUrl } from "@/lib/keycloak"
 
+import { AvatarSettings } from "./avatar-settings"
 import { DoorGreetingSettings } from "./door-greeting-settings"
 import { SignatureSettings } from "./signature-settings"
 import { SignOutButton } from "./sign-out-button"
@@ -31,7 +33,7 @@ const fields = [
 
 export default async function ProfilePage() {
   const actor = await requireActor("/profile")
-  const [profile, stats, bento, ledger, signature, image, trips, door] =
+  const [profile, stats, bento, ledger, signature, image, trips, door, avatar] =
     await Promise.all([
       runAction(getProfile, actor, {}).catch((error: unknown) => ({
         error: errorMessage(error),
@@ -43,6 +45,7 @@ export default async function ProfilePage() {
       runAction(getMySignatureImage, actor, {}),
       runAction(getTripStats, actor, {}),
       runAction(getMyDoorGreeting, actor, {}),
+      runAction(getMemberAvatar, actor, { user_id: actor.userId }),
     ])
   const travel = trips.members.find((row) => row.userId === actor.userId)
   const paid = ledger.applicants.find((row) => row.applicantId === actor.userId)
@@ -83,6 +86,14 @@ export default async function ProfilePage() {
             ))}
           </FieldList>
         )}
+        <section className="flex flex-col gap-6">
+          <SectionHeader title="頭像" />
+          <AvatarSettings
+            userId={actor.userId}
+            name={"error" in profile ? "" : (profile.chineseName ?? "")}
+            version={avatar?.version ?? null}
+          />
+        </section>
         <section className="flex flex-col gap-6">
           <SectionHeader title="簽名" />
           <SignatureSettings
