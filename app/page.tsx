@@ -22,6 +22,7 @@ const apps = [
   { label: "Reimburse", href: "/reimburse" },
   { label: "Trip", href: "/trip" },
   { label: "Receipts", href: "/receipts" },
+  { label: "Approve", href: "/approve" },
   { label: "Rooms", href: "/rooms" },
   { label: "Door", href: "/door" },
   { label: "Profile", href: "/profile" },

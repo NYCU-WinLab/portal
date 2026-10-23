@@ -141,6 +141,13 @@
       "when": 1792748601530,
       "tag": "0019_door_greetings",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1792749220438,
+      "tag": "0020_approve",
+      "breakpoints": true
     }
   ]
 }
