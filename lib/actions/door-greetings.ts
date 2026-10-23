@@ -100,8 +100,8 @@ export const setDoorSpeakName = defineAction({
  * on each of their cards): suffix, and playlist, the pool sound ids the
  * door picks one of at random. pool links every listed sound, default
  * lists the ones for everyone else. color stays empty; per-member colors
- * were dropped in the move. quiet lists the
- * names the door greets without saying "Hi <name>". phrases is the
+ * were dropped in the move. quiet lists the names the door greets without
+ * saying "Hi <name>". phrases is the
  * spoken greeting schedule the door picks from at open time, and voice
  * links the clips in CC's voice by text.
  */
