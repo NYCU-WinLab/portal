@@ -7,6 +7,18 @@ const nextConfig: NextConfig = {
   // Trip files (up to 10 MB) and menu photos reach the server as base64 in
   // a server action, a third larger than the file.
   experimental: { serverActions: { bodySizeLimit: "15mb" } },
+  // No page is meant to be framed: the consent pages above all.
+  async headers() {
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          { key: "X-Frame-Options", value: "DENY" },
+          { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
+        ],
+      },
+    ]
+  },
   turbopack: {
     rules: {
       "*.css": {

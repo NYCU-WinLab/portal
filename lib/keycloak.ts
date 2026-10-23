@@ -244,3 +244,15 @@ export async function labCohorts() {
   )
   return cohorts.sort((a, b) => b.name.localeCompare(a.name))
 }
+
+/** The groups one member is in, by their Keycloak id. */
+export async function keycloakUserGroups(sub: string) {
+  const groups: { name: string; path: string }[] = []
+  for (let first = 0; ; first += 100) {
+    const page = await adminGet<{ name: string; path: string }[]>(
+      `/users/${encodeURIComponent(sub)}/groups?first=${first}&max=100`
+    )
+    groups.push(...page)
+    if (page.length < 100) return groups
+  }
+}
