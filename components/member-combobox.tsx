@@ -97,7 +97,7 @@ function MemberCombobox({
                   data-checked={chosen.includes(member.id)}
                   onSelect={() => pick(member.id)}
                 >
-                  <span className="truncate">{member.name}</span>
+                  <span className="shrink-0">{member.name}</span>
                   <span className="truncate text-muted-foreground">
                     {member.email}
                   </span>
