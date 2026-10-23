@@ -4,113 +4,17 @@ import { PageHeader, SectionHeader } from "@/components/page-header"
 import { PortalShell } from "@/components/portal-shell"
 import { listAnnouncements } from "@/lib/actions/bulletin"
 import { runAction } from "@/lib/actions/define"
+import { listHomePins } from "@/lib/actions/home"
 import { getNextMeeting } from "@/lib/actions/meetings"
 import { whoami } from "@/lib/actions/users"
 import { requireActor } from "@/lib/auth/session"
 import { givenName } from "@/lib/names"
+import { serviceGroups, services } from "@/lib/services"
 
 import { NextMeeting } from "./meetings/next-meeting"
+import { PinButton } from "./pin-button"
 
 export const dynamic = "force-dynamic"
-
-// Services in groups, each group in alphabetical order. An href that starts
-// with https is another lab service and gets the ↗ mark.
-const groups = [
-  {
-    title: "日常",
-    apps: [
-      { label: "Bento", name: "便當", emoji: "🍱", href: "/bento" },
-      { label: "Bulletin", name: "公告", emoji: "📢", href: "/bulletin" },
-      { label: "Door", name: "門禁", emoji: "🚪", href: "/door" },
-      {
-        label: "Gallery",
-        name: "相簿",
-        emoji: "🖼️",
-        href: "https://gallery.winlab.tw",
-      },
-      { label: "Games", name: "遊戲", emoji: "🎮", href: "/games" },
-      { label: "Leave", name: "請假", emoji: "🏖️", href: "/leave" },
-      { label: "Meetings", name: "實驗室會議", emoji: "🗓️", href: "/meetings" },
-      { label: "Rooms", name: "借會議室", emoji: "🏢", href: "/rooms" },
-    ],
-  },
-  {
-    title: "行政",
-    apps: [
-      { label: "Approve", name: "簽核", emoji: "✍️", href: "/approve" },
-      { label: "Receipts", name: "收據", emoji: "🧾", href: "/receipts" },
-      { label: "Reimburse", name: "記帳", emoji: "💰", href: "/reimburse" },
-      { label: "Trip", name: "出差文件", emoji: "✈️", href: "/trip" },
-    ],
-  },
-  {
-    title: "帳號",
-    apps: [
-      { label: "Admins", name: "管理員", emoji: "🛡️", href: "/admins" },
-      {
-        label: "Developers",
-        name: "開發者應用",
-        emoji: "🧩",
-        href: "/developers",
-      },
-      { label: "Groups", name: "群組信", emoji: "👥", href: "/groups" },
-      { label: "Profile", name: "個人資料", emoji: "👤", href: "/profile" },
-    ],
-  },
-  {
-    title: "工具",
-    apps: [
-      {
-        label: "Carrel",
-        name: "虛擬機",
-        emoji: "🖥️",
-        href: "https://carrel.winlab.tw",
-      },
-      {
-        label: "GitHub",
-        name: "程式碼",
-        emoji: "🐙",
-        href: "https://github.com/NYCU-WinLab",
-      },
-      {
-        label: "GitLab",
-        name: "程式碼",
-        emoji: "🦊",
-        href: "https://gitlab.winlab.tw",
-      },
-      {
-        label: "LLM",
-        name: "語言模型",
-        emoji: "🤖",
-        href: "https://llm.winlab.tw",
-      },
-      {
-        label: "Nextcloud",
-        name: "雲端硬碟",
-        emoji: "☁️",
-        href: "https://nextcloud.winlab.tw",
-      },
-      {
-        label: "Transcribe",
-        name: "逐字稿",
-        emoji: "📝",
-        href: "https://transcribe.winlab.tw",
-      },
-      {
-        label: "Video",
-        name: "影片",
-        emoji: "🎬",
-        href: "https://video.winlab.tw",
-      },
-      {
-        label: "Wiki",
-        name: "文件庫",
-        emoji: "📚",
-        href: "https://wiki.winlab.tw",
-      },
-    ],
-  },
-]
 
 // A post shows on the home page for a week, then lives on /bulletin.
 const isFresh = (date: Date) =>
@@ -118,11 +22,24 @@ const isFresh = (date: Date) =>
 
 export default async function Home() {
   const actor = await requireActor("/")
-  const [member, { meeting }, { announcements }] = await Promise.all([
+  const [member, { meeting }, { announcements }, pins] = await Promise.all([
     runAction(whoami, actor, {}),
     runAction(getNextMeeting, actor, {}),
     runAction(listAnnouncements, actor, { limit: 1 }),
+    runAction(listHomePins, actor, {}),
   ])
+  // Starred services move out of their group into 置頂 at the top.
+  const pinned = new Set<string>(pins.services)
+  const groups = [
+    {
+      title: "置頂",
+      apps: services.filter((app) => pinned.has(app.key)),
+    },
+    ...serviceGroups.map((group) => ({
+      title: group.title,
+      apps: group.apps.filter((app) => !pinned.has(app.key)),
+    })),
+  ].filter((group) => group.apps.length > 0)
   const fresh = announcements.find((post) => isFresh(post.createdAt))
 
   return (
@@ -147,10 +64,13 @@ export default async function Home() {
             <SectionHeader title={group.title} />
             <ul className="flex stagger-rise flex-col">
               {group.apps.map((app) => (
-                <li key={app.href} className="border-b border-border">
+                <li
+                  key={app.key}
+                  className="flex items-center gap-2 border-b border-border"
+                >
                   <Link
                     href={app.href}
-                    className="flex min-h-14 items-center gap-3 transition-colors duration-state hover:text-muted-foreground"
+                    className="flex min-h-14 min-w-0 flex-1 items-center gap-3 transition-colors duration-state hover:text-muted-foreground"
                   >
                     <span aria-hidden className="w-6 text-center">
                       {app.emoji}
@@ -163,6 +83,11 @@ export default async function Home() {
                       )}
                     </span>
                   </Link>
+                  <PinButton
+                    service={app.key}
+                    label={app.label}
+                    pinned={pinned.has(app.key)}
+                  />
                 </li>
               ))}
             </ul>
