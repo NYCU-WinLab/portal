@@ -109,31 +109,18 @@ const bytea = customType<{ data: Buffer }>({ dataType: () => "bytea" })
 
 // How the door greets a member: the suffix after their name on the LED
 // panel ("歡迎 詠翔！！"). The sound after it comes from their playlist.
-// sound through playSound are the single sound before the pool (0027 moved
-// them into it); they stay one release so the previous image still runs
-// after a rollback, and nothing reads them.
-export const doorGreetings = pgTable(
-  "door_greetings",
-  {
-    userId: uuid()
-      .primaryKey()
-      .references(() => user.id, { onDelete: "cascade" }),
-    suffix: text(),
-    sound: bytea(),
-    soundType: text(),
-    soundVersion: text(),
-    playSound: boolean().default(false).notNull(),
-    // false: the door plays only the sound, without "Hi <name>" before it.
-    speakName: boolean().default(true).notNull(),
-    updatedAt: timestamp({ withTimezone: true }).defaultNow().notNull(),
-  },
-  (table) => [
-    check(
-      "door_greetings_sound_shape",
-      sql`(${table.sound} is null) = (${table.soundVersion} is null) and (${table.sound} is null) = (${table.soundType} is null)`
-    ),
-  ]
-)
+// The table still holds sound, sound_type, sound_version and play_sound from
+// before the pool (0027 moved them into it). Nothing reads or writes them;
+// the next migration drops them, once no running image lists them (#78).
+export const doorGreetings = pgTable("door_greetings", {
+  userId: uuid()
+    .primaryKey()
+    .references(() => user.id, { onDelete: "cascade" }),
+  suffix: text(),
+  // false: the door plays only the sound, without "Hi <name>" before it.
+  speakName: boolean().default(true).notNull(),
+  updatedAt: timestamp({ withTimezone: true }).defaultNow().notNull(),
+})
 
 // The lab's pool of door sounds: every member's upload, shared, so anyone
 // can play one or put it on their playlist. A sound's bytes never change, so

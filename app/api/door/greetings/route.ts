@@ -2,8 +2,8 @@ import { panelGreetings } from "@/lib/actions/door-greetings"
 
 import { panelJson, panelRefused } from "../panel-auth"
 
-// {suffix, color, sound} for the door panel, each keyed by display name;
-// sound holds {url, mode, version} with an hour-long signed url.
+// What the door panel greets with: suffix, quiet, playlist and phrases keyed
+// by display name, and pool and voice holding hour-long signed urls.
 export async function GET(request: Request) {
   return panelRefused(request) ?? panelJson(await panelGreetings())
 }
