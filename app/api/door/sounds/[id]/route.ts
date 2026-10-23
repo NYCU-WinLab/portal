@@ -27,6 +27,7 @@ export async function GET(
       "content-type": sound.type,
       "content-length": String(sound.bytes.length),
       "cache-control": "private, max-age=3600",
+      "x-content-type-options": "nosniff",
     },
   })
 }

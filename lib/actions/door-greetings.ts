@@ -74,7 +74,11 @@ export const uploadDoorSound = defineAction({
   title: "上傳門口音效",
   description: `Uploads the signed-in member's own door sound as base64 (mp3, m4a, aac, wav or ogg, up to ${SOUND_MAX_BYTES / 1024 / 1024} MB; the door plays its first 10 seconds) and turns it on. It replaces the previous one.`,
   kind: "mutation",
-  input: z.object({ base64: z.base64("檔案要是 base64") }),
+  input: z.object({
+    base64: z
+      .base64("檔案要是 base64")
+      .max(Math.ceil((SOUND_MAX_BYTES * 4) / 3) + 4, "音檔超過 3 MB"),
+  }),
   run: async (actor, { base64 }) => {
     const sound = Buffer.from(base64, "base64")
     if (!sound.length) throw new Error("音檔是空的")

@@ -37,12 +37,24 @@ export function soundType(bytes: Uint8Array): string | null {
   return null
 }
 
-/** "詠翔 詹" (given family, as Keycloak spells some names) -> "詹詠翔":
- * the panel looks members up by the name the card reader shows. */
+const han = (char: string) => /\p{Script=Han}/u.test(char)
+
+/** The label the panel shows for a name, by idm-display's display_name:
+ * "詠翔 詹" -> "詹詠翔", Han names cut to 4 characters, a Latin name to its
+ * first word in ASCII, at most 8. The panel looks suffixes up by it. */
 export function panelName(name: string) {
-  const collapsed = name.trim().replace(/\s+/g, " ")
-  const swapped = /^(\p{Script=Han}+) (\p{Script=Han}+)$/u.exec(collapsed)
-  return swapped ? `${swapped[2]}${swapped[1]}` : collapsed
+  let collapsed = name.trim().replace(/\s+/g, " ")
+  const parts = /^(\S+) (\S+)$/.exec(collapsed)
+  if (parts && [...parts[1], ...parts[2]].every(han))
+    collapsed = `${parts[2]}${parts[1]}`
+  if ([...collapsed].some(han))
+    return [...collapsed.replace(/\s/g, "")].slice(0, 4).join("")
+  const first = collapsed.split(/[\s@]/)[0]
+  const ascii = first
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .replace(/[^\x20-\x7e]/g, "")
+  return ascii ? ascii.slice(0, 8) : [...first].slice(0, 4).join("")
 }
 
 const LINK_SECONDS = 60 * 60
