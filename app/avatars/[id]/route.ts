@@ -3,10 +3,16 @@ import { getMemberAvatar } from "@/lib/actions/avatars"
 import { getSession } from "@/lib/auth/session"
 
 // A member's avatar, for signed-in members only; ?size=large is the
-// profile's. With ?v=<version> the url never changes content and caches for
-// a year. Without it (the avatar stacks, which know only the member id) the
-// browser asks again each time and gets a 304, so a new picture shows at
-// once. A member with none gets a 404 for a minute: the initial shows.
+// profile's. The browser keeps it but asks again every time, so the session
+// is checked on each view and a new picture shows at once (a 304 when
+// unchanged). A member with none gets a 404 for a minute: the initial shows.
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+const notFound = () =>
+  new Response("Not found", {
+    status: 404,
+    headers: { "Cache-Control": "private, max-age=60" },
+  })
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -14,6 +20,7 @@ export async function GET(
   const session = await getSession()
   if (!session) return new Response("Unauthorized", { status: 401 })
   const { id } = await params
+  if (!UUID.test(id)) return notFound()
   const query = new URL(request.url).searchParams
   const size = query.get("size") === "large" ? "large" : "small"
   const avatar = await runAction(
@@ -27,16 +34,10 @@ export async function GET(
       status: 503,
       headers: { "Cache-Control": "no-store" },
     })
-  if (!avatar)
-    return new Response("Not found", {
-      status: 404,
-      headers: { "Cache-Control": "private, max-age=60" },
-    })
+  if (!avatar) return notFound()
   const etag = `"${avatar.version}-${size}"`
   const headers = {
-    "Cache-Control": query.has("v")
-      ? "private, max-age=31536000, immutable"
-      : "private, no-cache",
+    "Cache-Control": "private, no-cache",
     ETag: etag,
     "X-Content-Type-Options": "nosniff",
   }
