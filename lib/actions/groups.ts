@@ -9,7 +9,7 @@ import { type AuditInsert, splitDenied } from "@/lib/groups/audit"
 import { visibleGroups } from "@/lib/groups/authorize"
 import { fetchCohorts } from "@/lib/groups/cohorts"
 import { failure } from "@/lib/groups/failure"
-import { getGroup, listDomainGroups } from "@/lib/groups/google"
+import { getGroup, listDomainGroups, listGroupsOf } from "@/lib/groups/google"
 import { groupsApiFromEnv } from "@/lib/groups/google-auth"
 import {
   addToGroup,
@@ -122,6 +122,70 @@ export const listMailGroups = defineAction({
     } catch (error) {
       // Google's own wording stays in the server log.
       console.error("[groups] list failed", error)
+      const result = failure(error, false)
+      throw new Error("detail" in result ? result.detail : "讀不到 Google 群組")
+    }
+  },
+})
+
+/** Nested lists are followed this many levels up, so a loop or a deep
+ * chain cannot run up the Directory quota. */
+const NESTING_DEPTH = 3
+
+export const listMyMailGroups = defineAction({
+  name: "list_my_mail_groups",
+  title: "我在的群組信",
+  description:
+    "The Google mailing lists the signed-in member receives mail from, by their portal email (address): each list's address and name, and via: null when the address is a member itself, else the list the member is in directly that is nested in this one (up to 3 levels). status unconfigured when the portal has no Google credential.",
+  kind: "query",
+  input: z.object({}),
+  run: async (actor) => {
+    const api = groupsApiFromEnv()
+    if (!api) return unconfigured
+    const [me] = await db
+      .select({ email: user.email })
+      .from(user)
+      .where(eq(user.id, actor.userId))
+    if (!me) throw new Error("找不到你的帳號")
+    const address = me.email.toLowerCase()
+    try {
+      const found = new Map<
+        string,
+        { email: string; name: string; via: string | null }
+      >()
+      let level: { address: string; via: string | null }[] = [
+        { address, via: null },
+      ]
+      for (let depth = 0; depth < NESTING_DEPTH && level.length; depth++) {
+        const results = await Promise.all(
+          level.map(async (from) => ({
+            from,
+            groups: await listGroupsOf(api, from.address),
+          }))
+        )
+        const next: typeof level = []
+        for (const { from, groups } of results)
+          for (const group of groups) {
+            if (found.has(group.email)) continue
+            // via is the list the member is in directly that leads here.
+            found.set(group.email, {
+              email: group.email,
+              name: group.name,
+              via: from.via,
+            })
+            next.push({ address: group.email, via: from.via ?? group.email })
+          }
+        level = next
+      }
+      return {
+        status: "ok" as const,
+        address,
+        data: [...found.values()].sort((a, b) =>
+          a.email.localeCompare(b.email)
+        ),
+      }
+    } catch (error) {
+      console.error("[groups] my lists failed", error)
       const result = failure(error, false)
       throw new Error("detail" in result ? result.detail : "讀不到 Google 群組")
     }
