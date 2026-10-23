@@ -58,6 +58,16 @@ import {
   setDoorSuffix,
   uploadDoorSound,
 } from "@/lib/actions/door-greetings"
+import {
+  addMailGroupMembers,
+  getMailGroup,
+  listCohorts,
+  listMailGroupChanges,
+  listMailGroupManagers,
+  listMailGroups,
+  removeMailGroupMember,
+  setMailGroupManager,
+} from "@/lib/actions/groups"
 import { createLeave, deleteLeave, listLeaves } from "@/lib/actions/leave"
 import {
   getNextMeeting,
@@ -256,6 +266,14 @@ export const actions: Action[] = [
   submitApproveDocument,
   signApproveDocument,
   deleteApproveDocument,
+  listMailGroups,
+  getMailGroup,
+  addMailGroupMembers,
+  removeMailGroupMember,
+  listMailGroupChanges,
+  listMailGroupManagers,
+  setMailGroupManager,
+  listCohorts,
   listMembers,
   listAdmins,
   grantAdmin,
