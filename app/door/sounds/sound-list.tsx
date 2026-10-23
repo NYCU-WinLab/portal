@@ -30,7 +30,7 @@ import {
   savePlaylist,
   upload,
 } from "./actions"
-import { PlayButton } from "./play-button"
+import { PlayButton, soundSrc } from "./play-button"
 
 const LIMIT = 3 * 1024 * 1024
 const text = (data: FormData, key: string) => String(data.get(key) ?? "")
@@ -198,11 +198,7 @@ export function SoundList({
             key={sound.id}
             className="flex min-h-14 items-center gap-4 border-b border-border py-2"
           >
-            <PlayButton
-              soundId={sound.id}
-              version={sound.version}
-              label={sound.label}
-            />
+            <PlayButton src={soundSrc(sound)} label={sound.label} />
             <span className="flex min-w-0 flex-1 flex-col">
               <span className="truncate">{sound.label}</span>
               <span className="truncate text-muted-foreground">

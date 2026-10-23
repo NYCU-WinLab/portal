@@ -8,15 +8,17 @@ import { Button } from "@/components/ui/button"
 // One player for the whole page: starting a sound stops the one before.
 let current: { audio: HTMLAudioElement; stop: () => void } | null = null
 
+/** A pool sound's url for PlayButton. */
+export const soundSrc = (sound: { id: string; version: string }) =>
+  `/door/sounds/files/${sound.id}?v=${sound.version}`
+
 export function PlayButton({
-  soundId,
-  version,
+  src,
   label,
 }: {
-  soundId: string
-  /** Changes when the file is replaced; it is in the url, so a browser that
-   * kept the old file fetches the new one. */
-  version: string
+  /** The audio's url. A pool sound carries its version, so a browser that
+   * kept an old file fetches the replaced one. */
+  src: string
   label: string
 }) {
   const [playing, setPlaying] = React.useState(false)
@@ -28,7 +30,7 @@ export function PlayButton({
       return
     }
     current?.stop()
-    const audio = new Audio(`/door/sounds/files/${soundId}?v=${version}`)
+    const audio = new Audio(src)
     const stop = () => {
       audio.pause()
       setPlaying(false)
