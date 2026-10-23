@@ -13,7 +13,7 @@ import { z } from "zod"
 
 import { requireAdmin } from "@/lib/actions/authz"
 import { defineAction } from "@/lib/actions/define"
-import { withdrawLabMeeting } from "@/lib/actions/meetings-mail"
+import { cancelLabMeeting, releaseWeek } from "@/lib/actions/meetings-mail"
 import {
   isoDate,
   optionalText,
@@ -26,7 +26,6 @@ import {
   presenterRoster,
   QUESTIONERS_PER_WEEK,
 } from "@/lib/actions/meetings-shared"
-import { db } from "@/lib/db"
 import {
   meetingKinds,
   meetingQuestioners,
@@ -179,9 +178,12 @@ export const updateMeeting = defineAction({
         next.startsAt.slice(0, 5) !== meeting.startsAt.slice(0, 5) ||
         next.location !== meeting.location ||
         (next.kind === "holiday") !== (meeting.kind === "holiday")
-      return { date: next.date, id, moved, from: meeting.date }
-    }).then(async ({ date, id, moved, from }) => {
-      if (moved) await withdrawLabMeeting(id, [from, date], actor.userId)
+      const held = moved
+        ? await releaseWeek(tx, id, [meeting.date, next.date])
+        : null
+      return { date: next.date, held }
+    }).then(async ({ date, held }) => {
+      await cancelLabMeeting(held, actor.userId)
       return { date }
     })
   },
@@ -196,15 +198,14 @@ export const deleteMeeting = defineAction({
   input: z.object({ date: isoDate }),
   run: async (actor, { date }) => {
     await requireAdmin(actor, "meetings")
-    // Its Teams meeting goes first: deleting the week unlinks the booking.
-    const [meeting] = await db
-      .select({ id: meetings.id })
-      .from(meetings)
-      .where(eq(meetings.date, date))
-    if (meeting) await withdrawLabMeeting(meeting.id, [date], actor.userId)
     return changeSchedule(async (tx) => {
       const meeting = await meetingOn(tx, date)
+      // Read before the delete unlinks the booking.
+      const held = await releaseWeek(tx, meeting.id, [date])
       await tx.delete(meetings).where(eq(meetings.id, meeting.id))
+      return held
+    }).then(async (held) => {
+      await cancelLabMeeting(held, actor.userId)
       return { date }
     })
   },

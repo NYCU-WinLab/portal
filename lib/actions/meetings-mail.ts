@@ -3,7 +3,7 @@
 // week still has no title; on Friday from 12:00 announce@winlab.tw gets the
 // week, and a regular week also gets a Teams meeting through the rooms
 // pipeline, with its calendar invite on that announcement.
-import { and, asc, eq, inArray } from "drizzle-orm"
+import { and, asc, eq, inArray, sql } from "drizzle-orm"
 
 import { queueMail } from "@/lib/actions/mail"
 import {
@@ -18,7 +18,13 @@ import {
 } from "@/lib/actions/rooms"
 import { joinUrl } from "@/lib/actions/rooms-meetings"
 import { db } from "@/lib/db"
-import { admins, meetingMailRuns, roomBookings, user } from "@/lib/db/schema"
+import {
+  admins,
+  meetingMailRuns,
+  meetings,
+  roomBookings,
+  user,
+} from "@/lib/db/schema"
 import type { Mail } from "@/lib/mail"
 import { mailBody } from "@/lib/mail-body"
 import { emitErrorLog } from "@/lib/otel"
@@ -118,11 +124,36 @@ async function claim(tx: Tx, date: string, kind: Kind) {
   if (!rows.length) throw new AlreadySent()
 }
 
+/**
+ * Takes the schedule lock and claims the week's mail, both inside the
+ * caller's transaction. A week moved or deleted since it was read sends
+ * nothing; the change lets the mail go out again for its new state.
+ */
+async function claimCurrent(tx: Tx, meeting: ScheduledMeeting, kind: Kind) {
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtext('meetings'))`)
+  const [now] = await tx
+    .select({
+      startsAt: meetings.startsAt,
+      location: meetings.location,
+      kind: meetings.kind,
+    })
+    .from(meetings)
+    .where(and(eq(meetings.id, meeting.id), eq(meetings.date, meeting.date)))
+  if (
+    !now ||
+    now.startsAt.slice(0, 5) !== meeting.startsAt ||
+    now.location !== meeting.location ||
+    now.kind !== meeting.kind
+  )
+    throw new AlreadySent()
+  await claim(tx, meeting.date, kind)
+}
+
 /** Queues a mail as the week's one mail of its kind. */
-async function queueOnce(date: string, kind: Kind, mail: Mail) {
+async function queueOnce(meeting: ScheduledMeeting, kind: Kind, mail: Mail) {
   await db
     .transaction(async (tx) => {
-      await claim(tx, date, kind)
+      await claimCurrent(tx, meeting, kind)
       await queueMail(tx, mail)
     })
     .catch((error) => {
@@ -137,7 +168,7 @@ async function remindTitle(meeting: ScheduledMeeting) {
     .from(user)
     .where(eq(user.id, meeting.presenter.id))
   if (!presenter) return
-  await queueOnce(meeting.date, "title", {
+  await queueOnce(meeting, "title", {
     to: [presenter.email],
     subject: `[Lab Meeting] 請填 ${dayLabel(meeting.date)} 的報告主題`,
     ...mailBody({
@@ -190,7 +221,7 @@ async function announce(
   const organizer =
     meeting.kind === "holiday" || held ? null : await organizerFor(meeting)
   if (!organizer) {
-    await queueOnce(meeting.date, "announce", announcement(meeting, next, held))
+    await queueOnce(meeting, "announce", announcement(meeting, next, held))
     return
   }
   // The announcement is the booking's invite, so it carries the event, and
@@ -212,7 +243,7 @@ async function announce(
       issueRefs: [],
       deliverables: [],
       meetingId: meeting.id,
-      inTransaction: (tx) => claim(tx, meeting.date, "announce"),
+      inTransaction: (tx) => claimCurrent(tx, meeting, "announce"),
       invite: (booking) => ({
         ...announcement(meeting, next, booking),
         replyTo: organizer.email,
@@ -226,23 +257,26 @@ async function announce(
     // Teams meeting failed, and the pipeline sweep mails the organizer.
     if (await heldBooking(meeting.id)) return
     // Nothing committed: the lab still gets the week, without Teams.
-    await queueOnce(meeting.date, "announce", announcement(meeting, next, null))
+    await queueOnce(meeting, "announce", announcement(meeting, next, null))
   }
 }
 
 /**
- * Takes down a week's Teams meeting after its date, time, place or kind
- * changed or it was deleted, mailing the lab the cancellation, and lets the
- * announcement go out again for the dates it touched.
+ * Inside a schedule change: the week's Teams booking, if any, and lets the
+ * announcement go out again for the dates touched. The caller cancels the
+ * booking with cancelLabMeeting once the change commits.
  */
-export async function withdrawLabMeeting(
-  meetingId: string,
-  dates: string[],
-  actorId: string
-) {
-  const held = await heldBooking(meetingId)
-  if (held) await cancelBooking(held, actorId)
-  await db
+export async function releaseWeek(tx: Tx, meetingId: string, dates: string[]) {
+  const [held] = await tx
+    .select()
+    .from(roomBookings)
+    .where(
+      and(
+        eq(roomBookings.meetingId, meetingId),
+        eq(roomBookings.status, "booked")
+      )
+    )
+  await tx
     .delete(meetingMailRuns)
     .where(
       and(
@@ -250,6 +284,12 @@ export async function withdrawLabMeeting(
         eq(meetingMailRuns.kind, "announce")
       )
     )
+  return held ?? null
+}
+
+/** Takes down a released week's Teams meeting, mailing the lab. */
+export async function cancelLabMeeting(held: Booking | null, actorId: string) {
+  if (held) await cancelBooking(held, actorId)
 }
 
 const minutesNow = (now: Date) => {
