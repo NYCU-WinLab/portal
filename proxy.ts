@@ -6,7 +6,10 @@ import { NextResponse, type NextRequest } from "next/server"
 export function proxy(request: NextRequest) {
   if (getSessionCookie(request)) return NextResponse.next()
   const url = new URL("/sign-in", request.url)
-  url.searchParams.set("next", request.nextUrl.pathname)
+  url.searchParams.set(
+    "next",
+    request.nextUrl.pathname + request.nextUrl.search
+  )
   return NextResponse.redirect(url)
 }
 
@@ -16,6 +19,6 @@ export const config = {
   // reader's bridge (its own secret), discovery documents and static files,
   // including the door's home-screen manifest and icons.
   matcher: [
-    "/((?!(?:sign-in|consent|api/auth|api/door/(?:events|greetings|meeting|sounds)|api/rooms|rooms/join|mcp|\\.well-known|_next/static|_next/image)(?:/|$)|favicon.ico$|icon.svg$|door/(?:manifest\\.webmanifest|[\\w-]+\\.png)$).*)",
+    "/((?!(?:sign-in|consent|api/auth|api/door/(?:events|greetings|meeting|sounds)|api/rooms|api/developers|rooms/join|mcp|\\.well-known|_next/static|_next/image)(?:/|$)|favicon.ico$|icon.svg$|door/(?:manifest\\.webmanifest|[\\w-]+\\.png)$).*)",
   ],
 }

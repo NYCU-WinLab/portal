@@ -70,6 +70,21 @@ import {
 } from "@/lib/actions/groups"
 import { listGameLeaderboard, recordGameScore } from "@/lib/actions/games"
 import { deleteIpUser, listIpUsers, saveIpUser } from "@/lib/actions/ip-users"
+import {
+  authorizeDeveloperApp,
+  getDeveloperApp,
+  getDeveloperIntegration,
+  listDeveloperApps,
+  listDeveloperScopeRequests,
+  listMyAuthorizations,
+  registerDeveloperApp,
+  requestDeveloperScopes,
+  reviewDeveloperScopes,
+  revokeMyAuthorization,
+  rotateDeveloperSecret,
+  setDeveloperAppEnabled,
+  updateDeveloperApp,
+} from "@/lib/actions/developers"
 import { createLeave, deleteLeave, listLeaves } from "@/lib/actions/leave"
 import {
   getNextMeeting,
@@ -281,6 +296,19 @@ export const actions: Action[] = [
   listIpUsers,
   saveIpUser,
   deleteIpUser,
+  listDeveloperApps,
+  getDeveloperApp,
+  getDeveloperIntegration,
+  registerDeveloperApp,
+  updateDeveloperApp,
+  rotateDeveloperSecret,
+  setDeveloperAppEnabled,
+  requestDeveloperScopes,
+  listDeveloperScopeRequests,
+  reviewDeveloperScopes,
+  listMyAuthorizations,
+  revokeMyAuthorization,
+  authorizeDeveloperApp,
   listMembers,
   listAdmins,
   grantAdmin,

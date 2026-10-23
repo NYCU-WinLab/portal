@@ -20,6 +20,7 @@
     "@better-auth/cimd": "^1.7.7",
     "@better-auth/mcp": "^1.7.7",
     "@modelcontextprotocol/server": "^2.3.1",
+    "@node-oauth/oauth2-server": "^5.3.1",
     "@opentelemetry/api": "^1.9.1",
     "@opentelemetry/api-logs": "^0.223.0",
     "@opentelemetry/exporter-logs-otlp-http": "^0.223.0",
