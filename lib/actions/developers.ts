@@ -247,14 +247,30 @@ export const authorizeDeveloperApp = defineAction({
       target.searchParams.set("error", "access_denied")
       return { redirect: target.toString() }
     }
-    const [grant] = await db
-      .insert(developerGrants)
-      .values({
-        appId: details.app.id,
-        userId: actor.userId,
-        scopes: details.scopes,
-      })
-      .returning({ id: developerGrants.id })
+    // The app is re-read under a share lock, so an owner changing it at the
+    // same moment either waits for this grant (and then ends it) or wins.
+    const grant = await db.transaction(async (tx) => {
+      const [app] = await tx
+        .select()
+        .from(developerApps)
+        .where(eq(developerApps.id, details.app.id))
+        .for("share")
+      if (
+        !app?.enabled ||
+        !app.redirectUris.includes(details.input.redirect_uri) ||
+        !approvedScopes(details.scopes, app.approvedScopes)
+      )
+        throw new Error("無效或已停用的應用程式或回呼網址")
+      const [created] = await tx
+        .insert(developerGrants)
+        .values({
+          appId: app.id,
+          userId: actor.userId,
+          scopes: details.scopes,
+        })
+        .returning({ id: developerGrants.id })
+      return created
+    })
     try {
       const code = await createOAuthServer(
         createOAuthStore(),
