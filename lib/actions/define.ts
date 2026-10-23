@@ -1,6 +1,7 @@
 import { z } from "zod"
 
 import { announceChange } from "@/lib/actions/changes"
+import { reloadGreetings } from "@/lib/display"
 import { traced } from "@/lib/otel"
 
 /**
@@ -38,6 +39,9 @@ export type Action<
   run: (actor: Actor, input: z.infer<Input>) => Promise<Output>
   /** Set only to keep it off MCP, with the reason. */
   mcpExcludedBecause?: string
+  /** Set when it changes what /api/door/greetings serves, so the door
+   * panel fetches it again right after the change. */
+  refreshesDoorPanel?: true
 }
 
 /** Names of every action created, for the registry check. */
@@ -66,6 +70,8 @@ export async function runAction<Input extends z.ZodObject, Output>(
       // change itself.
       if (action.kind === "mutation")
         await announceChange(action.name).catch(() => {})
+      if (action.kind === "mutation" && action.refreshesDoorPanel)
+        void reloadGreetings()
       return result
     }
   )

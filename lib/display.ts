@@ -33,3 +33,26 @@ export async function greet(name: string) {
     return false
   }
 }
+
+/** Asks the panel to fetch /api/door/greetings now instead of at its next
+ * 5-minute sync, so a sound, playlist or greeting change reaches the very
+ * next door open. Never throws: the panel still catches up on its own. */
+export async function reloadGreetings() {
+  const base = process.env.DISPLAY_API_URL
+  const secret = process.env.DISPLAY_API_SECRET
+  if (!base || !secret) return false
+  try {
+    const response = await fetch(
+      `${base.replace(/\/$/, "")}/api/greetings/reload`,
+      {
+        method: "POST",
+        headers: { authorization: `Bearer ${secret}` },
+        cache: "no-store",
+        signal: AbortSignal.timeout(3000),
+      }
+    )
+    return response.ok
+  } catch {
+    return false
+  }
+}

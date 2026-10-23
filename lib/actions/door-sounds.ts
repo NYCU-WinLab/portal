@@ -130,6 +130,7 @@ export const getDoorSound = defineAction({
 
 export const uploadDoorSound = defineAction({
   name: "upload_door_sound",
+  refreshesDoorPanel: true,
   title: "上傳門口音效",
   description: `Adds a sound to the lab's door sound pool as base64 (mp3, m4a, aac, wav or ogg, up to ${SOUND_MAX_BYTES / 1024 / 1024} MB; the door plays its first ${SOUND_MAX_SECONDS} seconds) with a label, and puts it on the signed-in member's playlist. A member can have ${SOUND_UPLOADS_MAX} sounds in the pool.`,
   kind: "mutation",
@@ -177,6 +178,7 @@ export const uploadDoorSound = defineAction({
 
 export const renameDoorSound = defineAction({
   name: "rename_door_sound",
+  refreshesDoorPanel: true,
   title: "改門口音效名稱",
   description:
     "Renames a sound in the door sound pool. Only its uploader or a door admin may.",
@@ -194,6 +196,7 @@ export const renameDoorSound = defineAction({
 
 export const deleteDoorSound = defineAction({
   name: "delete_door_sound",
+  refreshesDoorPanel: true,
   title: "刪除門口音效",
   description:
     "Deletes a sound from the door sound pool and from every playlist it is on. Only its uploader or a door admin may.",
@@ -208,6 +211,7 @@ export const deleteDoorSound = defineAction({
 
 export const setDoorPlaylist = defineAction({
   name: "set_door_playlist",
+  refreshesDoorPanel: true,
   title: "設定我的開門清單",
   description: `Replaces the signed-in member's door playlist with these pool sounds (at most ${PLAYLIST_MAX}). The door plays one of them at random each time they come in, so a playlist of one always plays that sound; an empty playlist plays one of the lab's defaults. Use list_door_sounds for the ids.`,
   kind: "mutation",
@@ -246,6 +250,7 @@ export const setDoorPlaylist = defineAction({
 
 export const setDoorSoundDefault = defineAction({
   name: "set_door_sound_default",
+  refreshesDoorPanel: true,
   title: "設定預設門口音效",
   description:
     "Marks a pool sound as one of the lab's defaults, played at random for members with an empty playlist, or unmarks it. Door admins only.",
