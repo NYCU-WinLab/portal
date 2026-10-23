@@ -6,6 +6,9 @@ import {
 } from "@/components/focus"
 import { PageHeader } from "@/components/page-header"
 import { PortalShell } from "@/components/portal-shell"
+import { StatusPage } from "@/components/status-page"
+import { NumberTicker } from "@/components/ui/number-ticker"
+import { isAdmin } from "@/lib/actions/authz"
 import { runAction } from "@/lib/actions/define"
 import { listDoorPhrases } from "@/lib/actions/door-phrases"
 import { whoami } from "@/lib/actions/users"
@@ -19,36 +22,47 @@ export const dynamic = "force-dynamic"
 
 export default async function DoorGreetingsPage() {
   const actor = await requireActor("/door/greetings")
-  const [{ phrases, now, can_edit }, me] = await Promise.all([
+  if (!(await isAdmin(actor, "door")))
+    return (
+      <PortalShell page={doorPage} layout="spotlight">
+        <StatusPage title="問候語只有 Door 管理員能改" />
+      </PortalShell>
+    )
+  const [{ phrases, now }, me] = await Promise.all([
     runAction(listDoorPhrases, actor, {}),
     runAction(whoami, actor, {}),
   ])
   const sample = givenName(panelName(me.name ?? "")) || "名字"
-  const current = phrases.find((phrase) => phrase.id === now)
+  const [only] = now.length === 1 ? phrases.filter((p) => p.id === now[0]) : []
   return (
-    <PortalShell page={doorPage} nav={doorNav(can_edit)}>
+    <PortalShell page={doorPage} nav={doorNav(true)}>
       <div className="flex flex-col gap-12">
-        <PageHeader
-          title="問候語"
-          actions={can_edit ? <AddPhrase sample={sample} /> : undefined}
-        />
+        <PageHeader title="問候語" actions={<AddPhrase sample={sample} />} />
         <Focus>
-          <FocusLabel>你現在開門，門口會說</FocusLabel>
+          <FocusLabel>現在有人開門，門口會說</FocusLabel>
           <FocusTitle>
-            {current ? (
+            {now.length === 0 ? (
               <>
-                {current.before}
+                Hi <FocusHighlight>{sample}</FocusHighlight>
+              </>
+            ) : only ? (
+              <>
+                {only.before}
                 <FocusHighlight>{sample}</FocusHighlight>
-                {current.after || "。"}
+                {only.after || "。"}
               </>
             ) : (
               <>
-                Hi <FocusHighlight>{sample}</FocusHighlight>
+                從{" "}
+                <FocusHighlight>
+                  <NumberTicker value={now.length} />
+                </FocusHighlight>{" "}
+                句裡隨機說一句
               </>
             )}
           </FocusTitle>
         </Focus>
-        <PhraseList phrases={phrases} canEdit={can_edit} sample={sample} />
+        <PhraseList phrases={phrases} now={now} sample={sample} />
       </div>
     </PortalShell>
   )

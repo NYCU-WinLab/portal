@@ -182,15 +182,6 @@ export function weekRanges(rule: {
   return ranges
 }
 
-export function rulesOverlap(
-  a: Parameters<typeof weekRanges>[0],
-  b: Parameters<typeof weekRanges>[0]
-) {
-  return weekRanges(a).some(([s1, e1]) =>
-    weekRanges(b).some(([s2, e2]) => s1 < e2 && s2 < e1)
-  )
-}
-
 /** Minutes since Monday 00:00 in Asia/Taipei, the line weekRanges uses. */
 export function taipeiWeekMinute(now: Date) {
   const parts = Object.fromEntries(
