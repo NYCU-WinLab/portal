@@ -109,6 +109,21 @@ import {
   updateReimburseEgress,
   updateReimburseIngress,
 } from "@/lib/actions/reimburse"
+import {
+  bookRoom,
+  cancelRoomBooking,
+  getEpicDeliverables,
+  listGroupEpics,
+  listRoomAvailability,
+  listRoomBookings,
+  listRoomGroups,
+} from "@/lib/actions/rooms"
+import {
+  createRoomSeries,
+  deleteRoomSeries,
+  listRoomSeries,
+  setRoomSeriesActive,
+} from "@/lib/actions/rooms-series"
 import { listMeetingStats } from "@/lib/actions/stats"
 import { whoami } from "@/lib/actions/users"
 
@@ -198,6 +213,17 @@ export const actions: Action[] = [
   getMySignatureImage,
   setMySignature,
   setSignatureSettings,
+  listRoomAvailability,
+  listRoomBookings,
+  listRoomGroups,
+  listGroupEpics,
+  getEpicDeliverables,
+  bookRoom,
+  cancelRoomBooking,
+  listRoomSeries,
+  createRoomSeries,
+  setRoomSeriesActive,
+  deleteRoomSeries,
   listMembers,
   listAdmins,
   grantAdmin,

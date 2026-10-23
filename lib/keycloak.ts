@@ -129,3 +129,73 @@ export async function labDirectory(): Promise<Map<string, LabMember>> {
   directory = { members, at: Date.now() }
   return members
 }
+
+export type ProjectGroup = {
+  /** The slug, e.g. "tasa-satsim": the Teams topic prefix. */
+  name: string
+  /** What people call it, when the group has a description. */
+  label: string
+  /** The GitLab group path (the gitlab_path attribute), when linked. */
+  gitlabPath: string | null
+  members: { name: string; email: string; username: string }[]
+  /** Members Keycloak has no email for, who cannot be invited. */
+  unmailable: string[]
+}
+
+type RawGroup = {
+  id: string
+  name: string
+  description?: string
+  attributes?: Record<string, string[]>
+}
+
+let projects: { groups: ProjectGroup[]; at: number } | null = null
+
+/**
+ * The project groups under /winlab-projects, with their members, for
+ * inviting a whole project to a meeting. Read live, cached for 10 minutes.
+ */
+export async function projectGroups(): Promise<ProjectGroup[]> {
+  if (projects && Date.now() - projects.at < LAB_DIRECTORY_TTL_MS)
+    return projects.groups
+  const root = await adminGet<{ id: string }>("/group-by-path/winlab-projects")
+  const children = await adminGet<RawGroup[]>(
+    `/groups/${root.id}/children?max=500&briefRepresentation=false`
+  )
+  const groups = await Promise.all(
+    children.map(async (group) => {
+      // The full representation is what carries each member's email.
+      const people = await adminGet<
+        {
+          username: string
+          email?: string
+          firstName?: string
+          lastName?: string
+        }[]
+      >(`/groups/${group.id}/members?max=1000&briefRepresentation=false`)
+      const members: ProjectGroup["members"] = []
+      const unmailable: string[] = []
+      for (const person of people) {
+        const name =
+          [person.firstName, person.lastName].filter(Boolean).join(" ") ||
+          person.username
+        if (person.email)
+          members.push({ name, email: person.email, username: person.username })
+        else unmailable.push(name)
+      }
+      return {
+        name: group.name,
+        label:
+          group.description?.trim() ||
+          group.attributes?.description?.[0]?.trim() ||
+          group.name,
+        gitlabPath: group.attributes?.gitlab_path?.[0]?.trim() || null,
+        members,
+        unmailable,
+      }
+    })
+  )
+  groups.sort((a, b) => a.name.localeCompare(b.name))
+  projects = { groups, at: Date.now() }
+  return groups
+}

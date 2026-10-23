@@ -127,6 +127,13 @@
       "when": 1792036460124,
       "tag": "0017_door",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1792744619691,
+      "tag": "0018_rooms",
+      "breakpoints": true
     }
   ]
 }

@@ -23,6 +23,10 @@ export const mailOutbox = pgTable(
     subject: text().notNull(),
     text: text().notNull(),
     html: text(),
+    replyTo: text(),
+    // A calendar invite (text/calendar) and its METHOD, REQUEST or CANCEL.
+    ics: text(),
+    icsMethod: text(),
     attempts: integer().default(0).notNull(),
     lastError: text(),
     createdAt: timestamp({ withTimezone: true }).defaultNow().notNull(),
