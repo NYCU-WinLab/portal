@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
 import { report } from "@/lib/report"
 
-import { PlayButton } from "../door/sounds/play-button"
+import { PlayButton, soundSrc } from "../door/sounds/play-button"
 import { saveDoorSpeakName, saveDoorSuffix } from "./actions"
 
 // What the door says when the member comes in: the panel's suffix after
@@ -67,11 +67,7 @@ export function DoorGreetingSettings({
             <ul className="flex flex-col">
               {playlist.map((sound) => (
                 <li key={sound.id} className="flex items-center gap-2">
-                  <PlayButton
-                    soundId={sound.id}
-                    version={sound.version}
-                    label={sound.label}
-                  />
+                  <PlayButton src={soundSrc(sound)} label={sound.label} />
                   <span className="truncate">{sound.label}</span>
                 </li>
               ))}

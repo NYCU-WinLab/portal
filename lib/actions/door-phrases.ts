@@ -1,4 +1,4 @@
-import { asc, eq, sql } from "drizzle-orm"
+import { asc, eq, notInArray, sql } from "drizzle-orm"
 import { z } from "zod"
 
 import { requireAdmin } from "@/lib/actions/authz"
@@ -186,6 +186,64 @@ export const deleteDoorPhrase = defineAction({
   },
 })
 
+export const listDoorVoiceClips = defineAction({
+  name: "list_door_voice_clips",
+  title: "門口語音",
+  description:
+    'The clips in CC\'s cloned voice that the door speaks greetings with, one per text ("晚安，", "詠翔，", "詠翔。"), and missing: the texts the door needs that have no clip yet (the voice job on furnace makes them every 10 minutes). Door admins only.',
+  kind: "query",
+  input: z.object({}),
+  run: async (actor) => {
+    await requireAdmin(actor, "door")
+    const [rows, { missing }] = await Promise.all([
+      db
+        .select({
+          id: doorVoiceClips.id,
+          text: doorVoiceClips.text,
+          createdAt: doorVoiceClips.createdAt,
+        })
+        .from(doorVoiceClips)
+        .orderBy(asc(doorVoiceClips.text)),
+      missingVoiceTexts(),
+    ])
+    return { clips: rows, missing }
+  },
+})
+
+export const getDoorVoiceClip = defineAction({
+  name: "get_door_voice_clip",
+  title: "試聽門口語音",
+  description:
+    "One voice clip as base64 with its content type, to listen to it. Door admins only.",
+  kind: "query",
+  input: z.object({ id: z.uuid("找不到這段語音") }),
+  run: async (actor, { id }) => {
+    await requireAdmin(actor, "door")
+    const clip = await panelVoiceClip(id)
+    if (!clip) throw new Error("找不到這段語音")
+    return { contentType: clip.type, base64: clip.bytes.toString("base64") }
+  },
+})
+
+export const deleteDoorVoiceClip = defineAction({
+  name: "delete_door_voice_clip",
+  refreshesDoorPanel: true,
+  title: "重錄門口語音",
+  description:
+    "Deletes one voice clip, for example a badly pronounced name. The door speaks that text in the stock voice until the voice job makes it again, within about 10 minutes. Door admins only.",
+  kind: "mutation",
+  input: z.object({ id: z.uuid("找不到這段語音") }),
+  run: async (actor, { id }) => {
+    await requireAdmin(actor, "door")
+    const [row] = await db
+      .delete(doorVoiceClips)
+      .where(eq(doorVoiceClips.id, id))
+      .returning({ text: doorVoiceClips.text })
+    if (!row) throw new Error("找不到這段語音")
+    return { id, text: row.text }
+  },
+})
+
 // What the door and the voice job read (not actions: both are machines with
 // the panel's secret, /api/door/greetings and /api/door/voice).
 
@@ -207,10 +265,15 @@ export async function panelPhrases() {
 
 /** Every text the door may speak as one clip: the rules' parts, the default
  * "Hi，", and each name it greets, ending in "。" and, when some rule says
- * more after the name, in "，". */
-export async function voiceTexts() {
+ * more after the name, in "，". paused also counts paused rules and members
+ * who turned the spoken Hi off, whose clips are kept for when they return. */
+export async function voiceTexts({ paused = false } = {}) {
   const [phrases, members, cards, greetings] = await Promise.all([
-    panelPhrases(),
+    paused
+      ? db
+          .select({ before: doorPhrases.before, after: doorPhrases.after })
+          .from(doorPhrases)
+      : panelPhrases(),
     db.select({ id: user.id, name: user.name }).from(user),
     db
       .select({ holderId: doorCards.holderId, name: doorCards.holderName })
@@ -229,7 +292,7 @@ export async function voiceTexts() {
   const names = new Set<string>()
   const add = (label: string, userId: string | null) => {
     const greeting = userId ? byUser.get(userId) : undefined
-    if (!label || greeting?.speakName === false) return
+    if (!label || (!paused && greeting?.speakName === false)) return
     names.add(spokenName(label, greeting?.suffix ?? null))
   }
   for (const member of members) add(panelName(member.name), member.id)
@@ -249,6 +312,22 @@ export async function panelVoice() {
   return Object.fromEntries(
     rows.map((row) => [row.text, { url: voiceLink(row.id), version: row.id }])
   )
+}
+
+/** Deletes the clips for texts the door can no longer say: a deleted rule,
+ * a renamed member. A paused rule or a member who turned the spoken Hi off
+ * keeps theirs, so turning it back on, even while this runs, finds its
+ * clips. The voice job calls this before it asks what is missing. */
+export async function pruneVoiceClips() {
+  const needed = await voiceTexts({ paused: true })
+  // voiceTexts always holds the default "Hi，" parts; an empty list means
+  // something went wrong, so keep every clip.
+  if (needed.length === 0) return 0
+  const pruned = await db
+    .delete(doorVoiceClips)
+    .where(notInArray(doorVoiceClips.text, needed))
+    .returning({ id: doorVoiceClips.id })
+  return pruned.length
 }
 
 /** The texts the door needs and has no clip for, for the voice job. */

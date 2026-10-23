@@ -1,17 +1,25 @@
 import { z } from "zod"
 
-import { missingVoiceTexts, storeVoiceClip } from "@/lib/actions/door-phrases"
+import {
+  missingVoiceTexts,
+  pruneVoiceClips,
+  storeVoiceClip,
+} from "@/lib/actions/door-phrases"
 import { soundType } from "@/lib/door-greeting"
 
 import { panelJson, panelRefused } from "../panel-auth"
 
-// The voice job on furnace, with the panel's secret: GET lists the texts the
-// door needs and has no clip for; POST {text, base64} stores one clip.
+// The voice job on furnace, with the panel's secret: GET drops the clips the
+// door no longer needs and lists the texts it needs and has no clip for;
+// POST {text, base64} stores one clip.
 
 const CLIP_MAX_BYTES = 512 * 1024
 
 export async function GET(request: Request) {
-  return panelRefused(request) ?? panelJson(await missingVoiceTexts())
+  const refused = panelRefused(request)
+  if (refused) return refused
+  await pruneVoiceClips()
+  return panelJson(await missingVoiceTexts())
 }
 
 const body = z.object({

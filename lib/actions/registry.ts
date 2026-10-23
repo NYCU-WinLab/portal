@@ -60,7 +60,10 @@ import {
 import {
   createDoorPhrase,
   deleteDoorPhrase,
+  deleteDoorVoiceClip,
+  getDoorVoiceClip,
   listDoorPhrases,
+  listDoorVoiceClips,
   updateDoorPhrase,
 } from "@/lib/actions/door-phrases"
 import {
@@ -346,4 +349,7 @@ export const actions: Action[] = [
   createDoorPhrase,
   updateDoorPhrase,
   deleteDoorPhrase,
+  listDoorVoiceClips,
+  getDoorVoiceClip,
+  deleteDoorVoiceClip,
 ]
