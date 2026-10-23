@@ -47,7 +47,7 @@ export default async function AuthorizePage({
             </li>
           ))}
         </ul>
-        <p className="text-muted-foreground break-all">
+        <p className="break-all text-muted-foreground">
           維護者 {app.contact_email}，授權後回到{" "}
           {new URL(input.redirect_uri).origin}，最長 30 天，可在 Developers
           頁撤銷。{" "}

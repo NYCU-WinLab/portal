@@ -169,6 +169,13 @@
       "when": 1792751265856,
       "tag": "0023_ip_users",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1792751595404,
+      "tag": "0024_developers",
+      "breakpoints": true
     }
   ]
 }
