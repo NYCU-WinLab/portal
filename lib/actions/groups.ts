@@ -109,14 +109,21 @@ export const listMailGroups = defineAction({
       ).map((row) => row.groupId)
     )
     if (!admin && !managed.size) return { status: "ok" as const, data: [] }
-    const all = await listDomainGroups(api)
-    return {
-      status: "ok" as const,
-      data: visibleGroups(all, {
-        isAdmin: admin,
-        managed,
-        domain: api.domain,
-      }).sort((a, b) => a.email.localeCompare(b.email)),
+    try {
+      const all = await listDomainGroups(api)
+      return {
+        status: "ok" as const,
+        data: visibleGroups(all, {
+          isAdmin: admin,
+          managed,
+          domain: api.domain,
+        }).sort((a, b) => a.email.localeCompare(b.email)),
+      }
+    } catch (error) {
+      // Google's own wording stays in the server log.
+      console.error("[groups] list failed", error)
+      const result = failure(error, false)
+      throw new Error("detail" in result ? result.detail : "讀不到 Google 群組")
     }
   },
 })
