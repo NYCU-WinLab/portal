@@ -69,6 +69,12 @@ async function drain() {
           subject: mail.subject,
           text: mail.text,
           html: mail.html ?? undefined,
+          replyTo: mail.replyTo ?? undefined,
+          ics: mail.ics ?? undefined,
+          icsMethod:
+            mail.icsMethod === "CANCEL" || mail.icsMethod === "REQUEST"
+              ? mail.icsMethod
+              : undefined,
         })
         await tx
           .update(mailOutbox)

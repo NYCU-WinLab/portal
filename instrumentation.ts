@@ -13,6 +13,8 @@ export async function register() {
   if (process.env.NEXT_RUNTIME === "nodejs") {
     const { startMailSender } = await import("@/lib/actions/mail")
     await startMailSender()
+    const { startRoomsScheduler } = await import("@/lib/actions/rooms-series")
+    startRoomsScheduler()
   }
 
   const endpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT?.replace(/\/+$/, "")

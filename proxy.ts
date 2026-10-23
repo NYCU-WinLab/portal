@@ -16,6 +16,6 @@ export const config = {
   // reader's bridge (its own secret), discovery documents and static files,
   // including the door's home-screen manifest and icons.
   matcher: [
-    "/((?!(?:sign-in|consent|api/auth|api/door/events|mcp|\\.well-known|_next/static|_next/image)(?:/|$)|favicon.ico$|icon.svg$|door/(?:manifest\\.webmanifest|[\\w-]+\\.png)$).*)",
+    "/((?!(?:sign-in|consent|api/auth|api/door/events|api/rooms|rooms/join|mcp|\\.well-known|_next/static|_next/image)(?:/|$)|favicon.ico$|icon.svg$|door/(?:manifest\\.webmanifest|[\\w-]+\\.png)$).*)",
   ],
 }

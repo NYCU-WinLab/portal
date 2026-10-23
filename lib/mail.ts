@@ -10,6 +10,11 @@ export type Mail = {
   subject: string
   text: string
   html?: string
+  /** Where replies go, such as RSVPs to whoever booked a meeting. */
+  replyTo?: string
+  /** A calendar invite: mail clients show it with Yes and No buttons. */
+  ics?: string
+  icsMethod?: "REQUEST" | "CANCEL"
 }
 
 let transport: Transporter | null = null
@@ -31,6 +36,12 @@ export async function sendMail(mail: Mail) {
   // A dev or test deployment sends every mail to MAIL_REDIRECT_TO alone,
   // never to the members it was meant for.
   const redirect = process.env.MAIL_REDIRECT_TO
+  const extras = {
+    replyTo: mail.replyTo,
+    icalEvent: mail.ics
+      ? { method: mail.icsMethod ?? "REQUEST", content: mail.ics }
+      : undefined,
+  }
   if (redirect) {
     const meant = mail.to.length + (mail.bcc?.length ?? 0)
     await transport.sendMail({
@@ -39,13 +50,18 @@ export async function sendMail(mail: Mail) {
       subject: `[dev, ${meant} 位收件人] ${mail.subject}`,
       text: mail.text,
       html: mail.html,
+      ...extras,
     })
     return
   }
   // A mail with only hidden recipients is addressed to the sender.
   await transport.sendMail({
     from,
-    ...mail,
     to: mail.to.length ? mail.to : from,
+    bcc: mail.bcc,
+    subject: mail.subject,
+    text: mail.text,
+    html: mail.html,
+    ...extras,
   })
 }
