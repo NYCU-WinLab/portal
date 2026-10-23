@@ -10,6 +10,12 @@ import { cn } from "@/lib/utils"
 
 export type StackPerson = { id: string; name: string; image?: string | null }
 
+// A member's picture, by id; people outside the lab (an email as id) have
+// none. The route answers 404 without one, and the initial shows.
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+const picture = (person: StackPerson) =>
+  person.image ?? (UUID.test(person.id) ? `/avatars/${person.id}` : null)
+
 // The first character a name is known by: 詹 for 詹詠翔, Z for Zhan.
 const initial = (name: string) => Array.from(name.trim())[0] ?? "?"
 
@@ -48,7 +54,7 @@ function AvatarStack({
             }
           >
             <Avatar className="ring-2 ring-background">
-              {person.image && <AvatarImage src={person.image} alt="" />}
+              {picture(person) && <AvatarImage src={picture(person)!} alt="" />}
               <AvatarFallback>{initial(person.name)}</AvatarFallback>
             </Avatar>
           </TooltipTrigger>
