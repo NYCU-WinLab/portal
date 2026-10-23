@@ -1,7 +1,7 @@
 import { asc, eq, sql } from "drizzle-orm"
 import { z } from "zod"
 
-import { isAdmin, requireAdmin } from "@/lib/actions/authz"
+import { requireAdmin } from "@/lib/actions/authz"
 import { defineAction } from "@/lib/actions/define"
 import { db } from "@/lib/db"
 import {
@@ -15,7 +15,6 @@ import {
   clock,
   DEFAULT_BEFORE,
   panelName,
-  rulesOverlap,
   spokenName,
   taipeiWeekMinute,
   voiceLink,
@@ -73,8 +72,8 @@ export type DoorPhrase = ReturnType<typeof shape>
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0]
 
-/** Saves a rule after checking it against the other enabled ones; one
- * save at a time, so two admins cannot add overlapping rules at once. */
+/** Saves a phrase. Phrases may share a time: the door picks one of the
+ * phrases in force at random. */
 async function save(
   tx: Tx,
   values: Omit<typeof doorPhrases.$inferInsert, "id">,
@@ -83,29 +82,6 @@ async function save(
   if (!values.before && !values.after) throw new Error("名字前後至少填一個")
   if (values.startsAt === values.endsAt)
     throw new Error("開始和結束不能是同一個時間")
-  await tx.execute(sql`select pg_advisory_xact_lock(hashtext('door_phrases'))`)
-  if (values.enabled) {
-    const others = await tx
-      .select()
-      .from(doorPhrases)
-      .where(eq(doorPhrases.enabled, true))
-    const clash = others.find(
-      (other) =>
-        other.id !== id &&
-        rulesOverlap(
-          {
-            startsAt: values.startsAt,
-            endsAt: values.endsAt,
-            days: values.days!,
-          },
-          other
-        )
-    )
-    if (clash)
-      throw new Error(
-        `跟「${clash.before}…${clash.after}」(${clock(clash.startsAt)} 到 ${clock(clash.endsAt)})的時段重疊`
-      )
-  }
   if (id) {
     const [row] = await tx
       .update(doorPhrases)
@@ -133,24 +109,26 @@ export const listDoorPhrases = defineAction({
   name: "list_door_phrases",
   title: "門口問候語",
   description:
-    'The door\'s spoken greeting schedule: each rule says before + member name + after (e.g. "晚安，" name "這麼晚來，很認真喔。") from starts_at to ends_at (HH:MM, Asia/Taipei, past midnight when ends_at <= starts_at) on the listed weekdays (1 Monday to 7 Sunday, the day the range starts). Outside every enabled rule the door says "Hi <name>". now is the id of the rule in force right now, or null; can_edit says whether the member is a door admin.',
+    'The door\'s pool of spoken greetings (door admins only): each phrase says before + member name + after (e.g. "晚安，" name "這麼晚來，很認真喔。") from starts_at to ends_at (HH:MM, Asia/Taipei, past midnight when ends_at <= starts_at) on the listed weekdays (1 Monday to 7 Sunday, the day the range starts). Phrases may share a time; at each opening the door picks one of the enabled phrases in force at random, and says "Hi <name>" when none is. now lists the ids of the phrases in force right now.',
   kind: "query",
   input: z.object({}),
   run: async (actor) => {
-    const [rows, can_edit] = await Promise.all([
-      db
-        .select()
-        .from(doorPhrases)
-        .orderBy(asc(doorPhrases.startsAt), asc(doorPhrases.createdAt)),
-      isAdmin(actor, "door"),
-    ])
+    await requireAdmin(actor, "door")
+    const rows = await db
+      .select()
+      .from(doorPhrases)
+      .orderBy(asc(doorPhrases.startsAt), asc(doorPhrases.createdAt))
     const minute = taipeiWeekMinute(new Date())
-    const now = rows.find(
-      (row) =>
-        row.enabled &&
-        weekRanges(row).some(([start, end]) => start <= minute && minute < end)
-    )
-    return { phrases: rows.map(shape), now: now?.id ?? null, can_edit }
+    const now = rows
+      .filter(
+        (row) =>
+          row.enabled &&
+          weekRanges(row).some(
+            ([start, end]) => start <= minute && minute < end
+          )
+      )
+      .map((row) => row.id)
+    return { phrases: rows.map(shape), now }
   },
 })
 
@@ -159,7 +137,7 @@ export const createDoorPhrase = defineAction({
   refreshesDoorPanel: true,
   title: "新增門口問候語",
   description:
-    "Adds a rule to the door's spoken greeting schedule (door admins). Enabled rules may not overlap on any weekday; the door speaks it in CC's cloned voice once the voice job has made its clips, and in the stock voice until then.",
+    "Adds a phrase to the door's spoken greeting pool (door admins). The door speaks it in CC's cloned voice once the voice job has made its clips, and in the stock voice until then.",
   kind: "mutation",
   input: fields,
   run: async (actor, input) => {
@@ -176,7 +154,7 @@ export const updateDoorPhrase = defineAction({
   refreshesDoorPanel: true,
   title: "修改門口問候語",
   description:
-    "Replaces one rule of the door's spoken greeting schedule (door admins); set enabled false to pause it without deleting it.",
+    "Replaces one phrase of the door's spoken greeting pool (door admins); set enabled false to pause it without deleting it.",
   kind: "mutation",
   input: fields.extend({ id: z.uuid("找不到這條問候語") }),
   run: async (actor, { id, ...input }) => {
@@ -193,7 +171,7 @@ export const deleteDoorPhrase = defineAction({
   refreshesDoorPanel: true,
   title: "刪除門口問候語",
   description:
-    "Deletes one rule of the door's spoken greeting schedule (door admins).",
+    "Deletes one phrase of the door's spoken greeting pool (door admins).",
   kind: "mutation",
   input: z.object({ id: z.uuid("找不到這條問候語") }),
   run: async (actor, { id }) => {

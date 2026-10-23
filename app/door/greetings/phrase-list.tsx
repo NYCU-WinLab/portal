@@ -6,6 +6,7 @@ import * as React from "react"
 import { ConfirmDialog } from "@/components/confirm-dialog"
 import { EmptyState } from "@/components/empty-state"
 import { FormDialog, FormField } from "@/components/form-dialog"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -144,13 +145,15 @@ export function AddPhrase({ sample }: { sample: string }) {
   return <PhraseForm sample={sample} trigger={<Button>新增</Button>} />
 }
 
+// The pool, by start time. A phrase in force right now carries a badge;
+// the door picks one of those at random at each opening.
 export function PhraseList({
   phrases,
-  canEdit,
+  now,
   sample,
 }: {
   phrases: DoorPhrase[]
-  canEdit: boolean
+  now: string[]
   sample: string
 }) {
   if (phrases.length === 0) return <EmptyState noun="問候語" />
@@ -171,44 +174,43 @@ export function PhraseList({
               {`${phrase.starts_at} 到 ${phrase.ends_at}，${dayLabel(phrase.days)}`}
             </span>
           </span>
-          {canEdit && (
-            <>
-              <Label className="flex shrink-0 items-center gap-2 text-muted-foreground">
-                啟用
-                <Switch
-                  checked={phrase.enabled}
-                  onCheckedChange={(enabled) =>
-                    report(
-                      update({ ...phrase, enabled }),
-                      enabled ? "已啟用" : "已停用"
-                    ).catch(() => {})
-                  }
-                />
-              </Label>
-              <div className="flex shrink-0 gap-1">
-                <PhraseForm
-                  phrase={phrase}
-                  sample={sample}
-                  trigger={
-                    <Button variant="ghost" size="icon" aria-label="修改">
-                      <PencilIcon />
-                    </Button>
-                  }
-                />
-                <ConfirmDialog
-                  trigger={
-                    <Button variant="ghost" size="icon" aria-label="刪除">
-                      <Trash2Icon />
-                    </Button>
-                  }
-                  title="刪除這條問候語？"
-                  confirmLabel="刪除"
-                  variant="destructive"
-                  onConfirm={() => report(remove(phrase.id), "已刪除")}
-                />
-              </div>
-            </>
-          )}
+          {now.includes(phrase.id) && <Badge variant="muted">現在</Badge>}
+          <>
+            <Label className="flex shrink-0 items-center gap-2 text-muted-foreground">
+              啟用
+              <Switch
+                checked={phrase.enabled}
+                onCheckedChange={(enabled) =>
+                  report(
+                    update({ ...phrase, enabled }),
+                    enabled ? "已啟用" : "已停用"
+                  ).catch(() => {})
+                }
+              />
+            </Label>
+            <div className="flex shrink-0 gap-1">
+              <PhraseForm
+                phrase={phrase}
+                sample={sample}
+                trigger={
+                  <Button variant="ghost" size="icon" aria-label="修改">
+                    <PencilIcon />
+                  </Button>
+                }
+              />
+              <ConfirmDialog
+                trigger={
+                  <Button variant="ghost" size="icon" aria-label="刪除">
+                    <Trash2Icon />
+                  </Button>
+                }
+                title="刪除這條問候語？"
+                confirmLabel="刪除"
+                variant="destructive"
+                onConfirm={() => report(remove(phrase.id), "已刪除")}
+              />
+            </div>
+          </>
         </li>
       ))}
     </ul>
