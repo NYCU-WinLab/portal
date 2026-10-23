@@ -16,7 +16,6 @@ CREATE TABLE "door_sounds" (
 	CONSTRAINT "door_sounds_label" CHECK (char_length("door_sounds"."label") between 1 and 40)
 );
 --> statement-breakpoint
-ALTER TABLE "door_greetings" DROP CONSTRAINT "door_greetings_sound_shape";--> statement-breakpoint
 ALTER TABLE "door_playlist_items" ADD CONSTRAINT "door_playlist_items_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "door_playlist_items" ADD CONSTRAINT "door_playlist_items_sound_id_door_sounds_id_fk" FOREIGN KEY ("sound_id") REFERENCES "public"."door_sounds"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "door_sounds" ADD CONSTRAINT "door_sounds_uploader_id_users_id_fk" FOREIGN KEY ("uploader_id") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
@@ -31,8 +30,4 @@ WHERE g."sound" IS NOT NULL;--> statement-breakpoint
 INSERT INTO "door_playlist_items" ("user_id", "sound_id")
 SELECT s."uploader_id", s."id"
 FROM "door_sounds" s JOIN "door_greetings" g ON g."user_id" = s."uploader_id"
-WHERE g."play_sound";--> statement-breakpoint
-ALTER TABLE "door_greetings" DROP COLUMN "sound";--> statement-breakpoint
-ALTER TABLE "door_greetings" DROP COLUMN "sound_type";--> statement-breakpoint
-ALTER TABLE "door_greetings" DROP COLUMN "sound_version";--> statement-breakpoint
-ALTER TABLE "door_greetings" DROP COLUMN "play_sound";
+WHERE g."play_sound";

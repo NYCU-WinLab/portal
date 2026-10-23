@@ -1,5 +1,5 @@
 {
-  "id": "7e5f3636-29a6-43df-85d7-ccf6828f7341",
+  "id": "ff3e81a2-daf6-4df3-a6d5-2318c059cffe",
   "prevId": "1e761d91-315d-4140-934f-2e7f5d936887",
   "version": "7",
   "dialect": "postgresql",
@@ -3939,6 +3939,31 @@
           "primaryKey": false,
           "notNull": false
         },
+        "sound": {
+          "name": "sound",
+          "type": "bytea",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "sound_type": {
+          "name": "sound_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "sound_version": {
+          "name": "sound_version",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "play_sound": {
+          "name": "play_sound",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
         "updated_at": {
           "name": "updated_at",
           "type": "timestamp with time zone",
@@ -3966,7 +3991,12 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "door_greetings_sound_shape": {
+          "name": "door_greetings_sound_shape",
+          "value": "(\"door_greetings\".\"sound\" is null) = (\"door_greetings\".\"sound_version\" is null) and (\"door_greetings\".\"sound\" is null) = (\"door_greetings\".\"sound_type\" is null)"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.door_playlist_items": {

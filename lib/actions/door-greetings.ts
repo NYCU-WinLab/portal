@@ -125,7 +125,8 @@ export async function panelGreetings() {
       if (own && !(label in suffix)) suffix[label] = own
       if (list.length && !(label in playlist)) {
         playlist[label] = list
-        sound[label] = { ...link(list[0]), mode: "sound_only" }
+        list.forEach(link)
+        sound[label] = { ...pool[list[0]], mode: "sound_only" }
       }
     }
   }

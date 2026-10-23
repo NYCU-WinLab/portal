@@ -28,6 +28,16 @@ const label = z
       )
   )
 
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0]
+
+/** One upload or playlist change at a time per member, so the caps hold
+ * and a playlist is replaced, never merged. */
+async function lockMember(tx: Tx, userId: string) {
+  await tx.execute(
+    sql`select 1 from ${user} where ${user.id} = ${userId} for update`
+  )
+}
+
 /** The sound, if the actor may change it: its uploader or a door admin. */
 async function ownSound(actor: Actor, soundId: string) {
   const [row] = await db
@@ -136,10 +146,7 @@ export const uploadDoorSound = defineAction({
     const type = soundType(sound)
     if (!type) throw new Error("只接受 mp3、m4a、aac、wav、ogg 音檔")
     return db.transaction(async (tx) => {
-      // One upload at a time per member, so the cap holds.
-      await tx.execute(
-        sql`select 1 from ${user} where ${user.id} = ${actor.userId} for update`
-      )
+      await lockMember(tx, actor.userId)
       const [{ n }] = await tx
         .select({ n: count() })
         .from(doorSounds)
@@ -212,6 +219,7 @@ export const setDoorPlaylist = defineAction({
   }),
   run: async (actor, { sound_ids }) =>
     db.transaction(async (tx) => {
+      await lockMember(tx, actor.userId)
       if (sound_ids.length) {
         const found = await tx
           .select({ id: doorSounds.id })
@@ -224,11 +232,14 @@ export const setDoorPlaylist = defineAction({
         .delete(doorPlaylistItems)
         .where(eq(doorPlaylistItems.userId, actor.userId))
       if (sound_ids.length)
-        await tx
-          .insert(doorPlaylistItems)
-          .values(
-            sound_ids.map((soundId) => ({ userId: actor.userId, soundId }))
-          )
+        await tx.insert(doorPlaylistItems).values(
+          // A millisecond apart, so the playlist reads back in this order.
+          sound_ids.map((soundId, i) => ({
+            userId: actor.userId,
+            soundId,
+            createdAt: new Date(Date.now() + i),
+          }))
+        )
       return { sound_ids }
     }),
 })
