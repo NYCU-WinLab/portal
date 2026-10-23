@@ -1,0 +1,1 @@
+ALTER TABLE "door_greetings" ADD COLUMN "speak_name" boolean DEFAULT true NOT NULL;

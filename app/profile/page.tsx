@@ -93,7 +93,11 @@ export default async function ProfilePage() {
         </section>
         <section className="flex flex-col gap-6">
           <SectionHeader title="門口歡迎" />
-          <DoorGreetingSettings suffix={door.suffix} playlist={door.playlist} />
+          <DoorGreetingSettings
+            suffix={door.suffix}
+            speakName={door.speak_name}
+            playlist={door.playlist}
+          />
         </section>
         {mine && (
           <section className="flex flex-col gap-6">

@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache"
 
 import { type Action, errorMessage, runAction } from "@/lib/actions/define"
-import { setDoorSuffix } from "@/lib/actions/door-greetings"
+import { setDoorSpeakName, setDoorSuffix } from "@/lib/actions/door-greetings"
 import { setMySignature, setSignatureSettings } from "@/lib/actions/signature"
 import { requireActor } from "@/lib/auth/session"
 
@@ -25,3 +25,6 @@ export const saveSignatureSettings = async (input: unknown) =>
 
 export const saveDoorSuffix = async (suffix: string) =>
   call(setDoorSuffix, { suffix })
+
+export const saveDoorSpeakName = async (speak: boolean) =>
+  call(setDoorSpeakName, { speak })
