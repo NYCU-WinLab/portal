@@ -561,8 +561,10 @@ export const cancelRoomBooking = defineAction({
           // A CANCEL must outrank the REQUEST, or calendars ignore it.
           inviteSequence: sql`${roomBookings.inviteSequence} + 1`,
         })
-        .where(eq(roomBookings.id, id))
+        // Two cancels at once: only the first changes the row.
+        .where(and(eq(roomBookings.id, id), eq(roomBookings.status, "booked")))
         .returning()
+      if (!row) throw new Error("這筆預約已經取消")
       await queueMail(tx, inviteMail(row, organizer, "CANCEL"))
       return row
     })

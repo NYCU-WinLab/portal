@@ -131,7 +131,10 @@ const icsText = (value: string) =>
     .replace(/\\/g, "\\\\")
     .replace(/;/g, "\\;")
     .replace(/,/g, "\\,")
-    .replace(/\r?\n/g, "\\n")
+    .replace(/\r\n|\r|\n/g, "\\n")
+
+// A parameter value is quoted, and may hold no quote or line break.
+const icsParam = (value: string) => `"${value.replace(/["\r\n]/g, " ")}"`
 
 function fold(line: string) {
   const bytes = new TextEncoder().encode(line)
@@ -188,10 +191,10 @@ export function calendarInvite(event: {
     `DTEND:${icsTime(event.end)}`,
     `SUMMARY:${icsText(event.title)}`,
     `LOCATION:${icsText(event.room ? `資工系 ${event.room}` : "線上會議")}`,
-    `ORGANIZER;CN=${icsText(event.organizer.name)}:mailto:${event.organizer.email}`,
+    `ORGANIZER;CN=${icsParam(event.organizer.name)}:mailto:${event.organizer.email}`,
     ...event.attendees.map(
       (a) =>
-        `ATTENDEE;CN=${icsText(a.name)};ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE:mailto:${a.email}`
+        `ATTENDEE;CN=${icsParam(a.name)};ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE:mailto:${a.email}`
     ),
     `STATUS:${event.method === "CANCEL" ? "CANCELLED" : "CONFIRMED"}`,
     ...(event.joinUrl
@@ -215,6 +218,7 @@ export const MEETING_FAILURES: Record<string, string> = {
   CREATE_FAILED: "Teams 建立會議失敗",
   OPTIONS_FAILED: "會議已建立，但自動錄影沒有套用",
   CANCEL_FAILED: "Teams 取消會議失敗",
+  INVALID_JOIN_URL: "pipeline 回傳的不是 Teams 連結",
   UNEXPECTED_RESPONSE: "Teams 的回應缺少必要欄位",
   NO_CALLBACK: "pipeline 沒有在時限內回報",
   TRIGGER_FAILED: "Portal 連不上 GitLab，pipeline 沒有啟動",

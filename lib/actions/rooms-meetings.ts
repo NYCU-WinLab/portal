@@ -89,10 +89,23 @@ export async function requestMeeting(booking: Booking) {
   })
 }
 
+const cancelVariables = (
+  booking: Booking,
+  meeting: { requestId: string; cancelId: string; messageId: string }
+) => ({
+  BOOKING_REQUEST_ID: meeting.requestId,
+  // The 04000000… GlobalObjectId, not the Outlook event id.
+  EVENT_ID: meeting.cancelId,
+  MESSAGE_ID: meeting.messageId,
+  START_TIME: taipeiOffsetIso(booking.date, booking.startTime),
+  CANCELLATION_MESSAGE: "此會議已取消（教室預約已取消）",
+})
+
 /**
  * Takes down a cancelled booking's Teams meeting. Returns why it could not,
  * since a meeting left behind still starts and records; null when it was
- * handed over or never existed.
+ * handed over, never existed, or is still being made (its callback then
+ * sees the booking cancelled and takes it down itself).
  */
 export async function cancelMeeting(booking: Booking) {
   if (!booking.online || !meetingPipelineConfigured()) return null
@@ -108,17 +121,18 @@ export async function cancelMeeting(booking: Booking) {
     .orderBy(desc(roomMeetingRequests.createdAt))
   const meeting = created.find((row) => row.cancelId && row.messageId)
   if (!meeting)
-    return created.some((row) => row.status !== "failed")
-      ? "Teams 會議還沒建好，或沒有回報識別碼"
+    return created.some((row) => row.status === "success")
+      ? "Teams 沒有回報會議識別碼"
       : null
-  return ask(booking, "cancel", {
-    BOOKING_REQUEST_ID: meeting.requestId,
-    // The 04000000… GlobalObjectId, not the Outlook event id.
-    EVENT_ID: meeting.cancelId!,
-    MESSAGE_ID: meeting.messageId!,
-    START_TIME: taipeiOffsetIso(booking.date, booking.startTime),
-    CANCELLATION_MESSAGE: "此會議已取消（教室預約已取消）",
-  })
+  return ask(
+    booking,
+    "cancel",
+    cancelVariables(booking, {
+      requestId: meeting.requestId,
+      cancelId: meeting.cancelId!,
+      messageId: meeting.messageId!,
+    })
+  )
 }
 
 /** The latest create request of each booking, for showing its link. */
@@ -217,11 +231,18 @@ export async function applyMeetingCallback(
     pipelineUrl: text(body.pipeline?.url),
     completedAt: sql`now()`,
   }
-  const join = text(body.meeting?.join_url)
+  // Only a Teams link may become the invite's redirect.
+  const rawJoin = text(body.meeting?.join_url)
+  const join =
+    rawJoin && /^https:\/\/teams\.microsoft\.com\//.test(rawJoin)
+      ? rawJoin
+      : null
   const succeeded =
     action === "cancel"
       ? body.status === "success" && !errorCode
       : join !== null
+  const cancelId = text(body.meeting?.cancel_id)
+  const messageId = text(body.meeting?.message_id)
   await db
     .update(roomMeetingRequests)
     .set(
@@ -230,19 +251,52 @@ export async function applyMeetingCallback(
             ...pipeline,
             status: "success",
             joinUrl: join,
-            cancelId: text(body.meeting?.cancel_id),
-            messageId: text(body.meeting?.message_id),
+            cancelId,
+            messageId,
             optionsApplied:
               body.options_applied === true && errorCode !== "OPTIONS_FAILED",
           }
         : {
             ...pipeline,
             status: "failed",
-            errorCode: errorCode ?? "UNEXPECTED_RESPONSE",
+            errorCode:
+              errorCode ??
+              (rawJoin && !join ? "INVALID_JOIN_URL" : "UNEXPECTED_RESPONSE"),
             errorMessage: text(body.error?.message) ?? "pipeline 沒有說明原因",
           }
     )
     .where(eq(roomMeetingRequests.id, request.id))
+  // Cancelled while the meeting was being made: take it down now. A failed
+  // ask records a failed cancel request, which the daily run mails.
+  if (action === "create" && succeeded) {
+    const [booking] = await db
+      .select()
+      .from(roomBookings)
+      .where(eq(roomBookings.id, request.bookingId))
+    if (booking && booking.status !== "booked") {
+      if (cancelId && messageId)
+        await ask(
+          booking,
+          "cancel",
+          cancelVariables(booking, {
+            requestId: request.requestId,
+            cancelId,
+            messageId,
+          })
+        )
+      else
+        await db.insert(roomMeetingRequests).values({
+          requestId: `room-booking-${randomBytes(6).toString("hex")}`,
+          bookingId: booking.id,
+          kind: "cancel",
+          callbackTokenHash: sha256(randomBytes(32).toString("hex")),
+          status: "failed",
+          errorCode: "CANCEL_FAILED",
+          errorMessage: "預約已取消，但 Teams 沒有回報會議識別碼",
+          completedAt: sql`now()`,
+        })
+    }
+  }
   await announceChange("room_meeting_callback").catch(() => {})
   return { status: 200, body: { ok: true } }
 }
