@@ -13,32 +13,103 @@ import { NextMeeting } from "./meetings/next-meeting"
 
 export const dynamic = "force-dynamic"
 
-// Apps in alphabetical order.
-const apps = [
-  { label: "Admins", href: "/admins" },
-  { label: "Approve", href: "/approve" },
-  { label: "Bento", href: "/bento" },
-  { label: "Bulletin", href: "/bulletin" },
-  { label: "Carrel", href: "https://carrel.winlab.tw" },
-  { label: "Developers", href: "/developers" },
-  { label: "Door", href: "/door" },
-  { label: "Gallery", href: "https://gallery.winlab.tw" },
-  { label: "Games", href: "/games" },
-  { label: "GitHub", href: "https://github.com/NYCU-WinLab" },
-  { label: "GitLab", href: "https://gitlab.winlab.tw" },
-  { label: "Groups", href: "/groups" },
-  { label: "Leave", href: "/leave" },
-  { label: "LLM", href: "https://llm.winlab.tw" },
-  { label: "Meetings", href: "/meetings" },
-  { label: "Nextcloud", href: "https://nextcloud.winlab.tw" },
-  { label: "Profile", href: "/profile" },
-  { label: "Receipts", href: "/receipts" },
-  { label: "Reimburse", href: "/reimburse" },
-  { label: "Rooms", href: "/rooms" },
-  { label: "Transcribe", href: "https://transcribe.winlab.tw" },
-  { label: "Trip", href: "/trip" },
-  { label: "Video", href: "https://video.winlab.tw" },
-  { label: "Wiki", href: "https://wiki.winlab.tw" },
+// Services in groups, each group in alphabetical order. An href that starts
+// with https is another lab service and gets the ↗ mark.
+const groups = [
+  {
+    title: "日常",
+    apps: [
+      { label: "Bento", name: "便當", emoji: "🍱", href: "/bento" },
+      { label: "Bulletin", name: "公告", emoji: "📢", href: "/bulletin" },
+      { label: "Door", name: "門禁", emoji: "🚪", href: "/door" },
+      {
+        label: "Gallery",
+        name: "相簿",
+        emoji: "🖼️",
+        href: "https://gallery.winlab.tw",
+      },
+      { label: "Games", name: "遊戲", emoji: "🎮", href: "/games" },
+      { label: "Leave", name: "請假", emoji: "🏖️", href: "/leave" },
+      { label: "Meetings", name: "實驗室會議", emoji: "🗓️", href: "/meetings" },
+      { label: "Rooms", name: "借會議室", emoji: "🏢", href: "/rooms" },
+    ],
+  },
+  {
+    title: "行政",
+    apps: [
+      { label: "Approve", name: "簽核", emoji: "✍️", href: "/approve" },
+      { label: "Receipts", name: "收據", emoji: "🧾", href: "/receipts" },
+      { label: "Reimburse", name: "記帳", emoji: "💰", href: "/reimburse" },
+      { label: "Trip", name: "出差文件", emoji: "✈️", href: "/trip" },
+    ],
+  },
+  {
+    title: "帳號",
+    apps: [
+      { label: "Admins", name: "管理員", emoji: "🛡️", href: "/admins" },
+      {
+        label: "Developers",
+        name: "開發者應用",
+        emoji: "🧩",
+        href: "/developers",
+      },
+      { label: "Groups", name: "群組信", emoji: "👥", href: "/groups" },
+      { label: "Profile", name: "個人資料", emoji: "👤", href: "/profile" },
+    ],
+  },
+  {
+    title: "工具",
+    apps: [
+      {
+        label: "Carrel",
+        name: "虛擬機",
+        emoji: "🖥️",
+        href: "https://carrel.winlab.tw",
+      },
+      {
+        label: "GitHub",
+        name: "程式碼",
+        emoji: "🐙",
+        href: "https://github.com/NYCU-WinLab",
+      },
+      {
+        label: "GitLab",
+        name: "程式碼",
+        emoji: "🦊",
+        href: "https://gitlab.winlab.tw",
+      },
+      {
+        label: "LLM",
+        name: "語言模型",
+        emoji: "🤖",
+        href: "https://llm.winlab.tw",
+      },
+      {
+        label: "Nextcloud",
+        name: "雲端硬碟",
+        emoji: "☁️",
+        href: "https://nextcloud.winlab.tw",
+      },
+      {
+        label: "Transcribe",
+        name: "逐字稿",
+        emoji: "📝",
+        href: "https://transcribe.winlab.tw",
+      },
+      {
+        label: "Video",
+        name: "影片",
+        emoji: "🎬",
+        href: "https://video.winlab.tw",
+      },
+      {
+        label: "Wiki",
+        name: "文件庫",
+        emoji: "📚",
+        href: "https://wiki.winlab.tw",
+      },
+    ],
+  },
 ]
 
 // A post shows on the home page for a week, then lives on /bulletin.
@@ -71,21 +142,32 @@ export default async function Home() {
             </Link>
           </section>
         )}
-        <section className="flex flex-col gap-2">
-          <SectionHeader title="服務" />
-          <ul className="flex stagger-rise flex-col">
-            {apps.map((app) => (
-              <li key={app.href} className="border-b border-border">
-                <Link
-                  href={app.href}
-                  className="flex min-h-14 items-center transition-colors duration-state hover:text-muted-foreground"
-                >
-                  {app.label}
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </section>
+        {groups.map((group) => (
+          <section key={group.title} className="flex flex-col gap-2">
+            <SectionHeader title={group.title} />
+            <ul className="flex stagger-rise flex-col">
+              {group.apps.map((app) => (
+                <li key={app.href} className="border-b border-border">
+                  <Link
+                    href={app.href}
+                    className="flex min-h-14 items-center gap-3 transition-colors duration-state hover:text-muted-foreground"
+                  >
+                    <span aria-hidden className="w-6 text-center">
+                      {app.emoji}
+                    </span>
+                    {app.label}
+                    <span className="ml-auto flex items-center gap-1.5 text-muted-foreground">
+                      {app.name}
+                      {app.href.startsWith("https") && (
+                        <span aria-label="外部網站">↗</span>
+                      )}
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ))}
       </div>
     </PortalShell>
   )
