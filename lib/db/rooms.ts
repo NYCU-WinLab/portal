@@ -15,14 +15,14 @@ import {
 } from "drizzle-orm/pg-core"
 
 import { user } from "@/lib/db/auth-schema"
-import { meetings } from "@/lib/db/meetings"
+import { labMeetings } from "@/lib/db/meetings"
 import type { Attendee } from "@/lib/rooms/meeting"
 
 // Standing meetings: the scheduler books each occurrence a week ahead.
 // title is already the full Teams topic ([prefix]-suffix), frozen with
 // the prefix, group and epics when the series is made.
-export const roomSeries = pgTable(
-  "room_series",
+export const standingMeetings = pgTable(
+  "standing_meetings",
   {
     id: uuid().defaultRandom().primaryKey(),
     title: text().notNull(),
@@ -52,10 +52,10 @@ export const roomSeries = pgTable(
     createdAt: timestamp({ withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
-    check("room_series_weekday", sql`${table.weekday} between 0 and 6`),
-    check("room_series_interval", sql`${table.intervalWeeks} in (1, 2)`),
+    check("standing_meetings_weekday", sql`${table.weekday} between 0 and 6`),
+    check("standing_meetings_interval", sql`${table.intervalWeeks} in (1, 2)`),
     check(
-      "room_series_duration",
+      "standing_meetings_duration",
       sql`${table.durationMinutes} between 30 and 300`
     ),
   ]
@@ -64,8 +64,8 @@ export const roomSeries = pgTable(
 // A meeting the portal booked: a department room through the lab's shared
 // account (room and external_id null for an online-only meeting), a Teams
 // meeting when online. Cancelled rows stay, for the GitLab feed.
-export const roomBookings = pgTable(
-  "room_bookings",
+export const meetings = pgTable(
+  "meetings",
   {
     id: uuid().defaultRandom().primaryKey(),
     externalId: text(),
@@ -87,9 +87,13 @@ export const roomBookings = pgTable(
       .array()
       .default(sql`'{}'`)
       .notNull(),
-    seriesId: uuid().references(() => roomSeries.id, { onDelete: "set null" }),
+    seriesId: uuid().references(() => standingMeetings.id, {
+      onDelete: "set null",
+    }),
     // The Monday lab meeting this booking holds the Teams meeting for.
-    meetingId: uuid().references(() => meetings.id, { onDelete: "set null" }),
+    labMeetingId: uuid().references(() => labMeetings.id, {
+      onDelete: "set null",
+    }),
     // Where it happens when no department room is reserved (EC411).
     place: text(),
     requestedBy: uuid()
@@ -110,16 +114,13 @@ export const roomBookings = pgTable(
       .on(table.seriesId, table.date)
       .where(sql`${table.status} = 'booked' and ${table.seriesId} is not null`),
     uniqueIndex()
-      .on(table.meetingId)
+      .on(table.labMeetingId)
       .where(
-        sql`${table.status} = 'booked' and ${table.meetingId} is not null`
+        sql`${table.status} = 'booked' and ${table.labMeetingId} is not null`
       ),
+    check("meetings_status", sql`${table.status} in ('booked', 'cancelled')`),
     check(
-      "room_bookings_status",
-      sql`${table.status} in ('booked', 'cancelled')`
-    ),
-    check(
-      "room_bookings_room_reserved",
+      "meetings_room_reserved",
       sql`(${table.room} is null) = (${table.externalId} is null)`
     ),
   ]
@@ -128,14 +129,14 @@ export const roomBookings = pgTable(
 // One ask to the GitLab pipeline that creates or cancels a booking's Teams
 // meeting. The pipeline answers on /api/rooms/meeting-callback with a
 // one-time token, of which only the SHA-256 is kept.
-export const roomMeetingRequests = pgTable(
-  "room_meeting_requests",
+export const teamsRequests = pgTable(
+  "teams_requests",
   {
     id: uuid().defaultRandom().primaryKey(),
     requestId: text().notNull().unique(),
-    bookingId: uuid()
+    meetingId: uuid()
       .notNull()
-      .references(() => roomBookings.id, { onDelete: "cascade" }),
+      .references(() => meetings.id, { onDelete: "cascade" }),
     kind: text().notNull(),
     callbackTokenHash: text().notNull(),
     status: text().default("pending").notNull(),
@@ -153,16 +154,13 @@ export const roomMeetingRequests = pgTable(
     notifiedAt: timestamp({ withTimezone: true }),
   },
   (table) => [
-    index().on(table.bookingId),
+    index().on(table.meetingId),
     index()
       .on(table.createdAt)
       .where(sql`${table.status} = 'pending'`),
+    check("teams_requests_kind", sql`${table.kind} in ('create', 'cancel')`),
     check(
-      "room_meeting_requests_kind",
-      sql`${table.kind} in ('create', 'cancel')`
-    ),
-    check(
-      "room_meeting_requests_status",
+      "teams_requests_status",
       sql`${table.status} in ('pending', 'success', 'failed')`
     ),
   ]
@@ -170,7 +168,7 @@ export const roomMeetingRequests = pgTable(
 
 // The days the daily rooms run has done, so a restart or a second process
 // never books the same occurrences or mails the same failures twice.
-export const roomDailyRuns = pgTable("room_daily_runs", {
+export const meetingDailyRuns = pgTable("meeting_daily_runs", {
   date: date({ mode: "string" }).primaryKey(),
   ranAt: timestamp({ withTimezone: true }).defaultNow().notNull(),
 })

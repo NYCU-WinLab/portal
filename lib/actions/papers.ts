@@ -6,7 +6,7 @@ import { defineAction } from "@/lib/actions/define"
 import { optionalText, optionalUrl } from "@/lib/actions/meetings"
 import { db } from "@/lib/db"
 import {
-  meetings,
+  labMeetings,
   paperTagLinks,
   papers,
   paperTags,
@@ -44,14 +44,14 @@ export const listPapers = defineAction({
         .orderBy(asc(paperTags.name)),
       db
         .select({
-          paperId: meetings.paperId,
-          date: meetings.date,
+          paperId: labMeetings.paperId,
+          date: labMeetings.date,
           presenter: user.name,
         })
-        .from(meetings)
-        .leftJoin(user, eq(user.id, meetings.presenterId))
-        .where(sql`${meetings.paperId} is not null`)
-        .orderBy(asc(meetings.date)),
+        .from(labMeetings)
+        .leftJoin(user, eq(user.id, labMeetings.presenterId))
+        .where(sql`${labMeetings.paperId} is not null`)
+        .orderBy(asc(labMeetings.date)),
     ])
     return {
       papers: rows
@@ -242,9 +242,9 @@ export const deletePaper = defineAction({
   run: async (actor, { id }) => {
     await requireAdmin(actor, "meetings")
     const [used] = await db
-      .select({ date: meetings.date })
-      .from(meetings)
-      .where(and(eq(meetings.paperId, id)))
+      .select({ date: labMeetings.date })
+      .from(labMeetings)
+      .where(and(eq(labMeetings.paperId, id)))
       .limit(1)
     if (used) throw new Error(`${used.date} 的報告用了這篇，不能刪`)
     const removed = await db

@@ -28,8 +28,8 @@ import {
 } from "@/lib/actions/meetings-shared"
 import {
   meetingKinds,
-  meetingQuestioners,
-  meetings,
+  labMeetingQuestioners,
+  labMeetings,
   semesters,
 } from "@/lib/db/schema"
 import { taipeiToday } from "@/lib/leave-dates"
@@ -82,7 +82,7 @@ export const generateSemester = defineAction({
         )
       await tx.insert(semesters).values({ start, weeks })
       const added = await tx
-        .insert(meetings)
+        .insert(labMeetings)
         .values(
           dates.map((date) => ({
             date,
@@ -91,7 +91,7 @@ export const generateSemester = defineAction({
           }))
         )
         .onConflictDoNothing()
-        .returning({ date: meetings.date })
+        .returning({ date: labMeetings.date })
       return { added: added.length, skipped: weeks - added.length }
     })
   },
@@ -113,7 +113,7 @@ export const addLabMeeting = defineAction({
     if (kind === "holiday" && !holiday) throw new Error("請填放假原因")
     return changeSchedule(async (tx) => {
       const [added] = await tx
-        .insert(meetings)
+        .insert(labMeetings)
         .values({
           date,
           kind,
@@ -121,7 +121,7 @@ export const addLabMeeting = defineAction({
           title: kind === "regular" || kind === "holiday" ? null : title,
         })
         .onConflictDoNothing()
-        .returning({ date: meetings.date })
+        .returning({ date: labMeetings.date })
       if (!added) throw new Error(`${date} 已經有會議`)
       return added
     })
@@ -167,7 +167,7 @@ export const updateLabMeeting = defineAction({
         await requirePaper(tx, next.paperId)
       const { id, ...change } = next
       try {
-        await tx.update(meetings).set(change).where(eq(meetings.id, id))
+        await tx.update(labMeetings).set(change).where(eq(labMeetings.id, id))
       } catch (error) {
         if (isUniqueViolation(error)) throw new Error(`${next.date} 已經有會議`)
         throw error
@@ -202,7 +202,7 @@ export const deleteLabMeeting = defineAction({
       const meeting = await meetingOn(tx, date)
       // Read before the delete unlinks the booking.
       const held = await releaseWeek(tx, meeting.id, [date])
-      await tx.delete(meetings).where(eq(meetings.id, meeting.id))
+      await tx.delete(labMeetings).where(eq(labMeetings.id, meeting.id))
       return held
     }).then(async (held) => {
       await cancelLabMeeting(held, actor.userId)
@@ -242,8 +242,8 @@ export const swapLabMeetings = defineAction({
           throw new Error(`${row.date} 是放假或演講週，不能交換`)
       const pick = (row: typeof a) =>
         Object.fromEntries(swapped.map((key) => [key, row[key]]))
-      await tx.update(meetings).set(pick(b)).where(eq(meetings.id, a.id))
-      await tx.update(meetings).set(pick(a)).where(eq(meetings.id, b.id))
+      await tx.update(labMeetings).set(pick(b)).where(eq(labMeetings.id, a.id))
+      await tx.update(labMeetings).set(pick(a)).where(eq(labMeetings.id, b.id))
       return { first, second }
     })
   },
@@ -265,34 +265,34 @@ export const fillPresenters = defineAction({
       if (turn.length === 0) throw new Error("報告順序是空的")
       const today = taipeiToday()
       const [last] = await tx
-        .select({ presenterId: meetings.presenterId })
-        .from(meetings)
+        .select({ presenterId: labMeetings.presenterId })
+        .from(labMeetings)
         .where(
           and(
-            isNotNull(meetings.presenterId),
-            eq(meetings.kind, "regular"),
-            inArray(meetings.presenterId, turn)
+            isNotNull(labMeetings.presenterId),
+            eq(labMeetings.kind, "regular"),
+            inArray(labMeetings.presenterId, turn)
           )
         )
-        .orderBy(desc(meetings.date))
+        .orderBy(desc(labMeetings.date))
         .limit(1)
       const open = await tx
-        .select({ id: meetings.id })
-        .from(meetings)
+        .select({ id: labMeetings.id })
+        .from(labMeetings)
         .where(
           and(
-            gte(meetings.date, today),
-            eq(meetings.kind, "regular"),
-            isNull(meetings.presenterId)
+            gte(labMeetings.date, today),
+            eq(labMeetings.kind, "regular"),
+            isNull(labMeetings.presenterId)
           )
         )
-        .orderBy(asc(meetings.date))
+        .orderBy(asc(labMeetings.date))
       let next = last ? turn.indexOf(last.presenterId!) + 1 : 0
       for (const week of open) {
         await tx
-          .update(meetings)
+          .update(labMeetings)
           .set({ presenterId: turn[next % turn.length] })
-          .where(eq(meetings.id, week.id))
+          .where(eq(labMeetings.id, week.id))
         next += 1
       }
       return { filled: open.length }
@@ -319,13 +319,13 @@ export const setQuestioners = defineAction({
       if (userIds.includes(meeting.presenterId ?? ""))
         throw new Error("報告人不能當自己那週的提問人")
       await tx
-        .delete(meetingQuestioners)
-        .where(eq(meetingQuestioners.meetingId, meeting.id))
+        .delete(labMeetingQuestioners)
+        .where(eq(labMeetingQuestioners.labMeetingId, meeting.id))
       const unique = [...new Set(userIds)]
       if (unique.length)
-        await tx.insert(meetingQuestioners).values(
+        await tx.insert(labMeetingQuestioners).values(
           unique.map((userId) => ({
-            meetingId: meeting.id,
+            labMeetingId: meeting.id,
             userId,
             manual: true,
           }))

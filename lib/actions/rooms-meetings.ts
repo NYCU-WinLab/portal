@@ -12,7 +12,7 @@ import { announceChange } from "@/lib/actions/changes"
 import { queueMail } from "@/lib/actions/mail"
 import { mailBody } from "@/lib/mail-body"
 import { db } from "@/lib/db"
-import { roomBookings, roomMeetingRequests, user } from "@/lib/db/schema"
+import { meetings, teamsRequests, user } from "@/lib/db/schema"
 import { meetingPipelineConfigured, triggerMeetingPipeline } from "@/lib/gitlab"
 import { MEETING_FAILURES } from "@/lib/rooms/meeting"
 import { dayLabel, taipeiOffsetIso } from "@/lib/rooms/time"
@@ -23,7 +23,7 @@ const sha256 = (value: string) =>
 export const joinUrl = (bookingId: string) =>
   `${process.env.BETTER_AUTH_URL}/rooms/join/${bookingId}`
 
-type Booking = typeof roomBookings.$inferSelect
+type Booking = typeof meetings.$inferSelect
 
 /**
  * Asks the pipeline for a booking's Teams meeting, or to cancel it. The
@@ -38,9 +38,9 @@ async function ask(
 ) {
   const requestId = `room-booking-${randomBytes(6).toString("hex")}`
   const callbackToken = randomBytes(32).toString("hex")
-  await db.insert(roomMeetingRequests).values({
+  await db.insert(teamsRequests).values({
     requestId,
-    bookingId: booking.id,
+    meetingId: booking.id,
     kind,
     callbackTokenHash: sha256(callbackToken),
   })
@@ -58,21 +58,21 @@ async function ask(
     })
     if (pipelineId)
       await db
-        .update(roomMeetingRequests)
+        .update(teamsRequests)
         .set({ pipelineId })
-        .where(eq(roomMeetingRequests.requestId, requestId))
+        .where(eq(teamsRequests.requestId, requestId))
     return null
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     await db
-      .update(roomMeetingRequests)
+      .update(teamsRequests)
       .set({
         status: "failed",
         errorCode: "TRIGGER_FAILED",
         errorMessage: message,
         completedAt: sql`now()`,
       })
-      .where(eq(roomMeetingRequests.requestId, requestId))
+      .where(eq(teamsRequests.requestId, requestId))
     return message
   }
 }
@@ -112,14 +112,14 @@ export async function cancelTeamsMeeting(booking: Booking) {
   if (!booking.online || !meetingPipelineConfigured()) return null
   const created = await db
     .select()
-    .from(roomMeetingRequests)
+    .from(teamsRequests)
     .where(
       and(
-        eq(roomMeetingRequests.bookingId, booking.id),
-        eq(roomMeetingRequests.kind, "create")
+        eq(teamsRequests.meetingId, booking.id),
+        eq(teamsRequests.kind, "create")
       )
     )
-    .orderBy(desc(roomMeetingRequests.createdAt))
+    .orderBy(desc(teamsRequests.createdAt))
   const meeting = created.find((row) => row.cancelId && row.messageId)
   if (!meeting)
     return created.some((row) => row.status === "success")
@@ -140,23 +140,23 @@ export async function cancelTeamsMeeting(booking: Booking) {
 export async function meetingsOf(bookingIds: string[]) {
   if (!bookingIds.length) return new Map<string, MeetingState>()
   const rows = await db
-    .selectDistinctOn([roomMeetingRequests.bookingId], {
-      bookingId: roomMeetingRequests.bookingId,
-      status: roomMeetingRequests.status,
-      joinUrl: roomMeetingRequests.joinUrl,
-      errorCode: roomMeetingRequests.errorCode,
+    .selectDistinctOn([teamsRequests.meetingId], {
+      meetingId: teamsRequests.meetingId,
+      status: teamsRequests.status,
+      joinUrl: teamsRequests.joinUrl,
+      errorCode: teamsRequests.errorCode,
     })
-    .from(roomMeetingRequests)
+    .from(teamsRequests)
     .where(
       and(
-        eq(roomMeetingRequests.kind, "create"),
-        inArray(roomMeetingRequests.bookingId, bookingIds)
+        eq(teamsRequests.kind, "create"),
+        inArray(teamsRequests.meetingId, bookingIds)
       )
     )
-    .orderBy(roomMeetingRequests.bookingId, desc(roomMeetingRequests.createdAt))
+    .orderBy(teamsRequests.meetingId, desc(teamsRequests.createdAt))
   return new Map(
     rows.map((row) => [
-      row.bookingId,
+      row.meetingId,
       {
         status: row.status as MeetingState["status"],
         joinUrl: row.joinUrl,
@@ -205,8 +205,8 @@ export async function applyMeetingCallback(
     return { status: 400, body: { error: "X-Request-Id does not match" } }
   const [request] = await db
     .select()
-    .from(roomMeetingRequests)
-    .where(eq(roomMeetingRequests.requestId, requestId))
+    .from(teamsRequests)
+    .where(eq(teamsRequests.requestId, requestId))
   // An unknown id and a wrong token look the same to the caller.
   const presented = Buffer.from(sha256(token), "hex")
   const stored = Buffer.from(request?.callbackTokenHash ?? "", "hex")
@@ -245,7 +245,7 @@ export async function applyMeetingCallback(
   const cancelId = text(body.meeting?.cancel_id)
   const messageId = text(body.meeting?.message_id)
   await db
-    .update(roomMeetingRequests)
+    .update(teamsRequests)
     .set(
       succeeded
         ? {
@@ -266,14 +266,14 @@ export async function applyMeetingCallback(
             errorMessage: text(body.error?.message) ?? "pipeline 沒有說明原因",
           }
     )
-    .where(eq(roomMeetingRequests.id, request.id))
+    .where(eq(teamsRequests.id, request.id))
   // Cancelled while the meeting was being made: take it down now. A failed
   // ask records a failed cancel request, which the daily run mails.
   if (action === "create" && succeeded) {
     const [booking] = await db
       .select()
-      .from(roomBookings)
-      .where(eq(roomBookings.id, request.bookingId))
+      .from(meetings)
+      .where(eq(meetings.id, request.meetingId))
     if (booking && booking.status !== "booked") {
       if (cancelId && messageId)
         await ask(
@@ -286,9 +286,9 @@ export async function applyMeetingCallback(
           })
         )
       else
-        await db.insert(roomMeetingRequests).values({
+        await db.insert(teamsRequests).values({
           requestId: `room-booking-${randomBytes(6).toString("hex")}`,
-          bookingId: booking.id,
+          meetingId: booking.id,
           kind: "cancel",
           callbackTokenHash: sha256(randomBytes(32).toString("hex")),
           status: "failed",
@@ -305,9 +305,9 @@ export async function applyMeetingCallback(
 /** Where the invite's link should go now. */
 export async function meetingForJoin(bookingId: string) {
   const [booking] = await db
-    .select({ status: roomBookings.status, online: roomBookings.online })
-    .from(roomBookings)
-    .where(eq(roomBookings.id, bookingId))
+    .select({ status: meetings.status, online: meetings.online })
+    .from(meetings)
+    .where(eq(meetings.id, bookingId))
   if (!booking) return { state: "missing" as const }
   if (booking.status !== "booked") return { state: "cancelled" as const }
   if (!booking.online) return { state: "offline" as const }
@@ -328,7 +328,7 @@ const STUCK_MINUTES = 30
  */
 export async function sweepMeetingRequests() {
   await db
-    .update(roomMeetingRequests)
+    .update(teamsRequests)
     .set({
       status: "failed",
       errorCode: "NO_CALLBACK",
@@ -337,35 +337,32 @@ export async function sweepMeetingRequests() {
     })
     .where(
       and(
-        eq(roomMeetingRequests.status, "pending"),
+        eq(teamsRequests.status, "pending"),
         lt(
-          roomMeetingRequests.createdAt,
+          teamsRequests.createdAt,
           sql`now() - make_interval(mins => ${STUCK_MINUTES})`
         )
       )
     )
   const failed = await db
     .select({
-      id: roomMeetingRequests.id,
-      kind: roomMeetingRequests.kind,
-      errorCode: roomMeetingRequests.errorCode,
-      errorMessage: roomMeetingRequests.errorMessage,
-      pipelineUrl: roomMeetingRequests.pipelineUrl,
-      bookingStatus: roomBookings.status,
-      title: roomBookings.title,
-      date: roomBookings.date,
-      startTime: roomBookings.startTime,
-      endTime: roomBookings.endTime,
+      id: teamsRequests.id,
+      kind: teamsRequests.kind,
+      errorCode: teamsRequests.errorCode,
+      errorMessage: teamsRequests.errorMessage,
+      pipelineUrl: teamsRequests.pipelineUrl,
+      bookingStatus: meetings.status,
+      title: meetings.title,
+      date: meetings.date,
+      startTime: meetings.startTime,
+      endTime: meetings.endTime,
       email: user.email,
     })
-    .from(roomMeetingRequests)
-    .innerJoin(roomBookings, eq(roomBookings.id, roomMeetingRequests.bookingId))
-    .innerJoin(user, eq(user.id, roomBookings.requestedBy))
+    .from(teamsRequests)
+    .innerJoin(meetings, eq(meetings.id, teamsRequests.meetingId))
+    .innerJoin(user, eq(user.id, meetings.requestedBy))
     .where(
-      and(
-        eq(roomMeetingRequests.status, "failed"),
-        isNull(roomMeetingRequests.notifiedAt)
-      )
+      and(eq(teamsRequests.status, "failed"), isNull(teamsRequests.notifiedAt))
     )
   for (const row of failed) {
     await db.transaction(async (tx) => {
@@ -399,9 +396,9 @@ export async function sweepMeetingRequests() {
         })
       }
       await tx
-        .update(roomMeetingRequests)
+        .update(teamsRequests)
         .set({ notifiedAt: sql`now()` })
-        .where(eq(roomMeetingRequests.id, row.id))
+        .where(eq(teamsRequests.id, row.id))
     })
   }
 }
@@ -415,14 +412,11 @@ export async function sweepMeetingRequests() {
 export async function bookingsFeed(from: string, to: string) {
   const rows = await db
     .select()
-    .from(roomBookings)
+    .from(meetings)
     .where(
-      and(
-        sql`${roomBookings.date} >= ${from}`,
-        sql`${roomBookings.date} <= ${to}`
-      )
+      and(sql`${meetings.date} >= ${from}`, sql`${meetings.date} <= ${to}`)
     )
-    .orderBy(roomBookings.date, roomBookings.startTime)
+    .orderBy(meetings.date, meetings.startTime)
   return rows.map((row) => ({
     booking_id: row.id,
     start: taipeiOffsetIso(row.date, row.startTime),

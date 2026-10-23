@@ -72,8 +72,8 @@ export const semesters = pgTable("semesters", {
 // kind replaces the old holiday / speaker / thesis flags, so they cannot
 // clash. title is free text for a speaker or thesis week (and for weeks
 // imported from before the paper rule); a regular week names a paper.
-export const meetings = pgTable(
-  "meetings",
+export const labMeetings = pgTable(
+  "lab_meetings",
   {
     id: uuid().defaultRandom().primaryKey(),
     date: date({ mode: "string" }).notNull().unique(),
@@ -92,16 +92,16 @@ export const meetings = pgTable(
   },
   (table) => [
     check(
-      "meetings_kind_known",
+      "lab_meetings_kind_known",
       sql`${table.kind} in ('regular', 'holiday', 'speaker', 'thesis')`
     ),
     // Only a regular or thesis week has a member presenting.
     check(
-      "meetings_presenter_kind",
+      "lab_meetings_presenter_kind",
       sql`${table.presenterId} is null or ${table.kind} in ('regular', 'thesis')`
     ),
     check(
-      "meetings_paper_kind",
+      "lab_meetings_paper_kind",
       sql`${table.paperId} is null or ${table.kind} = 'regular'`
     ),
   ]
@@ -119,19 +119,19 @@ export const presenters = pgTable("presenters", {
 
 // Who asks questions each week. manual seats were picked by an admin and are
 // never moved by the automatic assignment.
-export const meetingQuestioners = pgTable(
-  "meeting_questioners",
+export const labMeetingQuestioners = pgTable(
+  "lab_meeting_questioners",
   {
-    meetingId: uuid()
+    labMeetingId: uuid()
       .notNull()
-      .references(() => meetings.id, { onDelete: "cascade" }),
+      .references(() => labMeetings.id, { onDelete: "cascade" }),
     userId: uuid()
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
     manual: boolean().notNull().default(false),
   },
   (table) => [
-    primaryKey({ columns: [table.meetingId, table.userId] }),
+    primaryKey({ columns: [table.labMeetingId, table.userId] }),
     index().on(table.userId),
   ]
 )
@@ -139,8 +139,8 @@ export const meetingQuestioners = pgTable(
 // The weekly mails already sent, by the Monday they are about (kind title:
 // the presenter's reminder; announce: the lab's announcement), so a restart
 // or a second process never sends one twice.
-export const meetingMailRuns = pgTable(
-  "meeting_mail_runs",
+export const labMeetingMailRuns = pgTable(
+  "lab_meeting_mail_runs",
   {
     date: date({ mode: "string" }).notNull(),
     kind: text().notNull(),

@@ -4,7 +4,12 @@ import { z } from "zod"
 import { isAdmin } from "@/lib/actions/authz"
 import { defineAction } from "@/lib/actions/define"
 import { db } from "@/lib/db"
-import { leaves, meetingQuestioners, meetings, user } from "@/lib/db/schema"
+import {
+  leaves,
+  labMeetingQuestioners,
+  labMeetings,
+  user,
+} from "@/lib/db/schema"
 import { taipeiToday } from "@/lib/leave-dates"
 
 export type MemberStats = {
@@ -40,30 +45,30 @@ export const listLabMeetingStats = defineAction({
     const [presenting, asking, away] = await Promise.all([
       db
         .select({
-          userId: meetings.presenterId,
-          done: past(meetings.date),
-          next: ahead(meetings.date),
+          userId: labMeetings.presenterId,
+          done: past(labMeetings.date),
+          next: ahead(labMeetings.date),
         })
-        .from(meetings)
+        .from(labMeetings)
         .where(
           only
-            ? inArray(meetings.presenterId, only)
-            : sql`${meetings.presenterId} is not null`
+            ? inArray(labMeetings.presenterId, only)
+            : sql`${labMeetings.presenterId} is not null`
         )
-        .groupBy(meetings.presenterId),
+        .groupBy(labMeetings.presenterId),
       db
         .select({
-          userId: meetingQuestioners.userId,
-          done: past(meetings.date),
-          next: ahead(meetings.date),
+          userId: labMeetingQuestioners.userId,
+          done: past(labMeetings.date),
+          next: ahead(labMeetings.date),
         })
-        .from(meetingQuestioners)
+        .from(labMeetingQuestioners)
         .innerJoin(
-          meetings,
-          sql`${meetings.id} = ${meetingQuestioners.meetingId}`
+          labMeetings,
+          sql`${labMeetings.id} = ${labMeetingQuestioners.labMeetingId}`
         )
-        .where(only ? inArray(meetingQuestioners.userId, only) : undefined)
-        .groupBy(meetingQuestioners.userId),
+        .where(only ? inArray(labMeetingQuestioners.userId, only) : undefined)
+        .groupBy(labMeetingQuestioners.userId),
       db
         .select({
           userId: leaves.userId,
