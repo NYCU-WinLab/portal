@@ -1,6 +1,6 @@
 "use client"
 
-import { CheckIcon, PencilIcon, Trash2Icon, Undo2Icon } from "lucide-react"
+import { CheckIcon, EllipsisIcon, Undo2Icon } from "lucide-react"
 import * as React from "react"
 import { toast } from "sonner"
 
@@ -8,6 +8,12 @@ import { ConfirmDialog } from "@/components/confirm-dialog"
 import { FileUpload } from "@/components/file-upload"
 import { FormDialog, FormField } from "@/components/form-dialog"
 import { Button } from "@/components/ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
@@ -175,6 +181,8 @@ export function ReceiptActions({
   projects: string[]
 }) {
   const done = receipt.status === "approved"
+  const [editing, setEditing] = React.useState(false)
+  const [deleting, setDeleting] = React.useState(false)
   return (
     <>
       <Tooltip>
@@ -200,12 +208,24 @@ export function ReceiptActions({
         </TooltipTrigger>
         <TooltipContent>{done ? "改回審核中" : "完成"}</TooltipContent>
       </Tooltip>
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          render={<Button variant="ghost" size="icon" aria-label="更多" />}
+        >
+          <EllipsisIcon />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem onClick={() => setEditing(true)}>
+            修改
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => setDeleting(true)}>
+            刪除
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
       <FormDialog
-        trigger={
-          <Button variant="ghost" size="icon" aria-label="修改">
-            <PencilIcon />
-          </Button>
-        }
+        open={editing}
+        onOpenChange={setEditing}
         title="修改收據"
         submitLabel="儲存"
         onSubmit={(data) =>
@@ -223,11 +243,8 @@ export function ReceiptActions({
         <Fields receipt={receipt} projects={projects} />
       </FormDialog>
       <ConfirmDialog
-        trigger={
-          <Button variant="ghost" size="icon" aria-label="刪除">
-            <Trash2Icon />
-          </Button>
-        }
+        open={deleting}
+        onOpenChange={setDeleting}
         title={`刪除「${receipt.name}」？`}
         confirmLabel="刪除"
         onConfirm={() => report(remove(receipt.id), "已刪除")}
