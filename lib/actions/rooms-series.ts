@@ -3,7 +3,7 @@
 // time picks whatever is free by then. A daily run in the server process
 // does it; a new series books its first week at once, which the daily run
 // (looking only 7 days out) would never reach.
-import { and, asc, eq } from "drizzle-orm"
+import { and, asc, eq, gt, gte, inArray, lt, lte } from "drizzle-orm"
 import { z } from "zod"
 
 import { announceChange } from "@/lib/actions/changes"
@@ -23,6 +23,7 @@ import { roomBookings, roomDailyRuns, roomSeries, user } from "@/lib/db/schema"
 import { epicIssues, getEpic } from "@/lib/gitlab"
 import { projectGroups } from "@/lib/keycloak"
 import { bookingConfigured } from "@/lib/meetingroom"
+import type { Slot } from "@/lib/rooms/availability"
 import {
   ADVISOR_USERNAME,
   DEFAULT_TOPIC,
@@ -113,35 +114,81 @@ export const listStandingMeetings = defineAction({
 })
 
 /**
- * Books one occurrence: the room the page would pick (a paid one when no
- * free room is open, as the old portal did), else tells the creator. Skips
- * an occurrence already held. Returns the failure, or null.
+ * A room the lab's account holds for the whole span that no portal booking
+ * accounts for, or null. A reserve the department accepted but never
+ * answered leaves exactly that; booking again would hold a second room.
  */
-async function bookOccurrence(series: Series, date: string) {
+async function strayLabHold(
+  slots: Slot[],
+  date: string,
+  start: string,
+  end: string
+) {
+  const span = slots.filter((slot) => slot.start >= start && slot.end <= end)
+  if (!span.length) return null
+  const held = span[0].labRooms.filter((room) =>
+    span.every((slot) => slot.labRooms.includes(room))
+  )
+  if (!held.length) return null
+  const ours = await db
+    .select({ room: roomBookings.room })
+    .from(roomBookings)
+    .where(
+      and(
+        eq(roomBookings.date, date),
+        eq(roomBookings.status, "booked"),
+        lt(roomBookings.startTime, end),
+        gt(roomBookings.endTime, start)
+      )
+    )
+  return held.find((room) => !ours.some((row) => row.room === room)) ?? null
+}
+
+/**
+ * Books one occurrence: the room the page would pick (a paid one when no
+ * free room is open, as the old portal did), else tells the creator when
+ * notify. Skips an occurrence that has a booking, kept or cancelled.
+ * Returns the failure, or null.
+ */
+async function bookOccurrence(series: Series, date: string, notify = true) {
+  // Read again just before booking, whatever the caller saw: a cancelled
+  // row settles the day as much as a kept one.
   const [held] = await db
     .select({ id: roomBookings.id })
     .from(roomBookings)
     .where(
-      and(
-        eq(roomBookings.seriesId, series.id),
-        eq(roomBookings.date, date),
-        eq(roomBookings.status, "booked")
-      )
+      and(eq(roomBookings.seriesId, series.id), eq(roomBookings.date, date))
     )
   if (held) return null
   const endTime = addMinutes(series.startTime, series.durationMinutes)!
+  // The creator may have booked the week by hand, as the failure mail asks;
+  // that booking carries no series, and a second one would hold two rooms.
+  const [byHand] = await db
+    .select({ id: roomBookings.id })
+    .from(roomBookings)
+    .where(
+      and(
+        eq(roomBookings.requestedBy, series.createdBy),
+        eq(roomBookings.date, date),
+        eq(roomBookings.status, "booked"),
+        lt(roomBookings.startTime, endTime),
+        gt(roomBookings.endTime, series.startTime)
+      )
+    )
+  if (byHand) return null
   const [owner] = await db
     .select({ id: user.id, name: user.name, email: user.email })
     .from(user)
     .where(eq(user.id, series.createdBy))
   try {
     if (!bookingConfigured()) throw new Error("Portal 還沒設定系上借用帳號")
-    const room = roomFor(
-      (await availability([date], true))[0].slots,
-      series.startTime,
-      endTime,
-      true
-    )
+    const slots = (await availability([date], true))[0].slots
+    const stray = await strayLabHold(slots, date, series.startTime, endTime)
+    if (stray)
+      throw new Error(
+        `系上已有實驗室帳號借的 ${stray}，portal 沒有這筆紀錄，可能是之前的預約沒收到回應；請確認後自己借或取消`
+      )
+    const room = roomFor(slots, series.startTime, endTime, true)
     let attendees = series.attendees
     if (series.includeAdvisor) {
       const [advisor] = await db
@@ -170,22 +217,23 @@ async function bookOccurrence(series: Series, date: string) {
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error)
     emitErrorLog(error, { "room_series.id": series.id })
-    await queueMail(db, {
-      to: [owner.email],
-      subject: `[WinLab 會議] 固定會議沒訂到教室：${series.title}`,
-      ...mailBody({
-        title: series.title,
-        rows: [
-          ["時間", `${dayLabel(date)} ${series.startTime} 到 ${endTime}`],
-          ["原因", reason],
-        ],
-        paragraphs: ["請自己借教室，或改成線上。"],
-        action: {
-          label: "借教室",
-          url: `${process.env.BETTER_AUTH_URL}/meetings`,
-        },
-      }),
-    })
+    if (notify)
+      await queueMail(db, {
+        to: [owner.email],
+        subject: `[WinLab 會議] 固定會議沒訂到教室：${series.title}`,
+        ...mailBody({
+          title: series.title,
+          rows: [
+            ["時間", `${dayLabel(date)} ${series.startTime} 到 ${endTime}`],
+            ["原因", reason],
+          ],
+          paragraphs: ["請自己借教室，或改成線上。"],
+          action: {
+            label: "借教室",
+            url: `${process.env.BETTER_AUTH_URL}/meetings`,
+          },
+        }),
+      })
     return `${dayLabel(date)}：${reason}`
   }
 }
@@ -315,7 +363,7 @@ export const setStandingMeetingActive = defineAction({
   name: "set_standing_meeting_active",
   title: "暫停或恢復固定會議",
   description:
-    "Pauses (active false) or resumes (active true) one of the member's own standing meetings. A paused series books nothing new; occurrences already booked stay, and are cancelled with cancel_meeting.",
+    "Pauses (active false) or resumes (active true) one of the member's own standing meetings. A paused series books nothing new; occurrences already booked stay, and are cancelled with cancel_meeting. Resuming books, at the next daily run, every week within the coming 7 days that has no booking; to skip one week, keep it running and cancel that week's booking instead.",
   kind: "mutation",
   input: z.object({ id: z.uuid(), active: z.boolean() }),
   run: async (actor, { id, active }) => {
@@ -341,7 +389,7 @@ export const deleteStandingMeeting = defineAction({
 
 /**
  * The daily run, once a day from 04:30 Taipei: books every active series'
- * occurrence 7 days out, then settles and reports Teams meetings that
+ * occurrences up to 7 days out, then settles and reports Teams meetings that
  * failed. The day is claimed in room_daily_runs first, so a restart or a
  * second process never runs it twice.
  */
@@ -353,13 +401,49 @@ export async function runDailyRooms() {
     .onConflictDoNothing()
     .returning()
   if (!claimed.length) return
-  const date = addDays(today, LEAD_DAYS)
-  const due = (
-    await db.select().from(roomSeries).where(eq(roomSeries.active, true))
-  ).filter((series) =>
-    occurrencesBetween(rule(series), date, date).includes(date)
+  // Day 7 is the new one. The days before it are booked too when nothing
+  // holds them, so a run that never happened (the server was down, or the
+  // series was paused then) is made up. A failure mails on day 7 and once
+  // more the day before, so a week that never had a day 7 still warns, and
+  // nobody gets a mail a day for the same week.
+  const from = addDays(today, 1)
+  const to = addDays(today, LEAD_DAYS)
+  const active = await db
+    .select()
+    .from(roomSeries)
+    .where(eq(roomSeries.active, true))
+  // Any row, kept or cancelled, settles a day: a week the creator
+  // cancelled stays cancelled.
+  const settled = new Set(
+    active.length
+      ? (
+          await db
+            .select({
+              seriesId: roomBookings.seriesId,
+              date: roomBookings.date,
+            })
+            .from(roomBookings)
+            .where(
+              and(
+                inArray(
+                  roomBookings.seriesId,
+                  active.map((series) => series.id)
+                ),
+                gte(roomBookings.date, from),
+                lte(roomBookings.date, to)
+              )
+            )
+        ).map((row) => `${row.seriesId} ${row.date}`)
+      : []
   )
-  for (const series of due) await bookOccurrence(series, date)
+  for (const series of active)
+    for (const date of occurrencesBetween(rule(series), from, to))
+      if (!settled.has(`${series.id} ${date}`))
+        // One week that throws outside bookOccurrence's own handling must
+        // not cost the other series, or the Teams sweep below, their day.
+        await bookOccurrence(series, date, date === to || date === from).catch(
+          (error) => emitErrorLog(error, { "room_series.id": series.id, date })
+        )
   await sweepMeetingRequests()
   await announceChange("room_daily_run").catch(() => {})
 }
