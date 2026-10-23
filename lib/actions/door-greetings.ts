@@ -1,20 +1,19 @@
-import { randomBytes } from "node:crypto"
-
-import { and, eq, inArray, isNotNull, or, sql } from "drizzle-orm"
+import { eq, inArray, isNotNull, sql } from "drizzle-orm"
 import { z } from "zod"
 
 import { defineAction } from "@/lib/actions/define"
+import { panelPlaylists } from "@/lib/actions/door-sounds"
 import { readSchedule } from "@/lib/actions/meetings-shared"
 import { db } from "@/lib/db"
-import { doorCards, doorGreetings, leaves, user } from "@/lib/db/schema"
 import {
-  SOUND_MAX_BYTES,
-  SOUND_MAX_SECONDS,
-  panelName,
-  soundLink,
-  soundType,
-  suffixProblem,
-} from "@/lib/door-greeting"
+  doorCards,
+  doorGreetings,
+  doorPlaylistItems,
+  doorSounds,
+  leaves,
+  user,
+} from "@/lib/db/schema"
+import { panelName, soundLink, suffixProblem } from "@/lib/door-greeting"
 import { taipeiToday } from "@/lib/leave-dates"
 
 async function upsert(
@@ -34,46 +33,23 @@ export const getMyDoorGreeting = defineAction({
   name: "get_my_door_greeting",
   title: "我的門口歡迎",
   description:
-    "How the lab door greets the signed-in member: suffix (shown after their name on the LED panel, null for the default ！！), whether they uploaded their own sound (sound_version changes with every upload), and whether it plays (play_sound) instead of the lab's default.",
+    "How the lab door greets the signed-in member: suffix (shown after their name on the LED panel, null for the default ！！) and their playlist, the pool sounds the door picks from at random (empty plays one of the lab's defaults).",
   kind: "query",
   input: z.object({}),
   run: async (actor) => {
-    const [row] = await db
-      .select({
-        suffix: doorGreetings.suffix,
-        soundType: doorGreetings.soundType,
-        soundVersion: doorGreetings.soundVersion,
-        playSound: doorGreetings.playSound,
-      })
-      .from(doorGreetings)
-      .where(eq(doorGreetings.userId, actor.userId))
-    return {
-      suffix: row?.suffix ?? null,
-      has_sound: Boolean(row?.soundType),
-      sound_version: row?.soundVersion ?? null,
-      play_sound: row?.playSound ?? false,
-    }
-  },
-})
-
-export const getMyDoorSound = defineAction({
-  name: "get_my_door_sound",
-  title: "試聽我的門口音效",
-  description:
-    "The signed-in member's own door sound as base64 with its content type, or null when they have not uploaded one.",
-  kind: "query",
-  input: z.object({}),
-  run: async (actor) => {
-    const [row] = await db
-      .select({ sound: doorGreetings.sound, type: doorGreetings.soundType })
-      .from(doorGreetings)
-      .where(eq(doorGreetings.userId, actor.userId))
-    return {
-      sound:
-        row?.sound && row.type
-          ? { contentType: row.type, base64: row.sound.toString("base64") }
-          : null,
-    }
+    const [[row], playlist] = await Promise.all([
+      db
+        .select({ suffix: doorGreetings.suffix })
+        .from(doorGreetings)
+        .where(eq(doorGreetings.userId, actor.userId)),
+      db
+        .select({ id: doorSounds.id, label: doorSounds.label })
+        .from(doorPlaylistItems)
+        .innerJoin(doorSounds, eq(doorSounds.id, doorPlaylistItems.soundId))
+        .where(eq(doorPlaylistItems.userId, actor.userId))
+        .orderBy(doorPlaylistItems.createdAt),
+    ])
+    return { suffix: row?.suffix ?? null, playlist }
   },
 })
 
@@ -93,145 +69,69 @@ export const setDoorSuffix = defineAction({
   },
 })
 
-export const uploadDoorSound = defineAction({
-  name: "upload_door_sound",
-  title: "上傳門口音效",
-  description: `Uploads the signed-in member's own door sound as base64 (mp3, m4a, aac, wav or ogg, up to ${SOUND_MAX_BYTES / 1024 / 1024} MB; the door plays its first ${SOUND_MAX_SECONDS} seconds) and turns it on. It replaces the previous one.`,
-  kind: "mutation",
-  input: z.object({
-    base64: z
-      .base64("檔案要是 base64")
-      .max(Math.ceil((SOUND_MAX_BYTES * 4) / 3) + 4, "音檔超過 3 MB"),
-  }),
-  run: async (actor, { base64 }) => {
-    const sound = Buffer.from(base64, "base64")
-    if (!sound.length) throw new Error("音檔是空的")
-    if (sound.length > SOUND_MAX_BYTES) throw new Error("音檔超過 3 MB")
-    const type = soundType(sound)
-    if (!type) throw new Error("只接受 mp3、m4a、aac、wav、ogg 音檔")
-    await upsert(actor.userId, {
-      sound,
-      soundType: type,
-      soundVersion: randomBytes(8).toString("hex"),
-      playSound: true,
-    })
-    return { uploaded: true, play_sound: true }
-  },
-})
-
-export const setDoorSound = defineAction({
-  name: "set_door_sound",
-  title: "選擇門口音效",
-  description:
-    "Chooses which sound the lab door plays when the signed-in member opens it: their own uploaded sound (play_sound true; upload one with upload_door_sound first) or the lab's default (false).",
-  kind: "mutation",
-  input: z.object({ play_sound: z.boolean() }),
-  run: async (actor, { play_sound }) => {
-    if (play_sound) {
-      const [row] = await db
-        .select({ soundType: doorGreetings.soundType })
-        .from(doorGreetings)
-        .where(eq(doorGreetings.userId, actor.userId))
-      if (!row?.soundType) throw new Error("還沒有上傳音效")
-    }
-    await upsert(actor.userId, { playSound: play_sound })
-    return { play_sound }
-  },
-})
-
-export const deleteDoorSound = defineAction({
-  name: "delete_door_sound",
-  title: "刪除門口音效",
-  description:
-    "Deletes the signed-in member's own door sound; the door goes back to the lab's default for them.",
-  kind: "mutation",
-  input: z.object({}),
-  run: async (actor) => {
-    await upsert(actor.userId, {
-      sound: null,
-      soundType: null,
-      soundVersion: null,
-      playSound: false,
-    })
-    return { deleted: true }
-  },
-})
-
 // What the door panel reads (not actions: the panel is a machine with its
 // own secret, /api/door/greetings and /api/door/meeting).
 
 /**
- * {suffix, color, sound}, each keyed by the name the panel shows: the
- * member's name and the holder name on each of their cards. color stays
- * empty; per-member colors were dropped in the move.
+ * Keyed by the name the panel shows (the member's name and the holder name
+ * on each of their cards): suffix, and playlist, the pool sound ids the
+ * door picks one of at random. pool links every listed sound, default
+ * lists the ones for everyone else. sound is the format before playlists,
+ * each member's first sound, for a panel that has not moved on yet. color
+ * stays empty; per-member colors were dropped in the move.
  */
 export async function panelGreetings() {
-  const rows = await db
-    .select({
-      userId: doorGreetings.userId,
-      name: user.name,
-      suffix: doorGreetings.suffix,
-      soundVersion: doorGreetings.soundVersion,
-      playSound: doorGreetings.playSound,
-    })
-    .from(doorGreetings)
-    .innerJoin(user, eq(user.id, doorGreetings.userId))
-    .where(
-      or(
-        isNotNull(doorGreetings.suffix),
-        and(
-          eq(doorGreetings.playSound, true),
-          isNotNull(doorGreetings.soundVersion)
-        )
-      )
-    )
-    .orderBy(doorGreetings.userId)
-  const cards = rows.length
-    ? await db
-        .select({ holderId: doorCards.holderId, name: doorCards.holderName })
-        .from(doorCards)
-        .where(
-          inArray(
-            doorCards.holderId,
-            rows.map((row) => row.userId)
-          )
-        )
-    : []
+  const [suffixRows, { playlists, defaults }] = await Promise.all([
+    db
+      .select({ userId: doorGreetings.userId, suffix: doorGreetings.suffix })
+      .from(doorGreetings)
+      .where(isNotNull(doorGreetings.suffix)),
+    panelPlaylists(),
+  ])
+  const suffixes = new Map(suffixRows.map((row) => [row.userId, row.suffix!]))
+  const ids = [...new Set([...suffixes.keys(), ...playlists.keys()])].sort()
+  const [members, cards] = ids.length
+    ? await Promise.all([
+        db
+          .select({ id: user.id, name: user.name })
+          .from(user)
+          .where(inArray(user.id, ids)),
+        db
+          .select({ holderId: doorCards.holderId, name: doorCards.holderName })
+          .from(doorCards)
+          .where(inArray(doorCards.holderId, ids)),
+      ])
+    : [[], []]
+  const names = new Map(members.map((member) => [member.id, member.name]))
   const suffix: Record<string, string> = {}
+  const playlist: Record<string, string[]> = {}
   const sound: Record<string, { url: string; mode: string; version: string }> =
     {}
-  for (const row of rows) {
-    const names = [
-      row.name,
-      ...cards.filter((c) => c.holderId === row.userId).map((c) => c.name),
+  const pool: Record<string, { url: string; version: string }> = {}
+  const link = (soundId: string) =>
+    (pool[soundId] ??= { url: soundLink(soundId), version: soundId })
+  for (const userId of ids) {
+    const name = names.get(userId)
+    if (name === undefined) continue
+    const labels = [
+      name,
+      ...cards.filter((c) => c.holderId === userId).map((c) => c.name),
     ].map(panelName)
-    for (const name of names) {
+    const own = suffixes.get(userId)
+    const list = playlists.get(userId) ?? []
+    for (const label of labels) {
       // The first member to claim a name keeps it.
-      if (!name) continue
-      if (row.suffix && !(name in suffix)) suffix[name] = row.suffix
-      if (row.playSound && row.soundVersion && !(name in sound))
-        sound[name] = {
-          url: soundLink(row.userId, row.soundVersion),
-          mode: "sound_only",
-          version: row.soundVersion,
-        }
+      if (!label) continue
+      if (own && !(label in suffix)) suffix[label] = own
+      if (list.length && !(label in playlist)) {
+        playlist[label] = list
+        list.forEach(link)
+        sound[label] = { ...pool[list[0]], mode: "sound_only" }
+      }
     }
   }
-  return { suffix, color: {}, sound }
-}
-
-/** A member's sound at this version, or null when it has changed since. */
-export async function panelSound(userId: string, version: string) {
-  const [row] = await db
-    .select({ sound: doorGreetings.sound, type: doorGreetings.soundType })
-    .from(doorGreetings)
-    .where(
-      and(
-        eq(doorGreetings.userId, userId),
-        eq(doorGreetings.soundVersion, version)
-      )
-    )
-  return row?.sound && row.type ? { bytes: row.sound, type: row.type } : null
+  for (const soundId of defaults) link(soundId)
+  return { suffix, color: {}, sound, playlist, pool, default: defaults }
 }
 
 const kindLabel: Record<string, string> = {

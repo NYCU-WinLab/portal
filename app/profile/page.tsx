@@ -5,7 +5,6 @@ import { buttonVariants } from "@/components/ui/button"
 import { errorMessage, runAction } from "@/lib/actions/define"
 import { getBentoStats } from "@/lib/actions/bento"
 import { getMyDoorGreeting } from "@/lib/actions/door-greetings"
-import { SOUND_MAX_SECONDS } from "@/lib/door-greeting"
 import { getProfile } from "@/lib/actions/profile"
 import { getReimburseStats } from "@/lib/actions/reimburse"
 import { getMySignature, getMySignatureImage } from "@/lib/actions/signature"
@@ -94,12 +93,7 @@ export default async function ProfilePage() {
         </section>
         <section className="flex flex-col gap-6">
           <SectionHeader title="門口歡迎" />
-          <DoorGreetingSettings
-            suffix={door.suffix}
-            soundVersion={door.sound_version}
-            maxSeconds={SOUND_MAX_SECONDS}
-            playSound={door.play_sound}
-          />
+          <DoorGreetingSettings suffix={door.suffix} playlist={door.playlist} />
         </section>
         {mine && (
           <section className="flex flex-col gap-6">

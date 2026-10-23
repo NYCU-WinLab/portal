@@ -5,7 +5,7 @@ import { getDoorStatus } from "@/lib/actions/door"
 import { requireActor } from "@/lib/auth/session"
 
 import { DoorButton } from "./door-button"
-import { doorAdminNav, doorPage } from "./nav"
+import { doorNav, doorPage } from "./nav"
 
 /** /door and /door/go: the same button; /door/go also presses it. */
 export async function DoorPage({ autoOpen }: { autoOpen: boolean }) {
@@ -15,11 +15,7 @@ export async function DoorPage({ autoOpen }: { autoOpen: boolean }) {
     isAdmin(actor, "door"),
   ])
   return (
-    <PortalShell
-      page={doorPage}
-      nav={admin ? doorAdminNav : undefined}
-      layout="spotlight"
-    >
+    <PortalShell page={doorPage} nav={doorNav(admin)} layout="spotlight">
       <DoorButton
         configured={status.configured}
         online={status.online}

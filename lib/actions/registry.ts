@@ -51,14 +51,16 @@ import {
   listDoorEvents,
   openDoor,
 } from "@/lib/actions/door"
+import { getMyDoorGreeting, setDoorSuffix } from "@/lib/actions/door-greetings"
 import {
   deleteDoorSound,
-  getMyDoorGreeting,
-  getMyDoorSound,
-  setDoorSound,
-  setDoorSuffix,
+  getDoorSound,
+  listDoorSounds,
+  renameDoorSound,
+  setDoorPlaylist,
+  setDoorSoundDefault,
   uploadDoorSound,
-} from "@/lib/actions/door-greetings"
+} from "@/lib/actions/door-sounds"
 import {
   addMailGroupMembers,
   getMailGroup,
@@ -194,11 +196,14 @@ export const actions: Action[] = [
   listDoorEvents,
   listDoorCards,
   getMyDoorGreeting,
-  getMyDoorSound,
   setDoorSuffix,
+  listDoorSounds,
+  getDoorSound,
   uploadDoorSound,
-  setDoorSound,
+  renameDoorSound,
   deleteDoorSound,
+  setDoorPlaylist,
+  setDoorSoundDefault,
   listMeetings,
   getNextMeeting,
   updateMyMeeting,

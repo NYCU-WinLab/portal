@@ -3,12 +3,7 @@
 import { revalidatePath } from "next/cache"
 
 import { type Action, errorMessage, runAction } from "@/lib/actions/define"
-import {
-  deleteDoorSound,
-  setDoorSound,
-  setDoorSuffix,
-  uploadDoorSound,
-} from "@/lib/actions/door-greetings"
+import { setDoorSuffix } from "@/lib/actions/door-greetings"
 import { setMySignature, setSignatureSettings } from "@/lib/actions/signature"
 import { requireActor } from "@/lib/auth/session"
 
@@ -30,8 +25,3 @@ export const saveSignatureSettings = async (input: unknown) =>
 
 export const saveDoorSuffix = async (suffix: string) =>
   call(setDoorSuffix, { suffix })
-export const saveDoorSound = async (base64: string) =>
-  call(uploadDoorSound, { base64 })
-export const chooseDoorSound = async (play_sound: boolean) =>
-  call(setDoorSound, { play_sound })
-export const removeDoorSound = async () => call(deleteDoorSound, {})

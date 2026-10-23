@@ -1,16 +1,21 @@
 import { runAction } from "@/lib/actions/define"
-import { getMyDoorSound } from "@/lib/actions/door-greetings"
+import { getDoorSound } from "@/lib/actions/door-sounds"
 import { getSession } from "@/lib/auth/session"
 
-// The member's own door sound, for the preview on /profile.
-export async function GET() {
+// A pool sound, for members signed in; the players on /door/sounds and
+// /profile load it. Its bytes never change, so it caches for a day.
+export async function GET(
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
   const session = await getSession()
   if (!session) return new Response("Unauthorized", { status: 401 })
-  const { sound } = await runAction(
-    getMyDoorSound,
+  const { id } = await params
+  const sound = await runAction(
+    getDoorSound,
     { userId: session.user.id, via: "web" },
-    {}
-  )
+    { id }
+  ).catch(() => null)
   if (!sound) return new Response("Not found", { status: 404 })
   return new Response(Buffer.from(sound.base64, "base64"), {
     headers: {

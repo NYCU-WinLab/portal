@@ -6,6 +6,7 @@ import {
   index,
   integer,
   pgTable,
+  primaryKey,
   smallint,
   text,
   timestamp,
@@ -74,9 +75,10 @@ export const doorCards = pgTable(
 const bytea = customType<{ data: Buffer }>({ dataType: () => "bytea" })
 
 // How the door greets a member: the suffix after their name on the LED
-// panel ("歡迎 詠翔！！"), and their own short sound, played instead of the
-// lab's default when play_sound is on. version changes with every upload,
-// so the panel knows to fetch the new file.
+// panel ("歡迎 詠翔！！"). The sound after it comes from their playlist.
+// sound through playSound are the single sound before the pool (0027 moved
+// them into it); they stay one release so the previous image still runs
+// after a rollback, and nothing reads them.
 export const doorGreetings = pgTable(
   "door_greetings",
   {
@@ -95,5 +97,48 @@ export const doorGreetings = pgTable(
       "door_greetings_sound_shape",
       sql`(${table.sound} is null) = (${table.soundVersion} is null) and (${table.sound} is null) = (${table.soundType} is null)`
     ),
+  ]
+)
+
+// The lab's pool of door sounds: every member's upload, shared, so anyone
+// can play one or put it on their playlist. A sound's bytes never change, so
+// its id is the version the panel caches it by. is_default marks the ones
+// played for a member with an empty playlist; door admins pick them.
+export const doorSounds = pgTable(
+  "door_sounds",
+  {
+    id: uuid().defaultRandom().primaryKey(),
+    label: text().notNull(),
+    uploaderId: uuid().references(() => user.id, { onDelete: "set null" }),
+    sound: bytea().notNull(),
+    soundType: text().notNull(),
+    isDefault: boolean().default(false).notNull(),
+    createdAt: timestamp({ withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index().on(table.uploaderId),
+    check(
+      "door_sounds_label",
+      sql`char_length(${table.label}) between 1 and 40`
+    ),
+  ]
+)
+
+// What the door plays for a member: one of these at random, so a playlist
+// of one always plays that sound.
+export const doorPlaylistItems = pgTable(
+  "door_playlist_items",
+  {
+    userId: uuid()
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    soundId: uuid()
+      .notNull()
+      .references(() => doorSounds.id, { onDelete: "cascade" }),
+    createdAt: timestamp({ withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.userId, table.soundId] }),
+    index().on(table.soundId),
   ]
 )
