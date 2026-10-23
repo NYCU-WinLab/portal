@@ -199,3 +199,48 @@ export async function projectGroups(): Promise<ProjectGroup[]> {
   projects = { groups, at: Date.now() }
   return groups
 }
+
+/** A member of a Keycloak group, as /groups invites them. */
+export type KeycloakGroupMember = {
+  id: string
+  email: string | null
+  name: string | null
+  username: string | null
+}
+
+/**
+ * The cohort groups under /lab-member (114, 113, …), newest first, each
+ * with its members, for adding a whole cohort to a mailing list.
+ */
+export async function labCohorts() {
+  const root = await adminGet<{ id: string }>("/group-by-path/lab-member")
+  const groups = await adminGet<{ id: string; name: string }[]>(
+    `/groups/${root.id}/children?max=200&briefRepresentation=true`
+  )
+  const cohorts = await Promise.all(
+    groups
+      .filter((group) => /^\d{3}$/.test(group.name))
+      .map(async (group) => {
+        const people = await adminGet<
+          {
+            id: string
+            username: string
+            email?: string
+            firstName?: string
+            lastName?: string
+          }[]
+        >(`/groups/${group.id}/members?max=1000&briefRepresentation=false`)
+        return {
+          name: group.name,
+          members: people.map((p): KeycloakGroupMember => ({
+            id: p.id,
+            email: p.email ?? null,
+            name:
+              [p.firstName, p.lastName].filter(Boolean).join(" ") || p.username,
+            username: p.username,
+          })),
+        }
+      })
+  )
+  return cohorts.sort((a, b) => b.name.localeCompare(a.name))
+}

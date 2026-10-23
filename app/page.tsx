@@ -25,6 +25,7 @@ const apps = [
   { label: "Approve", href: "/approve" },
   { label: "Rooms", href: "/rooms" },
   { label: "Door", href: "/door" },
+  { label: "Groups", href: "/groups" },
   { label: "Profile", href: "/profile" },
   { label: "Admins", href: "/admins" },
 ]
