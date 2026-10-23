@@ -204,6 +204,13 @@
       "when": 1792765102265,
       "tag": "0028_home_pins",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1792767244846,
+      "tag": "0029_door_tokens",
+      "breakpoints": true
     }
   ]
 }

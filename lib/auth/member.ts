@@ -17,25 +17,42 @@ const TRUST_WHILE_DOWN_MS = 60 * 60 * 1000
 
 const seen = new Map<string, { member: boolean; at: number }>()
 
+async function lookup(userId: string) {
+  const [link] = await db
+    .select({ sub: account.accountId })
+    .from(account)
+    .where(and(eq(account.userId, userId), eq(account.providerId, "keycloak")))
+  const keycloakUser = link ? await findKeycloakUser(link.sub) : null
+  return keycloakUser?.enabled === true
+}
+
 export async function isLabMember(userId: string): Promise<boolean> {
   const last = seen.get(userId)
   if (last && Date.now() - last.at < CHECK_EVERY_MS) return last.member
 
   let member: boolean
   try {
-    const [link] = await db
-      .select({ sub: account.accountId })
-      .from(account)
-      .where(
-        and(eq(account.userId, userId), eq(account.providerId, "keycloak"))
-      )
-    const keycloakUser = link ? await findKeycloakUser(link.sub) : null
-    member = keycloakUser?.enabled === true
+    member = await lookup(userId)
   } catch (error) {
     if (last?.member && Date.now() - last.at < TRUST_WHILE_DOWN_MS) return true
     throw error
   }
+  await remember(userId, member)
+  return member
+}
 
+/**
+ * The same question for the physical door: asked of Keycloak every time,
+ * with no cache and no grace while Keycloak is down (it throws then), so a
+ * member disabled a second ago cannot open the door.
+ */
+export async function isLabMemberNow(userId: string): Promise<boolean> {
+  const member = await lookup(userId)
+  await remember(userId, member)
+  return member
+}
+
+async function remember(userId: string, member: boolean) {
   seen.set(userId, { member, at: Date.now() })
   if (!member) {
     await db.transaction(async (tx) => {
@@ -45,5 +62,4 @@ export async function isLabMember(userId: string): Promise<boolean> {
       await tx.delete(session).where(eq(session.userId, userId))
     })
   }
-  return member
 }

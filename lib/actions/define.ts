@@ -4,10 +4,16 @@ import { announceChange } from "@/lib/actions/changes"
 import { traced } from "@/lib/otel"
 
 /**
- * Who is acting: the signed-in member, and whether through a page or an
- * MCP client (recorded on the action's span).
+ * Who is acting: the signed-in member, and whether through a page, an MCP
+ * client or a door token on POST /api/door/open (recorded on the action's
+ * span). tokenId and ip come only with via api.
  */
-export type Actor = { userId: string; via: "web" | "mcp" }
+export type Actor = {
+  userId: string
+  via: "web" | "mcp" | "api"
+  tokenId?: string
+  ip?: string
+}
 
 /**
  * Every read and write the portal does is one of these, defined once. Pages

@@ -54,6 +54,8 @@ export const openDoor = defineAction({
       ok: error === null,
       error,
       latencyMs: Math.round(performance.now() - started),
+      tokenId: actor.tokenId,
+      ip: actor.ip,
     })
     // The relay may have fired even when its answer was lost, so a failure
     // never claims the door stayed shut.
@@ -63,12 +65,12 @@ export const openDoor = defineAction({
   },
 })
 
-const source = z.enum(["web", "mcp", "card"])
+const source = z.enum(["web", "mcp", "api", "card"])
 
 export type DoorEvent = {
   id: string
   at: Date
-  source: "web" | "mcp" | "card"
+  source: "web" | "mcp" | "api" | "card"
   userId: string | null
   name: string
   ok: boolean | null
@@ -82,7 +84,7 @@ export const listDoorEvents = defineAction({
   name: "list_door_events",
   title: "開門紀錄",
   description:
-    "Door openings, newest first, for door admins only: presses on /door (web), presses by an agent (mcp) and card swipes (card, timed by the reader's clock). ok is null for reader events that are neither a grant nor a known denial. Page back with before set to the id of the last event returned.",
+    "Door openings, newest first, for door admins only: presses on /door (web), presses by an agent (mcp), calls to POST /api/door/open with a member's door token (api) and card swipes (card, timed by the reader's clock). ok is null for reader events that are neither a grant nor a known denial. Page back with before set to the id of the last event returned.",
   kind: "query",
   input: z.object({
     limit: z.number().int().min(1).max(500).default(100),
