@@ -5,9 +5,10 @@ import { isAdmin } from "@/lib/actions/authz"
 import { runAction } from "@/lib/actions/define"
 import { listDoorTokens } from "@/lib/actions/door-tokens"
 import { requireActor } from "@/lib/auth/session"
+import { curlLine } from "@/lib/door-token"
 
 import { doorNav, doorPage } from "../nav"
-import { CreateToken, curlLine, RevokeToken } from "./token-forms"
+import { CreateToken, RevokeToken } from "./token-forms"
 
 export const dynamic = "force-dynamic"
 

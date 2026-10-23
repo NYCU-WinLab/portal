@@ -14,13 +14,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
+import { curlLine } from "@/lib/door-token"
 import { report } from "@/lib/report"
 
 import { createDoorTokenAction, revokeDoorTokenAction } from "./actions"
-
-/** The curl line that opens the door with a token. */
-export const curlLine = (token: string) =>
-  `curl -X POST -H "Authorization: Bearer ${token}" https://portal.winlab.tw/api/door/open`
 
 export function CreateToken() {
   const [token, setToken] = React.useState<string | null>(null)
