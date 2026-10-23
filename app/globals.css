@@ -306,6 +306,54 @@
     translate: 0 -90%;
   }
 }
+/* The door button: a native emoji as the whole button, capped at 160px so
+   Apple's bitmap emoji draws 1:1 and stays sharp. While it opens the lock
+   wiggles; when the door does not answer it shakes once. */
+@utility text-emoji {
+  font-size: 8rem;
+  line-height: 1;
+  @media (width >= 40rem) {
+    font-size: 10rem;
+  }
+}
+
+@keyframes door-wiggle {
+  0%,
+  100% {
+    rotate: -6deg;
+  }
+  50% {
+    rotate: 6deg;
+  }
+}
+
+@keyframes door-shake {
+  0%,
+  100% {
+    translate: 0;
+  }
+  20% {
+    translate: -10px;
+  }
+  40% {
+    translate: 10px;
+  }
+  60% {
+    translate: -7px;
+  }
+  80% {
+    translate: 7px;
+  }
+}
+
+@utility animate-door-wiggle {
+  animation: door-wiggle 400ms cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@utility animate-door-shake {
+  animation: door-shake 400ms cubic-bezier(0.4, 0, 0.6, 1);
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   ::before,
@@ -323,5 +371,9 @@
   }
   .digit-roll {
     transition: none;
+  }
+  .animate-door-wiggle,
+  .animate-door-shake {
+    animation: none;
   }
 }
