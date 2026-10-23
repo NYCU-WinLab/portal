@@ -175,6 +175,8 @@ export function calendarInvite(event: {
   end: string
   organizer: { name: string; email: string }
   attendees: Attendee[]
+  /** Asks each attendee to answer; off for a mailing list. */
+  rsvp?: boolean
   joinUrl: string | null
 }) {
   const lines = [
@@ -194,7 +196,7 @@ export function calendarInvite(event: {
     `ORGANIZER;CN=${icsParam(event.organizer.name)}:mailto:${event.organizer.email}`,
     ...event.attendees.map(
       (a) =>
-        `ATTENDEE;CN=${icsParam(a.name)};ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE:mailto:${a.email}`
+        `ATTENDEE;CN=${icsParam(a.name)};ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=${event.rsvp === false ? "FALSE" : "TRUE"}:mailto:${a.email}`
     ),
     `STATUS:${event.method === "CANCEL" ? "CANCELLED" : "CONFIRMED"}`,
     ...(event.joinUrl

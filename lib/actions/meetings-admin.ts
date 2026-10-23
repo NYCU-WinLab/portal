@@ -13,6 +13,7 @@ import { z } from "zod"
 
 import { requireAdmin } from "@/lib/actions/authz"
 import { defineAction } from "@/lib/actions/define"
+import { withdrawLabMeeting } from "@/lib/actions/meetings-mail"
 import {
   isoDate,
   optionalText,
@@ -25,6 +26,7 @@ import {
   presenterRoster,
   QUESTIONERS_PER_WEEK,
 } from "@/lib/actions/meetings-shared"
+import { db } from "@/lib/db"
 import {
   meetingKinds,
   meetingQuestioners,
@@ -171,7 +173,16 @@ export const updateMeeting = defineAction({
         if (isUniqueViolation(error)) throw new Error(`${next.date} 已經有會議`)
         throw error
       }
-      return { date: next.date }
+      // A Teams meeting already made for the old date, time or place.
+      const moved =
+        next.date !== meeting.date ||
+        next.startsAt.slice(0, 5) !== meeting.startsAt.slice(0, 5) ||
+        next.location !== meeting.location ||
+        (next.kind === "holiday") !== (meeting.kind === "holiday")
+      return { date: next.date, id, moved, from: meeting.date }
+    }).then(async ({ date, id, moved, from }) => {
+      if (moved) await withdrawLabMeeting(id, [from, date], actor.userId)
+      return { date }
     })
   },
 })
@@ -185,6 +196,12 @@ export const deleteMeeting = defineAction({
   input: z.object({ date: isoDate }),
   run: async (actor, { date }) => {
     await requireAdmin(actor, "meetings")
+    // Its Teams meeting goes first: deleting the week unlinks the booking.
+    const [meeting] = await db
+      .select({ id: meetings.id })
+      .from(meetings)
+      .where(eq(meetings.date, date))
+    if (meeting) await withdrawLabMeeting(meeting.id, [date], actor.userId)
     return changeSchedule(async (tx) => {
       const meeting = await meetingOn(tx, date)
       await tx.delete(meetings).where(eq(meetings.id, meeting.id))
