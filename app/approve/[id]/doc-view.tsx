@@ -29,6 +29,21 @@ async function textImage(text: string, width: number, height: number) {
   return new Uint8Array(await blob!.arrayBuffer())
 }
 
+/** Any image data URL as PNG bytes, drawn through a canvas (SVG, JPG). */
+async function asPng(dataUrl: string) {
+  const image = new Image()
+  image.src = dataUrl
+  await image.decode()
+  const canvas = document.createElement("canvas")
+  canvas.width = image.naturalWidth || 400
+  canvas.height = image.naturalHeight || 200
+  canvas.getContext("2d")!.drawImage(image, 0, 0, canvas.width, canvas.height)
+  const blob = await new Promise<Blob | null>((done) =>
+    canvas.toBlob(done, "image/png")
+  )
+  return new Uint8Array(await blob!.arrayBuffer())
+}
+
 // A sent or finished document with what everyone filled in, and the PDF
 // with those values drawn in to download.
 export function DocView({
@@ -61,13 +76,15 @@ export function DocView({
           width: f.width * pw,
           height: f.height * ph,
         }
-        const image = f.value.startsWith("data:image/png")
-          ? await pdf.embedPng(f.value)
-          : f.value.startsWith("data:image/jpeg")
-            ? await pdf.embedJpg(f.value)
-            : await pdf.embedPng(
-                await textImage(f.value, box.width, box.height)
-              )
+        const signature =
+          f.category === "signature" && f.value.startsWith("data:image/")
+        const image = !signature
+          ? await pdf.embedPng(await textImage(f.value, box.width, box.height))
+          : f.value.startsWith("data:image/png")
+            ? await pdf.embedPng(f.value)
+            : f.value.startsWith("data:image/jpeg")
+              ? await pdf.embedJpg(f.value)
+              : await pdf.embedPng(await asPng(f.value))
         target.drawImage(image, box)
       }
       const bytes = await pdf.save()

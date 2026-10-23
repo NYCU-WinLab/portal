@@ -206,13 +206,16 @@ export const getApproveDocument = defineAction({
                     null),
             }))
         : []
-    // A signature is an image; agents get to know a field is signed, not
-    // the image itself.
-    const shown = fields.map((f) =>
-      actor.via === "mcp" && f.category === "signature" && f.value
-        ? { ...f, value: "（已簽名）" }
-        : f
-    )
+    // Values are personal (ID numbers, addresses): a signer sees only their
+    // own, the creator every one. A signature is an image; agents learn a
+    // field is signed, not the image itself.
+    const mine = doc.createdBy === actor.userId
+    const shown = fields.map((f) => {
+      if (!mine && f.signerId !== actor.userId) return { ...f, value: null }
+      if (actor.via === "mcp" && f.category === "signature" && f.value)
+        return { ...f, value: "（已簽名）" }
+      return f
+    })
     return {
       ...doc,
       creator: creator?.name ?? "",
@@ -253,7 +256,9 @@ export const createApproveDocument = defineAction({
   kind: "mutation",
   input: z.object({
     title: z.string().trim().min(1, "請填標題").max(200),
-    base64: z.base64("檔案要是 base64"),
+    base64: z
+      .base64("檔案要是 base64")
+      .max(Math.ceil((PDF_LIMIT * 4) / 3) + 4, "PDF 最大 10 MB"),
   }),
   run: async (actor, { title, base64 }) => {
     const raw = Buffer.from(base64, "base64")
@@ -309,6 +314,33 @@ export const setApproveFields = defineAction({
   input: z.object({ id, fields: z.array(field).max(300) }),
   run: async (actor, input) => {
     await draftOf(actor, input.id)
+    if (new Set(input.fields.map((f) => f.id)).size !== input.fields.length)
+      throw new Error("欄位 id 重複")
+    const signerIds = [
+      ...new Set(input.fields.flatMap((f) => (f.signerId ? [f.signerId] : []))),
+    ]
+    if (signerIds.length) {
+      const found = await db
+        .select({ id: user.id })
+        .from(user)
+        .where(inArray(user.id, signerIds))
+      if (found.length !== signerIds.length) throw new Error("有簽核人不是成員")
+    }
+    const taken = input.fields.length
+      ? await db
+          .select({ id: approveFields.id })
+          .from(approveFields)
+          .where(
+            and(
+              inArray(
+                approveFields.id,
+                input.fields.map((f) => f.id)
+              ),
+              sql`${approveFields.documentId} <> ${input.id}`
+            )
+          )
+      : []
+    if (taken.length) throw new Error("欄位 id 已被別份文件使用")
     await db.transaction(async (tx) => {
       await tx
         .delete(approveFields)
@@ -406,6 +438,14 @@ export const signApproveDocument = defineAction({
       .from(approveSavedValues)
       .where(eq(approveSavedValues.userId, actor.userId))
     return db.transaction(async (tx) => {
+      // The document row first: the last two signers signing at once would
+      // otherwise each still see the other pending, and nobody completes it.
+      const [locked] = await tx
+        .select({ status: approveDocuments.status })
+        .from(approveDocuments)
+        .where(eq(approveDocuments.id, doc.id))
+        .for("update")
+      if (locked?.status !== "pending") throw new Error("這份文件不在簽核中")
       // Locks the member's row so a double submit signs once.
       const [me] = await tx
         .select({ signedAt: approveSigners.signedAt })
