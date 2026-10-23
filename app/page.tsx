@@ -27,6 +27,7 @@ const apps = [
   { label: "Door", href: "/door" },
   { label: "Groups", href: "/groups" },
   { label: "Games", href: "/games" },
+  { label: "Gallery", href: "https://gallery.winlab.tw" },
   { label: "Developers", href: "/developers" },
   { label: "Profile", href: "/profile" },
   { label: "Admins", href: "/admins" },
