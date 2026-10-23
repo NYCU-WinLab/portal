@@ -218,6 +218,13 @@
       "when": 1792768283688,
       "tag": "0030_door_speak_name",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1792769755822,
+      "tag": "0031_door_phrases",
+      "breakpoints": true
     }
   ]
 }
