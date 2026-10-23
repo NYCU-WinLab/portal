@@ -40,9 +40,11 @@ import {
 const ANNOUNCE = { name: "WinLab", email: "announce@winlab.tw" }
 // 15:30 to 18:00, as the old calendar event ran.
 const MEETING_MINUTES = 150
-// winlab-helper files a `[lab-meeting]-` recording into the lab-meeting
-// group's Recordings folder; a prefix that names no group lands in unfiled.
-const RECORDING_PREFIX = "lab-meeting"
+// The lab-meeting GitLab group. winlab-helper files a `[lab-meeting]-`
+// recording into its Recordings folder, and keeps the meeting's epic there
+// only when the booking names the group: without one it reads the prefix as
+// a person and opens a personal folder and epic for "lab-meeting".
+const LAB_GROUP = "lab-meeting"
 
 const site = () => process.env.BETTER_AUTH_URL ?? "https://portal.winlab.tw"
 const kindLabel = { speaker: "演講", thesis: "碩論" } as const
@@ -253,12 +255,12 @@ async function announce(
       endTime: addMinutes(meeting.startsAt, MEETING_MINUTES)!,
       room: null,
       place: meeting.location,
-      title: composeTopic(RECORDING_PREFIX, recordingTopic(meeting)),
+      title: composeTopic(LAB_GROUP, recordingTopic(meeting)),
       attendees: [ANNOUNCE],
       organizer,
       online: true,
-      meetingPrefix: RECORDING_PREFIX,
-      groupName: null,
+      meetingPrefix: LAB_GROUP,
+      groupName: LAB_GROUP,
       agenda: null,
       issueRefs: [],
       deliverables: [],
