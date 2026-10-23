@@ -39,11 +39,13 @@ import {
   addDays,
   addMinutes,
   dayLabel,
+  isCalendarDay,
   nextOccurrence,
   nextWeekday,
   occurrencesBetween,
   spanProblem,
   todayInTaipei,
+  weekdayOf,
 } from "@/lib/rooms/time"
 
 const LEAD_DAYS = 7
@@ -60,7 +62,7 @@ export const listRoomSeries = defineAction({
   name: "list_room_series",
   title: "固定會議",
   description:
-    "Every standing meeting on /rooms/series: title, weekday (0 Sunday), start time, duration, every week or every other week, attendees, whether the advisor is invited, whether it is active, who made it, and its next occurrence with the room already held for it (booked false until the daily run books it, 7 days ahead). Every member sees every series; only its creator can pause or delete it.",
+    "Every standing meeting on /meetings: title, weekday (0 Sunday), start time, duration, every week or every other week, attendees, whether the advisor is invited, whether it is active, who made it, and its next occurrence with the room already held for it (booked false until the daily run books it, 7 days ahead). Every member sees every series; only its creator can pause or delete it.",
   kind: "query",
   input: z.object({}),
   run: async () => {
@@ -179,7 +181,7 @@ async function bookOccurrence(series: Series, date: string) {
         paragraphs: ["請自己借教室，或改成線上。"],
         action: {
           label: "借教室",
-          url: `${process.env.BETTER_AUTH_URL}/rooms`,
+          url: `${process.env.BETTER_AUTH_URL}/meetings`,
         },
       }),
     })
@@ -195,6 +197,13 @@ export const createRoomSeries = defineAction({
   kind: "mutation",
   input: z.object({
     weekday: z.number().int().min(0).max(6),
+    start_date: z
+      .string()
+      .refine(isCalendarDay, "日期要是 YYYY-MM-DD")
+      .optional()
+      .describe(
+        "the first occurrence, on weekday; default the next one after today"
+      ),
     start_time: z.string().regex(/^\d{2}:\d{2}$/, "時間要是 HH:MM"),
     duration_minutes: z
       .number()
@@ -244,6 +253,11 @@ export const createRoomSeries = defineAction({
     // Frozen now: a series keeps filing under the same project all term.
     const prefix = topicPrefix(group, attendees)
     const today = todayInTaipei()
+    if (input.start_date !== undefined) {
+      if (weekdayOf(input.start_date) !== input.weekday)
+        throw new Error("第一場的日期要在那個星期")
+      if (input.start_date < today) throw new Error("不能從過去的日期開始")
+    }
     const [series] = await db
       .insert(roomSeries)
       .values({
@@ -253,7 +267,7 @@ export const createRoomSeries = defineAction({
         durationMinutes: input.duration_minutes,
         intervalWeeks: input.interval_weeks,
         // Fixes which weeks an every-other-week series meets.
-        anchorDate: nextWeekday(today, input.weekday),
+        anchorDate: input.start_date ?? nextWeekday(today, input.weekday),
         attendees,
         includeAdvisor: input.include_advisor,
         meetingPrefix: prefix,
@@ -264,13 +278,14 @@ export const createRoomSeries = defineAction({
         createdBy: actor.userId,
       })
       .returning()
-    // Tomorrow through 7 days out: today's slot may be past, and the daily
-    // run may already have looked at day 7 before this series existed.
+    // Through 7 days out, as the daily run may already have looked at day 7
+    // before this series existed. Today only when picked: its slot was free
+    // on the grid a moment ago, while a default start is never today.
     const errors: string[] = []
     let booked = 0
     for (const date of occurrencesBetween(
       rule(series),
-      addDays(today, 1),
+      input.start_date ?? addDays(today, 1),
       addDays(today, LEAD_DAYS)
     )) {
       const error = await bookOccurrence(series, date)
