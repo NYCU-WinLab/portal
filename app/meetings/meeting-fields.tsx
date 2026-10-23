@@ -17,7 +17,7 @@ import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import { deliverableLabel, type Epic } from "@/lib/rooms/meeting"
 
-import { loadDeliverables, loadEpics } from "./actions"
+import { loadDeliverables, loadEpics } from "./rooms-actions"
 
 export type RoomGroup = {
   name: string

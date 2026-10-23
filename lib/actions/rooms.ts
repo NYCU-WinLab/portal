@@ -75,7 +75,7 @@ export const listRoomAvailability = defineAction({
   name: "list_room_availability",
   title: "教室空檔",
   description:
-    "Free and busy time in the CS department's meeting rooms for up to 14 days from date (Asia/Taipei), read live from the department system, the grid /rooms draws. Each run of the 30-minute grid lists the free-tier rooms open, the paid ones, and the rooms the lab's shared account already holds; lab_bookings says who booked those through the portal and what for. Every member gets the same answer. Book a slot with book_room.",
+    "Free and busy time in the CS department's meeting rooms for up to 14 days from date (Asia/Taipei), read live from the department system, the grid 新增會議 on /meetings draws. Each run of the 30-minute grid lists the free-tier rooms open, the paid ones, and the rooms the lab's shared account already holds; lab_bookings says who booked those through the portal and what for. Every member gets the same answer. Book a slot with book_room.",
   kind: "query",
   input: z.object({
     date: day.optional(),
@@ -127,6 +127,7 @@ async function bookingsBetween(from: string, to: string) {
       groupName: roomBookings.groupName,
       attendees: roomBookings.attendees,
       seriesId: roomBookings.seriesId,
+      meetingId: roomBookings.meetingId,
       requestedBy: roomBookings.requestedBy,
       requestedByName: user.name,
       cancelledAt: roomBookings.cancelledAt,
@@ -500,7 +501,7 @@ export const bookRoom = defineAction({
   name: "book_room",
   title: "預約會議",
   description:
-    "Books a meeting as the member, the 預約 button on /rooms: a CS department room through the lab's shared account (the room /rooms would pick: open for the whole span, free before paid; a paid room only with allow_paid true, since the department charges for it), or no room with online_only. Every booking also gets a Teams meeting in the WinLab channel, recorded automatically with a transcript and an AI summary the channel can see, and every attendee and the member get a calendar invite by mail. Times are Asia/Taipei HH:MM on the 30-minute grid between 08:00 and 22:00; check list_room_availability first. attendees are portal user ids, emails or usernames; group is a project group's slug from list_room_groups, whose members are invited too unless invite_group_members is false, and which names the project the recording files under. epic (an iid from list_group_epics) needs a group linked to GitLab. include_advisor has no default because it mails the advisor. Never book the Monday lab seminar here; it has a standing booking. Read back the date, time, room or online, title, attendees, advisor and the recording, and get the member's yes first.",
+    "Books a meeting as the member, 新增會議 on /meetings: a CS department room through the lab's shared account (the room /meetings would pick: open for the whole span, free before paid; a paid room only with allow_paid true, since the department charges for it), or no room with online_only. Every booking also gets a Teams meeting in the WinLab channel, recorded automatically with a transcript and an AI summary the channel can see, and every attendee and the member get a calendar invite by mail. Times are Asia/Taipei HH:MM on the 30-minute grid between 08:00 and 22:00; check list_room_availability first. attendees are portal user ids, emails or usernames; group is a project group's slug from list_room_groups, whose members are invited too unless invite_group_members is false, and which names the project the recording files under. epic (an iid from list_group_epics) needs a group linked to GitLab. include_advisor has no default because it mails the advisor. Never book the Monday lab meeting here; the portal books it itself. Read back the date, time, room or online, title, attendees, advisor and the recording, and get the member's yes first.",
   kind: "mutation",
   input: z.object({
     date: day,

@@ -9,25 +9,47 @@ import { runAction } from "@/lib/actions/define"
 import { listMeetings } from "@/lib/actions/meetings"
 import type { ScheduledMeeting } from "@/lib/actions/meetings-shared"
 import { listPapers } from "@/lib/actions/papers"
+import { listRoomBookings, listRoomGroups } from "@/lib/actions/rooms"
+import { listRoomSeries } from "@/lib/actions/rooms-series"
 import { requireActor } from "@/lib/auth/session"
 import { dateLabel, taipeiToday } from "@/lib/leave-dates"
+import { addDays, addMinutes } from "@/lib/rooms/time"
 
 import { AdminActions } from "./admin-actions"
+import { CancelButton } from "./cancel-button"
 import { MeetingActions } from "./meeting-actions"
 import { meetingsNav, meetingsPage } from "./nav"
+import { NewMeeting } from "./new-meeting"
 import { NextMeeting } from "./next-meeting"
+import { SeriesButtons } from "./series-buttons"
 
 export const dynamic = "force-dynamic"
 
 const kindLabel = { holiday: "放假", speaker: "演講", thesis: "碩論" } as const
+const weekdays = "日一二三四五六"
+// How far ahead the list shows other meetings; lab weeks run all term.
+const BOOKING_DAYS = 60
 
-function When({ meeting }: { meeting: ScheduledMeeting }) {
+type Booking = Awaited<
+  ReturnType<typeof listRoomBookings.run>
+>["bookings"][number]
+type Series = Awaited<ReturnType<typeof listRoomSeries.run>>["series"][number]
+
+// The date, then the week for a lab meeting or the time for any other.
+function When({ date, aside }: { date: string; aside: React.ReactNode }) {
   return (
     <span className="flex shrink-0 whitespace-nowrap tabular-nums">
-      <span className="w-14">{dateLabel(meeting.date)}</span>
-      <span className="w-20 text-muted-foreground">{meeting.label}</span>
+      <span className="w-14">{dateLabel(date)}</span>
+      <span className="w-20 text-muted-foreground">{aside}</span>
     </span>
   )
+}
+
+const teamsText = (booking: Booking) => {
+  if (!booking.meeting) return null
+  if (booking.meeting.status === "success") return null
+  if (booking.meeting.status === "pending") return "Teams 會議建立中"
+  return `Teams 會議沒有建成：${booking.meeting.error ?? "原因不明"}`
 }
 
 const link = "underline-offset-4 hover:underline"
@@ -43,7 +65,7 @@ function MeetingRow({
   if (meeting.kind === "holiday")
     return (
       <li className="flex min-h-14 items-center gap-4 border-b border-border py-3 text-muted-foreground">
-        <When meeting={meeting} />
+        <When date={meeting.date} aside={meeting.label} />
         <span className="min-w-0 flex-1">{meeting.holiday ?? "放假"}</span>
         {actions}
       </li>
@@ -53,7 +75,7 @@ function MeetingRow({
       actions={actions}
       summary={
         <span className="flex flex-col gap-1 sm:flex-row sm:gap-4">
-          <When meeting={meeting} />
+          <When date={meeting.date} aside={meeting.label} />
           <span className="flex min-w-0 flex-1 gap-3">
             {meeting.kind !== "regular" && (
               <span className="shrink-0 text-muted-foreground">
@@ -132,22 +154,151 @@ function MeetingRow({
   )
 }
 
+// Any other meeting: who called it, who comes, and its Teams link.
+function BookingRow({
+  booking,
+  actions,
+}: {
+  booking: Booking
+  actions?: React.ReactNode
+}) {
+  return (
+    <ExpandRow
+      actions={actions}
+      summary={
+        <span className="flex flex-col gap-1 sm:flex-row sm:gap-4">
+          <When date={booking.date} aside={booking.startTime} />
+          <span className="flex min-w-0 flex-1 gap-3">
+            <span className="min-w-0 truncate">{booking.title}</span>
+            <span className="ml-auto shrink-0 text-muted-foreground">
+              {booking.room ?? "線上"}
+            </span>
+          </span>
+        </span>
+      }
+    >
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-3 text-muted-foreground sm:pl-38">
+        {booking.meeting?.status === "success" && (
+          <a href={`/rooms/join/${booking.id}`} className={link}>
+            加入會議
+          </a>
+        )}
+        <span>
+          {booking.startTime} 到 {booking.endTime}
+        </span>
+        <span>發起人 {booking.requestedByName}</span>
+        {booking.attendees.length > 0 && (
+          <span>與會 {booking.attendees.map((a) => a.name).join("、")}</span>
+        )}
+        {booking.seriesId && <span>固定會議</span>}
+        {teamsText(booking) && <span>{teamsText(booking)}</span>}
+        {booking.agenda && (
+          <span className="w-full whitespace-pre-wrap">{booking.agenda}</span>
+        )}
+      </div>
+    </ExpandRow>
+  )
+}
+
+function SeriesRow({
+  series,
+  actions,
+}: {
+  series: Series
+  actions?: React.ReactNode
+}) {
+  return (
+    <ExpandRow
+      actions={actions}
+      summary={
+        <span className="flex flex-col gap-1 sm:flex-row sm:gap-4">
+          <span className="w-38 shrink-0 whitespace-nowrap tabular-nums">
+            {series.intervalWeeks === 2 ? "隔週" : "每週"}
+            {weekdays[series.weekday]} {series.startTime}
+          </span>
+          <span className="flex min-w-0 flex-1 gap-3">
+            <span className="min-w-0 truncate">{series.title}</span>
+            {!series.active && (
+              <span className="ml-auto shrink-0 text-muted-foreground">
+                暫停
+              </span>
+            )}
+          </span>
+        </span>
+      }
+    >
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-3 text-muted-foreground sm:pl-38">
+        <span>
+          {series.startTime} 到{" "}
+          {addMinutes(series.startTime, series.durationMinutes)}
+        </span>
+        <span>建立者 {series.createdByName}</span>
+        {series.attendees.length > 0 && (
+          <span>與會 {series.attendees.map((a) => a.name).join("、")}</span>
+        )}
+        {series.includeAdvisor && <span>邀請老師</span>}
+        {series.agenda && (
+          <span className="w-full whitespace-pre-wrap">{series.agenda}</span>
+        )}
+      </div>
+    </ExpandRow>
+  )
+}
+
+type Entry =
+  { at: string; lab: ScheduledMeeting } | { at: string; booking: Booking }
+
+const monthOf = (date: string) => `${Number(date.slice(5, 7))} 月`
+
 export default async function MeetingsPage() {
   const actor = await requireActor("/meetings")
-  const [{ meetings }, { meetings: past }, { papers }, admin] =
-    await Promise.all([
-      runAction(listMeetings, actor, {}),
-      runAction(listMeetings, actor, { past: true }),
-      runAction(listPapers, actor, {}),
-      isAdmin(actor, "meetings"),
-    ])
-  const members = admin ? await runAction(listMembers, actor, {}) : []
+  const today = taipeiToday()
+  const [
+    { meetings },
+    { meetings: past },
+    { papers },
+    admin,
+    { bookings },
+    { series },
+    groups,
+    members,
+  ] = await Promise.all([
+    runAction(listMeetings, actor, {}),
+    runAction(listMeetings, actor, { past: true }),
+    runAction(listPapers, actor, {}),
+    isAdmin(actor, "meetings"),
+    runAction(listRoomBookings, actor, { date: today, days: BOOKING_DAYS }),
+    runAction(listRoomSeries, actor, {}),
+    // Keycloak being down leaves booking without groups, not broken.
+    runAction(listRoomGroups, actor, {}).then(
+      ({ groups }) => groups,
+      () => []
+    ),
+    runAction(listMembers, actor, {}),
+  ])
   const paperOptions = papers.map((paper) => ({
     value: paper.id,
     label: paper.venue ? `${paper.title}（${paper.venue}）` : paper.title,
   }))
-  const semesters = [...new Set(meetings.map((row) => row.semester))]
-  const today = taipeiToday()
+  // Lab weeks carry their own Teams meeting, so their bookings are left out.
+  const timeline: Entry[] = [
+    ...meetings.map((lab) => ({ at: `${lab.date} ${lab.startsAt}`, lab })),
+    ...bookings
+      .filter((b) => b.status === "booked" && !b.meetingId)
+      .map((booking) => ({
+        at: `${booking.date} ${booking.startTime}`,
+        booking,
+      })),
+  ].sort((a, b) => a.at.localeCompare(b.at))
+  const horizon = addDays(today, BOOKING_DAYS - 1)
+  const months = [
+    ...new Set(
+      timeline
+        .filter((entry) => entry.at.slice(0, 10) <= horizon)
+        .map((entry) => monthOf(entry.at))
+    ),
+  ]
+  const later = timeline.filter((entry) => entry.at.slice(0, 10) > horizon)
 
   const actionsFor = (meeting: ScheduledMeeting) => (
     <MeetingActions
@@ -160,52 +311,104 @@ export default async function MeetingsPage() {
     />
   )
 
+  const renderEntry = (entry: Entry) =>
+    "lab" in entry ? (
+      <MeetingRow
+        key={`lab-${entry.lab.date}`}
+        meeting={entry.lab}
+        actions={actionsFor(entry.lab)}
+      />
+    ) : (
+      <BookingRow
+        key={entry.booking.id}
+        booking={entry.booking}
+        actions={
+          entry.booking.requestedBy === actor.userId && (
+            <CancelButton id={entry.booking.id} title={entry.booking.title} />
+          )
+        }
+      />
+    )
+
   return (
     <PortalShell page={meetingsPage} nav={meetingsNav}>
       <div className="flex flex-col gap-12">
         <PageHeader
-          title="實驗室會議"
+          title="會議"
           actions={
-            admin && (
-              <AdminActions
-                dates={meetings
-                  .filter(
-                    (row) => row.kind === "regular" || row.kind === "thesis"
-                  )
-                  .map((row) => ({
-                    value: row.date,
-                    label: `${dateLabel(row.date)} ${row.presenter?.name ?? ""}`,
-                  }))}
-              />
-            )
+            <>
+              <NewMeeting today={today} groups={groups} members={members} />
+              {admin && (
+                <AdminActions
+                  dates={meetings
+                    .filter(
+                      (row) => row.kind === "regular" || row.kind === "thesis"
+                    )
+                    .map((row) => ({
+                      value: row.date,
+                      label: `${dateLabel(row.date)} ${row.presenter?.name ?? ""}`,
+                    }))}
+                />
+              )}
+            </>
           }
         />
         <NextMeeting
           meeting={meetings.find((row) => row.kind !== "holiday") ?? null}
         />
-        {meetings.length === 0 ? (
+        {timeline.length === 0 ? (
           <EmptyState noun="會議" />
         ) : (
-          semesters.map((semester) => (
-            <section key={semester} className="flex flex-col gap-2">
-              <SectionHeader title={`${semester}學期`} />
-              <ul className="flex stagger-rise flex-col">
-                {meetings
-                  .filter((row) => row.semester === semester)
-                  .map((meeting) => (
-                    <MeetingRow
-                      key={meeting.date}
-                      meeting={meeting}
-                      actions={actionsFor(meeting)}
-                    />
-                  ))}
-              </ul>
-            </section>
-          ))
+          <>
+            {months.map((month) => (
+              <section key={month} className="flex flex-col gap-2">
+                <SectionHeader title={month} />
+                <ul className="flex stagger-rise flex-col">
+                  {timeline
+                    .filter(
+                      (entry) =>
+                        entry.at.slice(0, 10) <= horizon &&
+                        monthOf(entry.at) === month
+                    )
+                    .map(renderEntry)}
+                </ul>
+              </section>
+            ))}
+            {later.length > 0 && (
+              <section className="flex flex-col gap-2">
+                <SectionHeader title="之後的實驗室會議" />
+                <ul className="flex stagger-rise flex-col">
+                  {later.map(renderEntry)}
+                </ul>
+              </section>
+            )}
+          </>
+        )}
+        {series.length > 0 && (
+          <section className="flex flex-col gap-2">
+            <SectionHeader title="固定會議" />
+            <ul className="flex stagger-rise flex-col">
+              {series.map((s) => (
+                <SeriesRow
+                  key={s.id}
+                  series={s}
+                  actions={
+                    s.createdBy === actor.userId && (
+                      <SeriesButtons
+                        id={s.id}
+                        title={s.title}
+                        active={s.active}
+                      />
+                    )
+                  }
+                />
+              ))}
+            </ul>
+          </section>
         )}
         {past.length > 0 && (
           <section className="flex flex-col gap-2">
-            <SectionHeader title="過去" />
+            <SectionHeader title="過去的實驗室會議" />
             <ul className="flex stagger-rise flex-col">
               {past.map((meeting) => (
                 <MeetingRow

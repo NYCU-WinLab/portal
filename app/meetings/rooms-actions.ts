@@ -30,51 +30,47 @@ async function attempt<T>(path: string, run: () => Promise<T>) {
 }
 
 export async function loadAvailability(date: string, days: number) {
-  const actor = await requireActor("/rooms")
-  return attempt("/rooms", () =>
+  const actor = await requireActor("/meetings")
+  return attempt("/meetings", () =>
     runAction(listRoomAvailability, actor, { date, days, merge: false })
   )
 }
 
 export async function loadEpics(group: string) {
-  const actor = await requireActor("/rooms")
-  return attempt("/rooms", () => runAction(listGroupEpics, actor, { group }))
+  const actor = await requireActor("/meetings")
+  return attempt("/meetings", () => runAction(listGroupEpics, actor, { group }))
 }
 
 export async function loadDeliverables(group: string, epic: string) {
-  const actor = await requireActor("/rooms")
-  return attempt("/rooms", () =>
+  const actor = await requireActor("/meetings")
+  return attempt("/meetings", () =>
     runAction(getEpicDeliverables, actor, { group, epic })
   )
 }
 
 export async function bookRoomAction(input: unknown) {
-  const actor = await requireActor("/rooms")
-  return attempt("/rooms", () => runAction(bookRoom, actor, input))
+  const actor = await requireActor("/meetings")
+  return attempt("/meetings", () => runAction(bookRoom, actor, input))
 }
 
 export async function cancelBookingAction(id: string) {
-  const actor = await requireActor("/rooms")
-  return attempt("/rooms", () => runAction(cancelRoomBooking, actor, { id }))
+  const actor = await requireActor("/meetings")
+  return attempt("/meetings", () => runAction(cancelRoomBooking, actor, { id }))
 }
 
 export async function createSeriesAction(input: unknown) {
-  const actor = await requireActor("/rooms/series")
-  return attempt("/rooms/series", () =>
-    runAction(createRoomSeries, actor, input)
-  )
+  const actor = await requireActor("/meetings")
+  return attempt("/meetings", () => runAction(createRoomSeries, actor, input))
 }
 
 export async function setSeriesActiveAction(id: string, active: boolean) {
-  const actor = await requireActor("/rooms/series")
-  return attempt("/rooms/series", () =>
+  const actor = await requireActor("/meetings")
+  return attempt("/meetings", () =>
     runAction(setRoomSeriesActive, actor, { id, active })
   )
 }
 
 export async function deleteSeriesAction(id: string) {
-  const actor = await requireActor("/rooms/series")
-  return attempt("/rooms/series", () =>
-    runAction(deleteRoomSeries, actor, { id })
-  )
+  const actor = await requireActor("/meetings")
+  return attempt("/meetings", () => runAction(deleteRoomSeries, actor, { id }))
 }

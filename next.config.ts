@@ -7,6 +7,13 @@ const nextConfig: NextConfig = {
   // Trip files (up to 10 MB) and menu photos reach the server as base64 in
   // a server action, a third larger than the file.
   experimental: { serverActions: { bodySizeLimit: "15mb" } },
+  // Rooms became part of Meetings; /rooms/join/<id> stays, it is in invites.
+  async redirects() {
+    return [
+      { source: "/rooms", destination: "/meetings", permanent: true },
+      { source: "/rooms/series", destination: "/meetings", permanent: true },
+    ]
+  },
   // No page is meant to be framed: the consent pages above all.
   async headers() {
     return [

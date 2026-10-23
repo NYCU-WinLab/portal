@@ -5,7 +5,7 @@ import { toast } from "sonner"
 import { ConfirmDialog } from "@/components/confirm-dialog"
 import { Button } from "@/components/ui/button"
 
-import { deleteSeriesAction, setSeriesActiveAction } from "../actions"
+import { deleteSeriesAction, setSeriesActiveAction } from "./rooms-actions"
 
 export function SeriesButtons({
   id,

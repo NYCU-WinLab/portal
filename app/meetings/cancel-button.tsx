@@ -5,7 +5,7 @@ import { toast } from "sonner"
 import { ConfirmDialog } from "@/components/confirm-dialog"
 import { Button } from "@/components/ui/button"
 
-import { cancelBookingAction } from "./actions"
+import { cancelBookingAction } from "./rooms-actions"
 
 export function CancelButton({ id, title }: { id: string; title: string }) {
   async function cancel() {

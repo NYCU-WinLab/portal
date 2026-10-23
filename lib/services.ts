@@ -52,16 +52,9 @@ export const serviceGroups: { title: string; apps: Service[] }[] = [
       {
         key: "meetings",
         label: "Meetings",
-        name: "實驗室會議",
+        name: "會議",
         emoji: "🗓️",
         href: "/meetings",
-      },
-      {
-        key: "rooms",
-        label: "Rooms",
-        name: "借會議室",
-        emoji: "🏢",
-        href: "/rooms",
       },
     ],
   },
