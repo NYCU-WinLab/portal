@@ -79,6 +79,27 @@ function recordingTopic(meeting: ScheduledMeeting) {
   return what.length ? what.join(" ") : "Lab Meeting"
 }
 
+/**
+ * What the week is, for the GitLab record winlab-helper opens from the
+ * booking: it writes AGENDA under "Agenda", the presenter and paper its
+ * own lab skeleton leaves for a person to fill in.
+ */
+function recordAgenda(meeting: ScheduledMeeting) {
+  const paper = meeting.paper
+  const lines = [
+    meeting.presenter && `- 主講：${meeting.presenter.name}`,
+    paper
+      ? `- 論文：${paper.url ? `[${paper.title}](${paper.url})` : paper.title}${
+          paper.venue ? `（${paper.venue}）` : ""
+        }`
+      : meeting.title && `- 題目：${meeting.title}`,
+    meeting.slidesUrl && `- 投影片：${meeting.slidesUrl}`,
+    meeting.questioners.length > 0 &&
+      `- 提問：${meeting.questioners.map((q) => q.name).join("、")}`,
+  ].filter(Boolean)
+  return lines.length ? lines.join("\n") : null
+}
+
 function nextWeekRow(next: ScheduledMeeting | undefined): [string, string][] {
   if (!next) return []
   if (next.kind === "holiday")
@@ -261,7 +282,7 @@ async function announce(
       online: true,
       meetingPrefix: LAB_GROUP,
       groupName: LAB_GROUP,
-      agenda: null,
+      agenda: recordAgenda(meeting),
       issueRefs: [],
       deliverables: [],
       meetingId: meeting.id,
