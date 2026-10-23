@@ -9,6 +9,7 @@ import {
   meetingsOf,
   requestMeeting,
 } from "@/lib/actions/rooms-meetings"
+import { mailBody } from "@/lib/mail-body"
 import { db } from "@/lib/db"
 import { roomBookings, user } from "@/lib/db/schema"
 import {
@@ -336,24 +337,24 @@ function inviteMail(
     to,
     replyTo: organizer.email,
     subject: `[WinLab 會議] ${method === "CANCEL" ? "已取消" : "邀請"}：${booking.title}（${when}）`,
-    text: [
-      `${booking.title}`,
-      `時間：${when}`,
-      `地點：${booking.room ? `資工系 ${booking.room}` : "線上"}`,
-      `發起人：${organizer.name}`,
-      ...(booking.attendees.length
-        ? [`與會：${booking.attendees.map((a) => a.name).join("、")}`]
-        : []),
-      ...(booking.agenda ? ["", booking.agenda] : []),
-      ...(link
-        ? [
-            "",
-            `線上會議：${link}`,
-            "這場會議會在 Teams 自動錄影，並產生逐字稿與 AI 摘要。",
-          ]
-        : []),
-      ...(method === "CANCEL" ? ["", "這場會議已取消。"] : []),
-    ].join("\n"),
+    ...mailBody({
+      title: method === "CANCEL" ? `已取消：${booking.title}` : booking.title,
+      rows: [
+        ["時間", when],
+        ["地點", booking.room ? `資工系 ${booking.room}` : "線上"],
+        ["發起人", organizer.name],
+        ...(booking.attendees.length
+          ? [
+              ["與會", booking.attendees.map((a) => a.name).join("、")] as [
+                string,
+                string,
+              ],
+            ]
+          : []),
+      ],
+      paragraphs: booking.agenda ? [booking.agenda] : [],
+      action: link ? { label: "加入會議", url: link } : undefined,
+    }),
     ics: calendarInvite({
       uid: `rooms-${booking.id}@portal.winlab.tw`,
       method,

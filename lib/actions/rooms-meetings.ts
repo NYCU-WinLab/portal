@@ -10,6 +10,7 @@ import { and, desc, eq, inArray, isNull, lt, sql } from "drizzle-orm"
 
 import { announceChange } from "@/lib/actions/changes"
 import { queueMail } from "@/lib/actions/mail"
+import { mailBody } from "@/lib/mail-body"
 import { db } from "@/lib/db"
 import { roomBookings, roomMeetingRequests, user } from "@/lib/db/schema"
 import { meetingPipelineConfigured, triggerMeetingPipeline } from "@/lib/gitlab"
@@ -377,16 +378,24 @@ export async function sweepMeetingRequests() {
             row.kind === "cancel"
               ? `[WinLab 會議] Teams 會議沒有取消：${row.title}`
               : `[WinLab 會議] 會議連結建立失敗：${row.title}`,
-          text: [
-            `${dayLabel(row.date)} ${row.startTime} 到 ${row.endTime} ${row.title}`,
-            "",
-            row.kind === "cancel"
-              ? "預約已取消，但 Teams 會議還在，時間到仍會開始並錄影，請到 Teams 手動刪除。"
-              : "教室預約不受影響，但這場會議沒有 Teams 連結，需要的話請在 Teams 手動開。",
-            "",
-            `原因：${reason}`,
-            ...(row.pipelineUrl ? [`Pipeline：${row.pipelineUrl}`] : []),
-          ].join("\n"),
+          ...mailBody({
+            title: row.title,
+            rows: [
+              [
+                "時間",
+                `${dayLabel(row.date)} ${row.startTime} 到 ${row.endTime}`,
+              ],
+              ["原因", reason],
+            ],
+            paragraphs: [
+              row.kind === "cancel"
+                ? "預約已取消，但 Teams 會議還在，時間到仍會開始並錄影，請到 Teams 手動刪除。"
+                : "教室預約不受影響，但這場會議沒有 Teams 連結，需要的話請在 Teams 手動開。",
+            ],
+            action: row.pipelineUrl
+              ? { label: "查看 Pipeline", url: row.pipelineUrl }
+              : undefined,
+          }),
         })
       }
       await tx

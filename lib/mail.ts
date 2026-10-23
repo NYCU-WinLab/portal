@@ -38,8 +38,15 @@ export async function sendMail(mail: Mail) {
   const redirect = process.env.MAIL_REDIRECT_TO
   const extras = {
     replyTo: mail.replyTo,
-    icalEvent: mail.ics
-      ? { method: mail.icsMethod ?? "REQUEST", content: mail.ics }
+    // Only as the text/calendar alternative that clients turn into Yes and
+    // No buttons; nodemailer's icalEvent also attaches it a second time.
+    alternatives: mail.ics
+      ? [
+          {
+            contentType: `text/calendar; charset=utf-8; method=${mail.icsMethod ?? "REQUEST"}`,
+            content: mail.ics,
+          },
+        ]
       : undefined,
   }
   if (redirect) {

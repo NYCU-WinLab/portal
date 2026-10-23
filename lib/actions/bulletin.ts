@@ -4,6 +4,7 @@ import { z } from "zod"
 import { requireAdmin } from "@/lib/actions/authz"
 import { defineAction } from "@/lib/actions/define"
 import { mailStatus, queueMail } from "@/lib/actions/mail"
+import { mailBody } from "@/lib/mail-body"
 import { db } from "@/lib/db"
 import { announcements, mailOutbox, user } from "@/lib/db/schema"
 import { labDirectory } from "@/lib/keycloak"
@@ -28,7 +29,11 @@ function announcementMail(post: { title: string; content: string }) {
   const link = `${process.env.BETTER_AUTH_URL}/bulletin`
   return {
     subject: `[WinLab 公告] ${post.title}`,
-    text: `${post.content}\n\n${link}`,
+    ...mailBody({
+      title: post.title,
+      paragraphs: post.content.split(/\n{2,}/),
+      action: { label: "查看公告", url: link },
+    }),
   }
 }
 
