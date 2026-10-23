@@ -5,10 +5,20 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { EmptyState } from "@/components/empty-state"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import type { Receipt } from "@/lib/actions/receipts"
 import { depositAccounts, receiptStatuses } from "@/lib/receipts"
 
 import { ReceiptActions } from "./receipt-forms"
+
+// The value the project select uses for "every project".
+const ALL = "__all__"
 
 const statusFilters = [
   { key: "all", label: "全部" },
@@ -53,7 +63,7 @@ export function ReceiptList({
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-wrap items-center gap-2">
         <div role="group" aria-label="狀態" className="flex flex-wrap gap-2">
           {statusFilters.map((option) => (
             <Button
@@ -69,25 +79,28 @@ export function ReceiptList({
           ))}
         </div>
         {projects.length > 0 && (
-          <div role="group" aria-label="計畫" className="flex flex-wrap gap-2">
-            <Button
-              variant={!project ? "default" : "outline"}
-              aria-pressed={!project}
-              onClick={() => set("project", null)}
-            >
-              所有計畫
-            </Button>
-            {projects.map((name) => (
-              <Button
-                key={name}
-                variant={project === name ? "default" : "outline"}
-                aria-pressed={project === name}
-                onClick={() => set("project", name)}
-              >
-                {name}
-              </Button>
-            ))}
-          </div>
+          <Select
+            value={project ?? ALL}
+            onValueChange={(value) =>
+              set("project", value === ALL ? null : String(value))
+            }
+            items={[
+              { value: ALL, label: "所有計畫" },
+              ...projects.map((name) => ({ value: name, label: name })),
+            ]}
+          >
+            <SelectTrigger aria-label="計畫" className="w-48">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ALL}>所有計畫</SelectItem>
+              {projects.map((name) => (
+                <SelectItem key={name} value={name}>
+                  {name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         )}
       </div>
       {shown.length === 0 ? (
@@ -97,7 +110,7 @@ export function ReceiptList({
           {shown.map((receipt) => (
             <li
               key={receipt.id}
-              className="flex min-h-14 items-center gap-4 border-b border-border py-2"
+              className="flex min-h-14 items-center gap-4 border-b border-border py-3"
             >
               <span className="flex min-w-0 flex-1 flex-col">
                 <a
@@ -120,11 +133,9 @@ export function ReceiptList({
                     .join("，")}
                 </span>
               </span>
-              <Badge
-                variant={receipt.status === "pending" ? "warning" : "muted"}
-              >
-                {receiptStatuses[receipt.status]}
-              </Badge>
+              {receipt.status === "approved" && (
+                <Badge variant="muted">{receiptStatuses.approved}</Badge>
+              )}
               <div className="flex shrink-0 gap-1">
                 <ReceiptActions receipt={receipt} projects={projects} />
               </div>
