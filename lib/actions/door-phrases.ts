@@ -52,6 +52,12 @@ const fields = z.object({
     .default([1, 2, 3, 4, 5, 6, 7])
     .describe("Weekdays the range starts on, 1 Monday to 7 Sunday."),
   enabled: z.boolean().default(true),
+  first_visit: z
+    .boolean()
+    .default(false)
+    .describe(
+      "Say it only on the member's first opening of the day (the day starts at 06:00 Asia/Taipei); first-visit phrases in force win over the others then."
+    ),
 })
 
 const mask = (days: number[]) =>
@@ -68,6 +74,7 @@ const shape = (row: Row) => ({
   ends_at: clock(row.endsAt),
   days: dayList(row.days),
   enabled: row.enabled,
+  first_visit: row.firstVisit,
 })
 export type DoorPhrase = ReturnType<typeof shape>
 
@@ -103,6 +110,7 @@ const values = (input: z.infer<typeof fields>, userId: string) => ({
   endsAt: minutes(input.ends_at),
   days: mask(input.days),
   enabled: input.enabled,
+  firstVisit: input.first_visit,
   updatedBy: userId,
 })
 
@@ -110,7 +118,7 @@ export const listDoorPhrases = defineAction({
   name: "list_door_phrases",
   title: "門口問候語",
   description:
-    'The door\'s pool of spoken greetings (door admins only): each phrase says before + member name + after (e.g. "晚安，" name "這麼晚來，很認真喔。") from starts_at to ends_at (HH:MM, Asia/Taipei, past midnight when ends_at <= starts_at) on the listed weekdays (1 Monday to 7 Sunday, the day the range starts). Phrases may share a time; at each opening the door picks one of the enabled phrases in force at random, and says "Hi <name>" when none is. now lists the ids of the phrases in force right now.',
+    'The door\'s pool of spoken greetings (door admins only): each phrase says before + member name + after (e.g. "晚安，" name "這麼晚來，很認真喔。") from starts_at to ends_at (HH:MM, Asia/Taipei, past midnight when ends_at <= starts_at) on the listed weekdays (1 Monday to 7 Sunday, the day the range starts). Phrases may share a time; at each opening the door picks one of the enabled phrases in force at random, and says "Hi <name>" when none is. first_visit phrases are said only on a member\'s first opening of the day (from 06:00) and win over the others then. now lists the ids of the phrases in force right now.',
   kind: "query",
   input: z.object({}),
   run: async (actor) => {
@@ -260,6 +268,7 @@ export async function panelPhrases() {
     start: row.startsAt,
     end: row.endsAt,
     days: row.days,
+    first: row.firstVisit,
   }))
 }
 
