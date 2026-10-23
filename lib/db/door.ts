@@ -109,9 +109,6 @@ const bytea = customType<{ data: Buffer }>({ dataType: () => "bytea" })
 
 // How the door greets a member: the suffix after their name on the LED
 // panel ("歡迎 詠翔！！"). The sound after it comes from their playlist.
-// The table still holds sound, sound_type, sound_version and play_sound from
-// before the pool (0027 moved them into it). Nothing reads or writes them;
-// the next migration drops them, once no running image lists them (#78).
 export const doorGreetings = pgTable("door_greetings", {
   userId: uuid()
     .primaryKey()
