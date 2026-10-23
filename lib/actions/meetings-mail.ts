@@ -40,8 +40,9 @@ import {
 const ANNOUNCE = { name: "WinLab", email: "announce@winlab.tw" }
 // 15:30 to 18:00, as the old calendar event ran.
 const MEETING_MINUTES = 150
-// The recording files under this project's folder.
-const RECORDING_PREFIX = "winlab"
+// winlab-helper files a `[lab-meeting]-` recording into the lab-meeting
+// group's Recordings folder; a prefix that names no group lands in unfiled.
+const RECORDING_PREFIX = "lab-meeting"
 
 const site = () => process.env.BETTER_AUTH_URL ?? "https://portal.winlab.tw"
 const kindLabel = { speaker: "演講", thesis: "碩論" } as const
@@ -57,12 +58,13 @@ function headline(meeting: ScheduledMeeting) {
     : `${day} ${kindLabel[meeting.kind]}`
 }
 
-// Room for the date and name in a recording's file name.
+// Room for the rest of a recording's file name.
 const TOPIC_TITLE_MAX = 100
 
 /**
- * "2026-10-26 宋承叡 <paper title>": the recording file, and the file-index
- * issue made from it, say who presented what.
+ * "宋承叡 <paper title>": winlab-helper files the recording as
+ * "[lab-meeting] 2026-10-26 宋承叡 <paper title>.mp4", adding the date itself,
+ * and the file-index issue takes that name.
  */
 function recordingTopic(meeting: ScheduledMeeting) {
   const title = meeting.title?.trim()
@@ -72,7 +74,7 @@ function recordingTopic(meeting: ScheduledMeeting) {
       ? `${title.slice(0, TOPIC_TITLE_MAX).trimEnd()}…`
       : title,
   ].filter(Boolean)
-  return `${meeting.date} ${what.length ? what.join(" ") : "Lab Meeting"}`
+  return what.length ? what.join(" ") : "Lab Meeting"
 }
 
 function nextWeekRow(next: ScheduledMeeting | undefined): [string, string][] {
