@@ -2,6 +2,7 @@ import Link from "next/link"
 
 import { PageHeader, SectionHeader } from "@/components/page-header"
 import { PortalShell } from "@/components/portal-shell"
+import { adminAppsOf, visibleTo } from "@/lib/actions/authz"
 import { listAnnouncements } from "@/lib/actions/bulletin"
 import { runAction } from "@/lib/actions/define"
 import { listHomePins } from "@/lib/actions/home"
@@ -22,22 +23,26 @@ const isFresh = (date: Date) =>
 
 export default async function Home() {
   const actor = await requireActor("/")
-  const [member, { meeting }, { announcements }, pins] = await Promise.all([
-    runAction(whoami, actor, {}),
-    runAction(getNextLabMeeting, actor, {}),
-    runAction(listAnnouncements, actor, { limit: 1 }),
-    runAction(listHomePins, actor, {}),
-  ])
+  const [member, { meeting }, { announcements }, pins, adminOf] =
+    await Promise.all([
+      runAction(whoami, actor, {}),
+      runAction(getNextLabMeeting, actor, {}),
+      runAction(listAnnouncements, actor, { limit: 1 }),
+      runAction(listHomePins, actor, {}),
+      adminAppsOf(actor),
+    ])
   // Starred services move out of their group into 置頂 at the top.
   const pinned = new Set<string>(pins.services)
   const groups = [
     {
       title: "置頂",
-      apps: services.filter((app) => pinned.has(app.key)),
+      apps: visibleTo(adminOf, services).filter((app) => pinned.has(app.key)),
     },
     ...serviceGroups.map((group) => ({
       title: group.title,
-      apps: group.apps.filter((app) => !pinned.has(app.key)),
+      apps: visibleTo(adminOf, group.apps).filter(
+        (app) => !pinned.has(app.key)
+      ),
     })),
   ].filter((group) => group.apps.length > 0)
   const fresh = announcements.find((post) => isFresh(post.createdAt))
@@ -70,6 +75,10 @@ export default async function Home() {
                 >
                   <Link
                     href={app.href}
+                    {...(app.href.startsWith("https") && {
+                      target: "_blank",
+                      rel: "noopener noreferrer",
+                    })}
                     className="flex min-h-14 min-w-0 flex-1 items-center gap-3 transition-colors duration-state hover:text-muted-foreground"
                   >
                     <span aria-hidden className="w-6 text-center">

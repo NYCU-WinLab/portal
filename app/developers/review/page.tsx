@@ -1,7 +1,7 @@
 import { EmptyState } from "@/components/empty-state"
 import { PageHeader } from "@/components/page-header"
 import { PortalShell } from "@/components/portal-shell"
-import { isAdmin } from "@/lib/actions/authz"
+import { requireAdminPage } from "@/lib/actions/authz"
 import { runAction } from "@/lib/actions/define"
 import { listDeveloperScopeRequests } from "@/lib/actions/developers"
 import { requireActor } from "@/lib/auth/session"
@@ -14,18 +14,14 @@ export const dynamic = "force-dynamic"
 
 export default async function ReviewPage() {
   const actor = await requireActor("/developers/review")
-  const admin = await isAdmin(actor, "portal")
-  const requests = admin
-    ? (await runAction(listDeveloperScopeRequests, actor, {})).requests
-    : []
+  await requireAdminPage(actor, "portal")
+  const { requests } = await runAction(listDeveloperScopeRequests, actor, {})
 
   return (
     <PortalShell page={developersPage} nav={developersNav}>
       <div className="flex flex-col gap-12">
         <PageHeader title="審核資料權限" />
-        {!admin ? (
-          <p className="text-muted-foreground">只有 Portal 管理員可以審核</p>
-        ) : requests.length === 0 ? (
+        {requests.length === 0 ? (
           <EmptyState noun="待審申請" />
         ) : (
           <ul className="flex flex-col">

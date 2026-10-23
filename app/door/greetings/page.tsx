@@ -6,9 +6,8 @@ import {
 } from "@/components/focus"
 import { PageHeader } from "@/components/page-header"
 import { PortalShell } from "@/components/portal-shell"
-import { StatusPage } from "@/components/status-page"
 import { NumberTicker } from "@/components/ui/number-ticker"
-import { isAdmin } from "@/lib/actions/authz"
+import { requireAdminPage } from "@/lib/actions/authz"
 import { runAction } from "@/lib/actions/define"
 import { listDoorPhrases } from "@/lib/actions/door-phrases"
 import { whoami } from "@/lib/actions/users"
@@ -22,12 +21,7 @@ export const dynamic = "force-dynamic"
 
 export default async function DoorGreetingsPage() {
   const actor = await requireActor("/door/greetings")
-  if (!(await isAdmin(actor, "door")))
-    return (
-      <PortalShell page={doorPage} layout="spotlight">
-        <StatusPage title="問候語只有 Door 管理員能改" />
-      </PortalShell>
-    )
+  await requireAdminPage(actor, "door")
   const [{ phrases, now }, me] = await Promise.all([
     runAction(listDoorPhrases, actor, {}),
     runAction(whoami, actor, {}),
@@ -35,7 +29,7 @@ export default async function DoorGreetingsPage() {
   const sample = givenName(panelName(me.name ?? "")) || "名字"
   const [only] = now.length === 1 ? phrases.filter((p) => p.id === now[0]) : []
   return (
-    <PortalShell page={doorPage} nav={doorNav(true)}>
+    <PortalShell page={doorPage} nav={doorNav}>
       <div className="flex flex-col gap-12">
         <PageHeader title="問候語" actions={<AddPhrase sample={sample} />} />
         <Focus>

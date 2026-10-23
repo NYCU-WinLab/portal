@@ -64,7 +64,7 @@ export default async function DoorTokensPage() {
   ])
 
   return (
-    <PortalShell page={doorPage} nav={doorNav(admin)}>
+    <PortalShell page={doorPage} nav={doorNav}>
       <div className="flex flex-col gap-12">
         <PageHeader title="開門金鑰" actions={<CreateToken />} />
         <section className="flex flex-col gap-2">

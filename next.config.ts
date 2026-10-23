@@ -6,7 +6,11 @@ const nextConfig: NextConfig = {
   output: "standalone",
   // Trip files (up to 10 MB) and menu photos reach the server as base64 in
   // a server action, a third larger than the file.
-  experimental: { serverActions: { bodySizeLimit: "15mb" } },
+  // authInterrupts: forbidden() renders app/forbidden.tsx with a 403.
+  experimental: {
+    serverActions: { bodySizeLimit: "15mb" },
+    authInterrupts: true,
+  },
   // Rooms became part of Meetings; /rooms/join/<id> stays, it is in invites.
   async redirects() {
     return [
