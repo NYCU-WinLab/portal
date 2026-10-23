@@ -62,7 +62,7 @@ export const listStandingMeetings = defineAction({
   name: "list_standing_meetings",
   title: "固定會議",
   description:
-    "Every standing meeting on /meetings: title, weekday (0 Sunday), start time, duration, every week or every other week, attendees, whether the advisor is invited, whether it is active, who made it, and its next occurrence with the room already held for it (booked false until the daily run books it, 7 days ahead). Every member sees every series; only its creator can pause or delete it.",
+    "Every standing meeting on /meetings: title, weekday (0 Sunday), start time, duration, every week or every other week (anchorDate is a day it meets on, fixing which weeks), attendees, whether the advisor is invited, whether it is active, who made it, and its next occurrence with the room already held for it (booked false until the daily run books it, 7 days ahead). Every member sees every series; only its creator can pause or delete it.",
   kind: "query",
   input: z.object({}),
   run: async () => {
@@ -95,6 +95,7 @@ export const listStandingMeetings = defineAction({
           startTime: series.startTime,
           durationMinutes: series.durationMinutes,
           intervalWeeks: series.intervalWeeks,
+          anchorDate: series.anchorDate,
           attendees: series.attendees,
           includeAdvisor: series.includeAdvisor,
           groupName: series.groupName,
