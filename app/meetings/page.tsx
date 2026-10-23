@@ -1,4 +1,4 @@
-import { AvatarStack } from "@/components/avatar-stack"
+import { AvatarStack, type StackPerson } from "@/components/avatar-stack"
 import { EmptyState } from "@/components/empty-state"
 import { ExpandRow } from "@/components/expand-row"
 import { PageHeader, SectionHeader } from "@/components/page-header"
@@ -13,6 +13,7 @@ import { listMeetings, listProjectGroups } from "@/lib/actions/rooms"
 import { listStandingMeetings } from "@/lib/actions/rooms-series"
 import { requireActor } from "@/lib/auth/session"
 import { dateLabel, taipeiToday } from "@/lib/leave-dates"
+import { DEFAULT_TOPIC, splitTopic } from "@/lib/rooms/meeting"
 import { addDays, addMinutes } from "@/lib/rooms/time"
 
 import { AdminActions } from "./admin-actions"
@@ -155,11 +156,57 @@ function MeetingRow({
 }
 
 // Any other meeting: who called it, who comes, and its Teams link.
+// "[cairn]-sync" as members read it: the project's or the person's name,
+// then the title, which is left out when it is only the default "meeting".
+function Topic({ topic, owners }: { topic: string; owners: Owners }) {
+  const { prefix, title } = splitTopic(topic)
+  const owner = prefix ? (owners.get(prefix) ?? prefix) : null
+  if (!owner) return <span className="min-w-0 truncate">{title}</span>
+  return (
+    <span className="flex min-w-0 gap-3">
+      <span
+        className={
+          title === DEFAULT_TOPIC
+            ? "shrink-0"
+            : "shrink-0 text-muted-foreground"
+        }
+      >
+        {owner}
+      </span>
+      {title !== DEFAULT_TOPIC && (
+        <span className="min-w-0 truncate">{title}</span>
+      )}
+    </span>
+  )
+}
+
+type Owners = Map<string, string>
+// Attendees by email, as portal members: Keycloak groups send English
+// name order ("秉育 何"), the portal has 何秉育.
+type People = Map<string, StackPerson>
+
+const crowd = (attendees: { name: string; email: string }[], people: People) =>
+  attendees.map(
+    (a) => people.get(a.email.toLowerCase()) ?? { id: a.email, name: a.name }
+  )
+
+/** Topic as plain text, for confirm dialogs. */
+function topicText(topic: string, owners: Owners) {
+  const { prefix, title } = splitTopic(topic)
+  const owner = prefix ? (owners.get(prefix) ?? prefix) : null
+  if (!owner) return title
+  return title === DEFAULT_TOPIC ? owner : `${owner} ${title}`
+}
+
 function BookingRow({
   booking,
+  owners,
+  people,
   actions,
 }: {
   booking: Booking
+  owners: Owners
+  people: People
   actions?: React.ReactNode
 }) {
   return (
@@ -169,7 +216,7 @@ function BookingRow({
         <span className="flex flex-col gap-1 sm:flex-row sm:gap-4">
           <When date={booking.date} aside={booking.startTime} />
           <span className="flex min-w-0 flex-1 gap-3">
-            <span className="min-w-0 truncate">{booking.title}</span>
+            <Topic topic={booking.title} owners={owners} />
             <span className="ml-auto shrink-0 text-muted-foreground">
               {booking.room ?? "線上"}
             </span>
@@ -188,7 +235,7 @@ function BookingRow({
         </span>
         <span>發起人 {booking.requestedByName}</span>
         {booking.attendees.length > 0 && (
-          <span>與會 {booking.attendees.map((a) => a.name).join("、")}</span>
+          <AvatarStack people={crowd(booking.attendees, people)} />
         )}
         {booking.seriesId && <span>固定會議</span>}
         {teamsText(booking) && <span>{teamsText(booking)}</span>}
@@ -202,9 +249,13 @@ function BookingRow({
 
 function SeriesRow({
   series,
+  owners,
+  people,
   actions,
 }: {
   series: Series
+  owners: Owners
+  people: People
   actions?: React.ReactNode
 }) {
   return (
@@ -217,7 +268,7 @@ function SeriesRow({
             {weekdays[series.weekday]} {series.startTime}
           </span>
           <span className="flex min-w-0 flex-1 gap-3">
-            <span className="min-w-0 truncate">{series.title}</span>
+            <Topic topic={series.title} owners={owners} />
             {!series.active && (
               <span className="ml-auto shrink-0 text-muted-foreground">
                 暫停
@@ -234,7 +285,7 @@ function SeriesRow({
         </span>
         <span>建立者 {series.createdByName}</span>
         {series.attendees.length > 0 && (
-          <span>與會 {series.attendees.map((a) => a.name).join("、")}</span>
+          <AvatarStack people={crowd(series.attendees, people)} />
         )}
         {series.includeAdvisor && <span>邀請老師</span>}
         {series.agenda && (
@@ -280,6 +331,16 @@ export default async function MeetingsPage() {
     value: paper.id,
     label: paper.venue ? `${paper.title}（${paper.venue}）` : paper.title,
   }))
+  // Who a [prefix] stands for: a project group's label, else a member's name.
+  const owners: Owners = new Map([
+    ...members.flatMap((m) =>
+      m.username ? [[m.username, m.name] as [string, string]] : []
+    ),
+    ...groups.map((g) => [g.name, g.label] as [string, string]),
+  ])
+  const people: People = new Map(
+    members.map((m) => [m.email.toLowerCase(), { id: m.id, name: m.name }])
+  )
   // Lab weeks carry their own Teams meeting, so their bookings are left out.
   const timeline: Entry[] = [
     ...meetings.map((lab) => ({ at: `${lab.date} ${lab.startsAt}`, lab })),
@@ -320,11 +381,16 @@ export default async function MeetingsPage() {
       />
     ) : (
       <BookingRow
+        owners={owners}
+        people={people}
         key={entry.booking.id}
         booking={entry.booking}
         actions={
           entry.booking.requestedBy === actor.userId && (
-            <CancelButton id={entry.booking.id} title={entry.booking.title} />
+            <CancelButton
+              id={entry.booking.id}
+              title={topicText(entry.booking.title, owners)}
+            />
           )
         }
       />
@@ -390,13 +456,15 @@ export default async function MeetingsPage() {
             <ul className="flex stagger-rise flex-col">
               {series.map((s) => (
                 <SeriesRow
+                  owners={owners}
+                  people={people}
                   key={s.id}
                   series={s}
                   actions={
                     s.createdBy === actor.userId && (
                       <SeriesButtons
                         id={s.id}
-                        title={s.title}
+                        title={topicText(s.title, owners)}
                         active={s.active}
                       />
                     )

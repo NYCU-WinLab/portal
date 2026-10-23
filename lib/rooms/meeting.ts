@@ -28,6 +28,14 @@ export function composeTopic(prefix: string | null, suffix: string) {
   return prefix ? `[${prefix}]-${clean}` : clean
 }
 
+/** A topic split back into its [prefix] and the title after it. */
+export function splitTopic(topic: string) {
+  const match = /^\[([^\]]+)\]-(.*)$/.exec(topic)
+  return match
+    ? { prefix: match[1], title: match[2] }
+    : { prefix: null, title: topic }
+}
+
 /** The lab's advisor; project groups list students only. */
 export const ADVISOR_USERNAME = "cctseng"
 

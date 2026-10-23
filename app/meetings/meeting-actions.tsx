@@ -7,8 +7,18 @@ import { ConfirmDialog } from "@/components/confirm-dialog"
 import { FormDialog, FormField } from "@/components/form-dialog"
 import { type Member, MemberCombobox } from "@/components/member-combobox"
 import { Button } from "@/components/ui/button"
+import { ComboboxContent, ComboboxTrigger } from "@/components/ui/combobox"
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Popover } from "@/components/ui/popover"
 import {
   Select,
   SelectContent,
@@ -59,6 +69,20 @@ const kinds: Option[] = [
 const text = (data: FormData, key: string) =>
   data.has(key) ? String(data.get(key) ?? "").trim() : undefined
 
+// Every typed word must appear in the paper's label: "ebpf nsdi" finds
+// Electrode, where the default fuzzy match would list half the papers.
+function matchesWords(_value: string, search: string, keywords?: string[]) {
+  const text = (keywords ?? []).join(" ").toLowerCase()
+  return search
+    .toLowerCase()
+    .split(/\s+/)
+    .every((word) => text.includes(word))
+    ? 1
+    : 0
+}
+
+// The paper list runs long, so it is searched, not scrolled. A hidden
+// input carries the choice into the form.
 function PaperSelect({
   papers,
   defaultValue,
@@ -66,25 +90,46 @@ function PaperSelect({
   papers: Option[]
   defaultValue?: string | null
 }) {
+  const [open, setOpen] = React.useState(false)
+  const [value, setValue] = React.useState(defaultValue ?? "")
+  const chosen = papers.find((paper) => paper.value === value)
   return (
     <div className="flex flex-col gap-2">
       <Label htmlFor="meeting-paper">論文</Label>
-      <Select
-        name="paperId"
-        items={papers}
-        defaultValue={defaultValue ?? undefined}
-      >
-        <SelectTrigger id="meeting-paper" className="w-full">
-          <SelectValue placeholder="從論文清單選" />
-        </SelectTrigger>
-        <SelectContent>
-          {papers.map((paper) => (
-            <SelectItem key={paper.value} value={paper.value}>
-              {paper.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      <input type="hidden" name="paperId" value={value} />
+      <Popover open={open} onOpenChange={setOpen}>
+        <ComboboxTrigger
+          id="meeting-paper"
+          placeholder="從論文清單選"
+          className="w-full"
+        >
+          {chosen?.label}
+        </ComboboxTrigger>
+        <ComboboxContent>
+          <Command filter={matchesWords}>
+            <CommandInput placeholder="搜尋論文" />
+            <CommandList>
+              <CommandEmpty>找不到論文</CommandEmpty>
+              <CommandGroup>
+                {papers.map((paper) => (
+                  <CommandItem
+                    key={paper.value}
+                    value={paper.value}
+                    keywords={[paper.label]}
+                    data-checked={paper.value === value}
+                    onSelect={() => {
+                      setValue(paper.value)
+                      setOpen(false)
+                    }}
+                  >
+                    <span className="truncate">{paper.label}</span>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            </CommandList>
+          </Command>
+        </ComboboxContent>
+      </Popover>
     </div>
   )
 }
