@@ -9,7 +9,7 @@ import { FormDialog } from "@/components/form-dialog"
 import { Button } from "@/components/ui/button"
 import { report } from "@/lib/report"
 
-import { removeAvatar, saveAvatar } from "./actions"
+import { loadGravatar, removeAvatar, saveAvatar } from "./actions"
 
 const LIMIT = 5 * 1024 * 1024
 
@@ -249,6 +249,12 @@ export function AvatarSettings({
         />
         <Button variant="outline" onClick={() => input.current?.click()}>
           {version ? "換一張" : "上傳"}
+        </Button>
+        <Button
+          variant="ghost"
+          onClick={() => report(loadGravatar(), "已載入 Gravatar")}
+        >
+          從 Gravatar 載入
         </Button>
         {version && (
           <ConfirmDialog

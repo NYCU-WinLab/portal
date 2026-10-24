@@ -44,6 +44,26 @@ export const auth = betterAuth({
       username: { type: "string", required: false },
     },
   },
+  // A new member starts with their Gravatar when their email has one. It
+  // does not wait, so a slow Gravatar never holds sign-in up.
+  databaseHooks: {
+    user: {
+      create: {
+        after: async (created) => {
+          void import("@/lib/actions/avatars")
+            .then(async ({ loadMyGravatar }) => {
+              const { runAction } = await import("@/lib/actions/define")
+              await runAction(
+                loadMyGravatar,
+                { userId: created.id, via: "web" },
+                {}
+              )
+            })
+            .catch(() => {})
+        },
+      },
+    },
+  },
   session: { cookieCache: { enabled: true, maxAge: 5 * 60 } },
   plugins: [
     genericOAuth({
