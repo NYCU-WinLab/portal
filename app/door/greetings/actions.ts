@@ -8,6 +8,7 @@ import {
   deleteDoorPhrase,
   updateDoorPhrase,
 } from "@/lib/actions/door-phrases"
+import { setDoorSpeakName } from "@/lib/actions/door-greetings"
 import { requireActor } from "@/lib/auth/session"
 
 // The schedule's writes: the same actions MCP runs, then a refresh.
@@ -27,3 +28,5 @@ export const create = async (input: unknown) => call(createDoorPhrase, input)
 export const update = async (input: unknown) => call(updateDoorPhrase, input)
 export const remove = async (id: string, lab: boolean) =>
   call(deleteDoorPhrase, { id, default: lab })
+export const setSpeakName = async (speak: boolean) =>
+  call(setDoorSpeakName, { speak })

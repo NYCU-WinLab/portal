@@ -2,6 +2,7 @@ import {
   Focus,
   FocusHighlight,
   FocusLabel,
+  FocusMeta,
   FocusTitle,
 } from "@/components/focus"
 import Link from "next/link"
@@ -12,6 +13,7 @@ import { Button } from "@/components/ui/button"
 import { PortalShell } from "@/components/portal-shell"
 import { NumberTicker } from "@/components/ui/number-ticker"
 import { runAction } from "@/lib/actions/define"
+import { getMyDoorGreeting } from "@/lib/actions/door-greetings"
 import { listDoorPhrases, listDoorVoiceClips } from "@/lib/actions/door-phrases"
 import { whoami } from "@/lib/actions/users"
 import { requireActor } from "@/lib/auth/session"
@@ -19,15 +21,18 @@ import { givenName, panelName, voiceParts } from "@/lib/door-greeting"
 
 import { doorNav, doorPage } from "../nav"
 import { AddPhrase, PhraseList, type Recording } from "./phrase-list"
+import { SpeakNameSwitch } from "./speak-name-switch"
 
 export const dynamic = "force-dynamic"
 
 export default async function DoorGreetingsPage() {
   const actor = await requireActor("/door/greetings")
-  const [{ mine, defaults, now, can_edit_defaults }, me] = await Promise.all([
-    runAction(listDoorPhrases, actor, {}),
-    runAction(whoami, actor, {}),
-  ])
+  const [{ mine, defaults, now, can_edit_defaults }, me, door] =
+    await Promise.all([
+      runAction(listDoorPhrases, actor, {}),
+      runAction(whoami, actor, {}),
+      runAction(getMyDoorGreeting, actor, {}),
+    ])
   // The recording status reads the voice clips, which only door admins see.
   const { missing, job } = can_edit_defaults
     ? await runAction(listDoorVoiceClips, actor, {})
@@ -57,7 +62,9 @@ export default async function DoorGreetingsPage() {
         <Focus>
           <FocusLabel>現在你開門，門口會說</FocusLabel>
           <FocusTitle>
-            {now.length === 0 ? (
+            {!door.speak_name ? (
+              "不說話，只播音效"
+            ) : now.length === 0 ? (
               <>
                 Hi <FocusHighlight>{sample}</FocusHighlight>
               </>
@@ -77,6 +84,9 @@ export default async function DoorGreetingsPage() {
               </>
             )}
           </FocusTitle>
+          <FocusMeta>
+            <SpeakNameSwitch speak={door.speak_name} />
+          </FocusMeta>
         </Focus>
         {missing.length > 0 && (
           <p className="text-muted-foreground">
