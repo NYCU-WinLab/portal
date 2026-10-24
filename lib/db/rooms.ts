@@ -143,6 +143,10 @@ export const roomMeetingRequests = pgTable(
     joinUrl: text(),
     cancelId: text(),
     messageId: text(),
+    // What a create or update asked Teams for, so a later change of the
+    // booking's topic can tell whether Teams still shows the old one.
+    subject: text(),
+    agenda: text(),
     optionsApplied: boolean(),
     errorCode: text(),
     errorMessage: text(),
@@ -159,7 +163,7 @@ export const roomMeetingRequests = pgTable(
       .where(sql`${table.status} = 'pending'`),
     check(
       "room_meeting_requests_kind",
-      sql`${table.kind} in ('create', 'cancel')`
+      sql`${table.kind} in ('create', 'update', 'cancel')`
     ),
     check(
       "room_meeting_requests_status",

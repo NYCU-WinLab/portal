@@ -3,7 +3,8 @@
 // while the week has no title, and the week gets its Teams meeting through
 // the rooms pipeline as soon as the title is in. On Friday from 12:00
 // announce@winlab.tw gets the week, with the Teams meeting's calendar invite
-// (made then when the title never came).
+// (made then when the title never came). A later change of paper, presenter
+// or questioners renames that Teams meeting, keeping its link.
 import { and, asc, eq, inArray, sql } from "drizzle-orm"
 
 import { queueMail } from "@/lib/actions/mail"
@@ -18,7 +19,11 @@ import {
   placeBooking,
   type Booking,
 } from "@/lib/actions/rooms"
-import { joinUrl } from "@/lib/actions/rooms-meetings"
+import {
+  joinUrl,
+  teamsTopicState,
+  updateTeamsMeeting,
+} from "@/lib/actions/rooms-meetings"
 import { db } from "@/lib/db"
 import {
   admins,
@@ -401,6 +406,42 @@ async function announce(
   }
 }
 
+/**
+ * Keeps the week's Teams meeting named after what is presented: a new
+ * paper, presenter or questioners rename the booking, and its Teams
+ * meeting and GitLab record follow through an update that keeps the link.
+ * A time or place change is not this: it releases the week instead.
+ */
+async function syncTeamsTopic(meeting: ScheduledMeeting) {
+  if (meeting.kind === "holiday") return
+  const held = await heldBooking(meeting.id)
+  if (!held) return
+  const title = composeTopic(LAB_GROUP, recordingTopic(meeting))
+  const agenda = recordAgenda(meeting)
+  let booking = held
+  if (held.title !== title || held.agenda !== agenda) {
+    const [renamed] = await db
+      .transaction(async (tx) => {
+        await lockCurrent(tx, meeting)
+        return tx
+          .update(roomBookings)
+          .set({ title, agenda })
+          .where(
+            and(eq(roomBookings.id, held.id), eq(roomBookings.status, "booked"))
+          )
+          .returning()
+      })
+      .catch((error) => {
+        if (error instanceof AlreadySent) return []
+        throw error
+      })
+    if (!renamed) return
+    booking = renamed
+  }
+  const topic = await teamsTopicState(booking)
+  if (topic.state === "stale") await updateTeamsMeeting(booking, topic.meeting)
+}
+
 /** A Teams booking a schedule change let go, and whether the lab heard of it. */
 type Released = { booking: Booking; announced: boolean }
 
@@ -491,6 +532,7 @@ export async function runMeetingMail(now = new Date()) {
       meeting,
       schedule.find((m) => m.date === addDays(monday, 7))
     )
+  await syncTeamsTopic(meeting)
 }
 
 /** Checks every 10 minutes; called once per server process. */
