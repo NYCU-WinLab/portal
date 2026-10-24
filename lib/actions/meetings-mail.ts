@@ -204,10 +204,17 @@ async function claimCurrent(tx: Tx, meeting: ScheduledMeeting, kind: Kind) {
 }
 
 /** Queues a mail as the week's one mail of its kind. */
-async function queueOnce(meeting: ScheduledMeeting, kind: Kind, mail: Mail) {
+async function queueOnce(
+  meeting: ScheduledMeeting,
+  kind: Kind,
+  mail: Mail,
+  /** Runs under the lock; throwing AlreadySent sends nothing this tick. */
+  stillDue?: (tx: Tx) => Promise<void>
+) {
   await db
     .transaction(async (tx) => {
       await claimCurrent(tx, meeting, kind)
+      await stillDue?.(tx)
       await queueMail(tx, mail)
     })
     .catch((error) => {
@@ -222,21 +229,34 @@ async function remindTitle(meeting: ScheduledMeeting, today: string) {
     .from(user)
     .where(eq(user.id, meeting.presenter.id))
   if (!presenter) return
-  await queueOnce(meeting, `title:${today}`, {
-    to: [presenter.email],
-    subject: `[Lab Meeting] 請填 ${dayLabel(meeting.date)} 的報告主題`,
-    ...mailBody({
-      title: "報告主題還沒填",
-      rows: [
-        ["時間", `${dayLabel(meeting.date)} ${meeting.startsAt}`],
-        ["主講", meeting.presenter.name],
-      ],
-      paragraphs: [
-        "填好後會建立 Teams 會議，週五中午的公告信會帶上主題。還沒填的話，每天早上 9 點會再提醒。",
-      ],
-      action: { label: "填主題", url: `${site()}/meetings` },
-    }),
-  })
+  const untitled = async (tx: Tx) => {
+    // The presenter may have saved a title since the schedule was read.
+    const [now] = await tx
+      .select({ title: meetings.title, paperId: meetings.paperId })
+      .from(meetings)
+      .where(eq(meetings.id, meeting.id))
+    if (now?.title || now?.paperId) throw new AlreadySent()
+  }
+  await queueOnce(
+    meeting,
+    `title:${today}`,
+    {
+      to: [presenter.email],
+      subject: `[Lab Meeting] 請填 ${dayLabel(meeting.date)} 的報告主題`,
+      ...mailBody({
+        title: "報告主題還沒填",
+        rows: [
+          ["時間", `${dayLabel(meeting.date)} ${meeting.startsAt}`],
+          ["主講", meeting.presenter.name],
+        ],
+        paragraphs: [
+          "填好後會建立 Teams 會議，週五中午的公告信會帶上主題。還沒填的話，每天早上 9 點會再提醒。",
+        ],
+        action: { label: "填主題", url: `${site()}/meetings` },
+      }),
+    },
+    untitled
+  )
 }
 
 /** Who sends the invite: the presenter, else a portal admin. */
@@ -328,11 +348,28 @@ async function announce(
   if (held) {
     // Made earlier without mail, so the announcement carries its invite.
     const organizer = await organizerOf(held.requestedBy)
-    await queueOnce(meeting, "announce", {
-      ...announcement(meeting, next, held),
-      replyTo: organizer.email,
-      ...bookingCalendar(held, organizer, "REQUEST"),
-    })
+    await queueOnce(
+      meeting,
+      "announce",
+      {
+        ...announcement(meeting, next, held),
+        replyTo: organizer.email,
+        ...bookingCalendar(held, organizer, "REQUEST"),
+      },
+      async (tx) => {
+        // A schedule change commits before it cancels the old booking: wait
+        // for that, then the next tick books the new slot.
+        const now = await heldBooking(meeting.id, tx)
+        if (
+          now?.id !== held.id ||
+          meeting.kind === "holiday" ||
+          now.date !== meeting.date ||
+          now.startTime.slice(0, 5) !== meeting.startsAt ||
+          now.place !== meeting.location
+        )
+          throw new AlreadySent()
+      }
+    )
     return
   }
   const organizer =
