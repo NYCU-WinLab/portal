@@ -256,3 +256,56 @@ export async function keycloakUserGroups(sub: string) {
     if (page.length < 100) return groups
   }
 }
+
+/** One enabled realm account, as the member directory shows it. */
+export type RealmAccount = {
+  id: string
+  username: string
+  email?: string
+  firstName?: string
+  lastName?: string
+  attributes: Record<string, string | undefined>
+}
+
+/**
+ * Accounts that exist to try the lab's apps, not people: a "test" token in
+ * the username (test, winlab-test-master). They carry real groups and
+ * attributes, so the username is the one thing that sets them apart.
+ */
+const TEST_ACCOUNT = /(^|[-_.])test([-_.]|$)/i
+
+let accounts: { list: RealmAccount[]; at: number } | null = null
+
+/**
+ * Every enabled account in the realm except test accounts, with each
+ * attribute's first value. Most alumni are in no /lab-member group, so the
+ * member directory starts here, not from labDirectory(). Cached 10 minutes.
+ */
+export async function realmAccounts(): Promise<RealmAccount[]> {
+  if (accounts && Date.now() - accounts.at < LAB_DIRECTORY_TTL_MS)
+    return accounts.list
+  const users = await adminGet<
+    (Omit<RealmAccount, "attributes"> & {
+      enabled?: boolean
+      attributes?: Record<string, string[]>
+    })[]
+  >("/users?max=5000&briefRepresentation=false")
+  // Keycloak ignores enabled=true on this endpoint, so filter here.
+  const list = users
+    .filter((u) => u.enabled && !TEST_ACCOUNT.test(u.username))
+    .map((u) => ({
+      id: u.id,
+      username: u.username,
+      email: u.email,
+      firstName: u.firstName,
+      lastName: u.lastName,
+      attributes: Object.fromEntries(
+        Object.entries(u.attributes ?? {}).map(([key, values]) => [
+          key,
+          values[0]?.trim() || undefined,
+        ])
+      ),
+    }))
+  accounts = { list, at: Date.now() }
+  return list
+}

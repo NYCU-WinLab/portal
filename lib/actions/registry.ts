@@ -202,6 +202,7 @@ import {
   listStandingMeetings,
   setStandingMeetingActive,
 } from "@/lib/actions/rooms-series"
+import { listLabMembers } from "@/lib/actions/members"
 import { listLabMeetingStats } from "@/lib/actions/stats"
 import { whoami } from "@/lib/actions/users"
 
@@ -209,6 +210,7 @@ import { whoami } from "@/lib/actions/users"
 export const actions: Action[] = [
   whoami,
   getProfile,
+  listLabMembers,
   listLeaves,
   createLeave,
   deleteLeave,
