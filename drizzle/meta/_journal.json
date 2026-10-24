@@ -302,6 +302,13 @@
       "when": 1792836699116,
       "tag": "0042_show_presented_papers",
       "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1792836873783,
+      "tag": "0043_rename_api_keys",
+      "breakpoints": true
     }
   ]
 }
