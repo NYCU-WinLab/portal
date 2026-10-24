@@ -9,8 +9,10 @@ import {
   readSchedule,
   type Tx,
 } from "@/lib/actions/meetings-shared"
+import { runMeetingMail } from "@/lib/actions/meetings-mail"
 import { meetings, papers } from "@/lib/db/schema"
 import { taipeiToday } from "@/lib/leave-dates"
+import { emitErrorLog } from "@/lib/otel"
 
 export const isoDate = z
   .string()
@@ -116,6 +118,13 @@ export const updateMyLabMeeting = defineAction({
           change[key as keyof typeof links] = value as string | null
       if (Object.keys(change).length)
         await tx.update(meetings).set(change).where(eq(meetings.id, meeting.id))
+      return { date, titled: paperId !== undefined || title !== undefined }
+    }).then(({ date, titled }) => {
+      // A title just in gets its Teams meeting now, not at the next tick.
+      if (titled)
+        void runMeetingMail().catch((error) =>
+          emitErrorLog(error, { "meeting.date": date })
+        )
       return { date }
     }),
 })

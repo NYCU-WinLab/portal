@@ -418,8 +418,11 @@ export type NewBooking = {
   /** The Monday lab meeting this booking is for. */
   meetingId?: string
   place?: string
-  /** Replaces the usual invite, as the lab meeting's announcement does. */
-  invite?: (booking: Booking) => Mail
+  /**
+   * Replaces the usual invite, as the lab meeting's announcement does; null
+   * mails nothing, for a booking whose invite goes out later.
+   */
+  invite?: (booking: Booking) => Mail | null
   /** Runs first in the booking's transaction; throwing books nothing. */
   inTransaction?: (tx: Tx) => Promise<void>
 }
@@ -461,11 +464,10 @@ export async function placeBooking(input: NewBooking) {
           requestedBy: input.organizer.id,
         })
         .returning()
-      await queueMail(
-        tx,
-        input.invite?.(created) ??
-          inviteMail(created, input.organizer, "REQUEST")
-      )
+      const invite = input.invite
+        ? input.invite(created)
+        : inviteMail(created, input.organizer, "REQUEST")
+      if (invite) await queueMail(tx, invite)
       return created
     })
   } catch (error) {
@@ -479,7 +481,7 @@ export async function placeBooking(input: NewBooking) {
   return booking
 }
 
-async function organizerOf(userId: string) {
+export async function organizerOf(userId: string) {
   const [me] = await db
     .select({ id: user.id, name: user.name, email: user.email })
     .from(user)
@@ -621,9 +623,14 @@ export const cancelMeeting = defineAction({
 /**
  * Cancels a booking: releases its department room, mails everyone the
  * cancellation and takes down its Teams meeting. teams_error says why the
- * Teams meeting could not be taken down.
+ * Teams meeting could not be taken down. notify false skips the mail, for a
+ * booking whose invite never went out.
  */
-export async function cancelBooking(booking: Booking, cancelledBy: string) {
+export async function cancelBooking(
+  booking: Booking,
+  cancelledBy: string,
+  { notify = true } = {}
+) {
   if (booking.externalId && booking.room)
     await release(booking.externalId, {
       room: booking.room,
@@ -647,7 +654,7 @@ export async function cancelBooking(booking: Booking, cancelledBy: string) {
       )
       .returning()
     if (!row) throw new Error("這筆預約已經取消")
-    await queueMail(tx, inviteMail(row, organizer, "CANCEL"))
+    if (notify) await queueMail(tx, inviteMail(row, organizer, "CANCEL"))
     return row
   })
   const teamsError = await cancelTeamsMeeting(cancelled)
