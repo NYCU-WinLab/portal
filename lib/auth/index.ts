@@ -64,7 +64,9 @@ export const auth = betterAuth({
       },
     },
   },
-  session: { cookieCache: { enabled: true, maxAge: 5 * 60 } },
+  // A session ended elsewhere (Keycloak logout, a member who left) stops
+  // working within a minute, not five.
+  session: { cookieCache: { enabled: true, maxAge: 60 } },
   plugins: [
     genericOAuth({
       config: [

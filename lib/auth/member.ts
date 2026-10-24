@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm"
+import { and, eq, gt } from "drizzle-orm"
 
 import { db } from "@/lib/db"
 import { account, oauthRefreshToken, session } from "@/lib/db/schema"
@@ -50,6 +50,32 @@ export async function isLabMemberNow(userId: string): Promise<boolean> {
   const member = await lookup(userId)
   await remember(userId, member)
   return member
+}
+
+/**
+ * Every few minutes: asks Keycloak about each member who has a live web
+ * session, so someone removed or disabled there loses their sessions and
+ * refresh tokens without waiting for their next /mcp call. Keycloak being
+ * unreachable changes nothing; the next sweep asks again.
+ */
+export async function sweepMembers() {
+  const live = await db
+    .selectDistinct({ userId: session.userId })
+    .from(session)
+    .where(gt(session.expiresAt, new Date()))
+  let ended = 0
+  for (const { userId } of live) {
+    const member = await isLabMemberNow(userId).catch(() => true)
+    if (!member) ended++
+  }
+  return ended
+}
+
+/** Starts the sweep; called once per server process. */
+export function startMemberSweep() {
+  const run = () => void sweepMembers().catch(() => {})
+  setInterval(run, CHECK_EVERY_MS).unref()
+  run()
 }
 
 async function remember(userId: string, member: boolean) {
