@@ -86,10 +86,21 @@ export async function runWithKey(
 export async function readInput(
   request: Request
 ): Promise<{ input: unknown } | Response> {
-  const length = Number(request.headers.get("content-length") ?? 0)
-  if (length > MAX_BODY_BYTES) return apiError(413, "body over 20 MB")
-  const text = await request.text()
-  if (text.length > MAX_BODY_BYTES) return apiError(413, "body over 20 MB")
+  // Read up to the limit and stop, whatever Content-Length claims.
+  const chunks: Uint8Array[] = []
+  let size = 0
+  const reader = request.body?.getReader()
+  while (reader) {
+    const { done, value } = await reader.read()
+    if (done) break
+    size += value.byteLength
+    if (size > MAX_BODY_BYTES) {
+      await reader.cancel()
+      return apiError(413, "body over 20 MB")
+    }
+    chunks.push(value)
+  }
+  const text = Buffer.concat(chunks).toString("utf8")
   if (!text.trim()) return { input: {} }
   try {
     return { input: JSON.parse(text) }
