@@ -19,6 +19,7 @@ import {
   deletePaper,
   deletePaperTag,
   renamePaperTag,
+  setShowPresentedPapers,
   updatePaper,
 } from "@/lib/actions/papers"
 import {
@@ -56,6 +57,8 @@ export const questioners = async (input: unknown) => call(setQuestioners, input)
 export const paperAdd = async (input: unknown) => call(addPaper, input)
 export const paperUpdate = async (input: unknown) => call(updatePaper, input)
 export const paperDelete = async (input: unknown) => call(deletePaper, input)
+export const showPresented = async (input: unknown) =>
+  call(setShowPresentedPapers, input)
 export const presenterAdd = async (input: unknown) => call(addPresenter, input)
 export const presenterRemove = async (input: unknown) =>
   call(removePresenter, input)

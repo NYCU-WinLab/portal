@@ -13,8 +13,10 @@ export const dynamic = "force-dynamic"
 
 export default async function PapersPage() {
   const actor = await requireActor("/meetings/papers")
-  const [{ papers }, { tags }, admin] = await Promise.all([
-    runAction(listPapers, actor, {}),
+  const [{ papers, showPresented }, { tags }, admin] = await Promise.all([
+    // Every paper: the list hides presented ones on the page, so the
+    // switch answers at once.
+    runAction(listPapers, actor, { presented: true }),
     runAction(listPaperTags, actor, {}),
     isAdmin(actor, "meetings"),
   ])
@@ -33,7 +35,12 @@ export default async function PapersPage() {
             )
           }
         />
-        <PaperList papers={papers} tags={tags} admin={admin} />
+        <PaperList
+          papers={papers}
+          tags={tags}
+          admin={admin}
+          showPresented={showPresented}
+        />
       </div>
     </PortalShell>
   )

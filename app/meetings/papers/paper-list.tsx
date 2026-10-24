@@ -2,31 +2,48 @@
 
 import * as React from "react"
 
+import { toast } from "sonner"
+
 import { EmptyState } from "@/components/empty-state"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Switch } from "@/components/ui/switch"
 import { dateLabel } from "@/lib/leave-dates"
 
+import { showPresented as saveShowPresented } from "../actions"
 import { type Paper, PaperRowActions, type Tag } from "./paper-actions"
 
 // The paper list, filtered by tag on the page: pick one or more tags to see
-// the papers carrying any of them. Each paper says who presented it or has
-// it lined up.
+// the papers carrying any of them. Papers already presented are hidden
+// unless the member switches them on, a choice saved with their account.
+// Each paper says who presented it or has it lined up.
 export function PaperList({
   papers,
   tags,
   admin,
+  showPresented,
 }: {
   papers: Paper[]
   tags: Tag[]
   admin: boolean
+  showPresented: boolean
 }) {
   const [picked, setPicked] = React.useState<string[]>([])
-  const shown = picked.length
-    ? papers.filter((paper) =>
-        paper.tags.some((tag) => picked.includes(tag.id))
-      )
-    : papers
+  const [withPresented, setWithPresented] = React.useState(showPresented)
+  const shown = papers.filter(
+    (paper) =>
+      (picked.length === 0 ||
+        paper.tags.some((tag) => picked.includes(tag.id))) &&
+      (withPresented || !paper.uses.some((use) => use.past))
+  )
+  const switchPresented = async (on: boolean) => {
+    setWithPresented(on)
+    const { error } = await saveShowPresented({ show: on })
+    if (error) {
+      toast.error(error)
+      setWithPresented(!on)
+    }
+  }
   const toggle = (id: string) =>
     setPicked((ids) =>
       ids.includes(id) ? ids.filter((other) => other !== id) : [...ids, id]
@@ -34,6 +51,10 @@ export function PaperList({
 
   return (
     <div className="flex flex-col gap-6">
+      <label className="flex items-center gap-3">
+        <Switch checked={withPresented} onCheckedChange={switchPresented} />
+        顯示報告過的論文
+      </label>
       {tags.length > 0 && (
         <div
           role="group"
@@ -55,7 +76,10 @@ export function PaperList({
       {shown.length === 0 ? (
         <EmptyState noun="論文" />
       ) : (
-        <ul key={picked.join()} className="flex stagger-rise flex-col">
+        <ul
+          key={`${picked.join()}:${withPresented}`}
+          className="flex stagger-rise flex-col"
+        >
           {shown.map((paper) => (
             <li
               key={paper.id}
