@@ -412,15 +412,25 @@ async function syncTeamsTopic(meeting: ScheduledMeeting) {
   if (meeting.kind === "holiday") return
   const held = await heldBooking(meeting.id)
   if (!held) return
-  const title = composeTopic(LAB_GROUP, recordingTopic(meeting))
-  const agenda = recordAgenda(meeting)
-  if (held.title !== title || held.agenda !== agenda) {
+  const topicOf = (m: ScheduledMeeting) => ({
+    title: composeTopic(LAB_GROUP, recordingTopic(m)),
+    agenda: recordAgenda(m),
+  })
+  const seen = topicOf(meeting)
+  if (held.title !== seen.title || held.agenda !== seen.agenda) {
     const [renamed] = await db
       .transaction(async (tx) => {
         await lockCurrent(tx, meeting)
+        // Read again under the lock every schedule change takes: the
+        // snapshot may predate a change whose own sync already ran, and
+        // writing it would rename the meeting back.
+        const fresh = (
+          await readSchedule({ fromDate: addDays(meeting.date, -1) })
+        ).find((m) => m.id === meeting.id)
+        if (!fresh) throw new AlreadySent()
         return tx
           .update(roomBookings)
-          .set({ title, agenda })
+          .set(topicOf(fresh))
           .where(
             and(eq(roomBookings.id, held.id), eq(roomBookings.status, "booked"))
           )
