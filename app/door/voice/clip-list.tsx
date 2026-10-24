@@ -6,6 +6,7 @@ import { ConfirmDialog } from "@/components/confirm-dialog"
 import { EmptyState } from "@/components/empty-state"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import type { VoiceJobStatus } from "@/lib/actions/door-phrases"
 import { report } from "@/lib/report"
 
 import { PlayButton } from "../sounds/play-button"
@@ -14,14 +15,16 @@ import { rerecord } from "./actions"
 type Clip = { id: string; text: string }
 
 // Every text the door speaks in CC's voice, A to Z, then the ones still
-// waiting for the voice job. Re-recording deletes a clip; the job makes it
-// again on its next run.
+// waiting for the voice job, in the order it makes them. Re-recording
+// deletes a clip; the job makes it again as soon as it gets to it.
 export function ClipList({
   clips,
   missing,
+  job,
 }: {
   clips: Clip[]
   missing: string[]
+  job: VoiceJobStatus
 }) {
   if (clips.length === 0 && missing.length === 0)
     return <EmptyState noun="語音" />
@@ -55,7 +58,13 @@ export function ClipList({
           <span className="min-w-0 flex-1 truncate text-muted-foreground">
             {text}
           </span>
-          <Badge variant="muted">錄製中</Badge>
+          <Badge variant="muted">
+            {text === job.text
+              ? `錄製中 ${job.step}/${job.steps}`
+              : job.online
+                ? "排隊中"
+                : "等 furnace"}
+          </Badge>
         </li>
       ))}
     </ul>

@@ -198,7 +198,7 @@ export const listDoorVoiceClips = defineAction({
   admin: "door",
   title: "門口語音",
   description:
-    'The clips in CC\'s cloned voice that the door speaks greetings with, one per text ("晚安，", "詠翔，", "詠翔。"), and missing: the texts the door needs that have no clip yet (the voice job on furnace makes them every 10 minutes). Door admins only.',
+    'The clips in CC\'s cloned voice that the door speaks greetings with, one per text ("晚安，", "詠翔，", "詠翔。"), and missing: the texts the door needs that have no clip yet, in the order the voice job on furnace makes them. job is that job: online when it asked within the last minute, text the one it is making now, step of steps done. Door admins only.',
   kind: "query",
   input: z.object({}),
   run: async () => {
@@ -213,7 +213,7 @@ export const listDoorVoiceClips = defineAction({
         .orderBy(asc(doorVoiceClips.text)),
       missingVoiceTexts(),
     ])
-    return { clips: rows, missing }
+    return { clips: rows, missing, job: voiceJobStatus(missing) }
   },
 })
 
@@ -238,7 +238,7 @@ export const deleteDoorVoiceClip = defineAction({
   refreshesDoorPanel: true,
   title: "重錄門口語音",
   description:
-    "Deletes one voice clip, for example a badly pronounced name. The door speaks that text in the stock voice until the voice job makes it again, within about 10 minutes. Door admins only.",
+    "Deletes one voice clip, for example a badly pronounced name. The door speaks that text in the stock voice until the voice job makes it again, usually within a minute. Door admins only.",
   kind: "mutation",
   input: z.object({ id: z.uuid("找不到這段語音") }),
   run: async (actor, { id }) => {
@@ -338,15 +338,65 @@ export async function pruneVoiceClips() {
   return pruned.length
 }
 
-/** The texts the door needs and has no clip for, for the voice job. */
+/** The texts the door needs and has no clip for, in the order the voice job
+ * makes them: the rules' own parts first, since a new rule waits on those,
+ * then the names. */
 export async function missingVoiceTexts() {
-  const [needed, have] = await Promise.all([
+  const [needed, have, rules] = await Promise.all([
     voiceTexts(),
     db.select({ text: doorVoiceClips.text }).from(doorVoiceClips),
+    panelPhrases(),
   ])
   const done = new Set(have.map((row) => row.text))
-  return { needed: needed.length, missing: needed.filter((t) => !done.has(t)) }
+  const own = new Set(
+    rules.flatMap((rule) => voiceParts("", rule.before, rule.after))
+  )
+  const missing = needed.filter((t) => !done.has(t))
+  return {
+    needed: needed.length,
+    missing: [
+      ...missing.filter((t) => own.has(t)),
+      ...missing.filter((t) => !own.has(t)),
+    ],
+  }
 }
+
+// The voice job's progress, in this process's memory: it changes every few
+// seconds and means nothing after a restart, so it stays out of the
+// database. The job reports through /api/door/voice/progress and counts as
+// online while it keeps asking /api/door/voice.
+type VoiceJob = { text: string | null; step: number; steps: number }
+const JOB_ONLINE_MS = 60_000
+const voiceJob = ((
+  globalThis as { doorVoiceJob?: VoiceJob & { seenAt: number } }
+).doorVoiceJob ??= { text: null, step: 0, steps: 0, seenAt: 0 })
+
+/** The voice job asked what is missing. */
+export function voiceJobSeen() {
+  voiceJob.seenAt = Date.now()
+}
+
+/** The voice job is making text, step of steps done; text null when idle. */
+export function setVoiceJobProgress(progress: VoiceJob) {
+  Object.assign(voiceJob, progress, { seenAt: Date.now() })
+}
+
+/** What the voice job is doing, for the door admins' pages. A text that is
+ * no longer missing (stored, or its rule deleted) is not shown as in work. */
+export function voiceJobStatus(missing: string[]) {
+  const online = Date.now() - voiceJob.seenAt < JOB_ONLINE_MS
+  const text =
+    online && voiceJob.text && missing.includes(voiceJob.text)
+      ? voiceJob.text
+      : null
+  return {
+    online,
+    text,
+    step: text ? voiceJob.step : 0,
+    steps: text ? voiceJob.steps : 0,
+  }
+}
+export type VoiceJobStatus = ReturnType<typeof voiceJobStatus>
 
 /** Stores one clip the voice job made. POST only accepts a text that is
  * still missing, so a clip is replaced only after its row is deleted. */

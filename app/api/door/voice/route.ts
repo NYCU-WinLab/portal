@@ -1,23 +1,29 @@
 import { z } from "zod"
 
+import { announceChange } from "@/lib/actions/changes"
 import {
   missingVoiceTexts,
   pruneVoiceClips,
   storeVoiceClip,
+  voiceJobSeen,
 } from "@/lib/actions/door-phrases"
+import { reloadGreetings } from "@/lib/display"
 import { soundType } from "@/lib/door-greeting"
 
 import { panelJson, panelRefused } from "../panel-auth"
 
 // The voice job on furnace, with the panel's secret: GET drops the clips the
-// door no longer needs and lists the texts it needs and has no clip for;
-// POST {text, base64} stores one clip.
+// door no longer needs and lists the texts it needs and has no clip for (the
+// job asks every few seconds, which also marks it online); POST {text,
+// base64} stores one clip, refreshes the admins' pages and tells the door to
+// fetch it now.
 
 const CLIP_MAX_BYTES = 512 * 1024
 
 export async function GET(request: Request) {
   const refused = panelRefused(request)
   if (refused) return refused
+  voiceJobSeen()
   await pruneVoiceClips()
   return panelJson(await missingVoiceTexts())
 }
@@ -41,5 +47,7 @@ export async function POST(request: Request) {
   if (!type || audio.length > CLIP_MAX_BYTES)
     return Response.json({ error: "not audio" }, { status: 400 })
   await storeVoiceClip(parsed.data.text, audio, type)
+  await announceChange("store_door_voice_clip").catch(() => {})
+  void reloadGreetings()
   return panelJson({ ok: true })
 }
