@@ -103,6 +103,15 @@ const absent = (error: unknown) =>
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0]
 
+/** Takes the card lock or gives up at once: a reader call can hold it for
+ * half a minute, and waiting would hold a pool connection all that time. */
+async function cardLock(tx: Tx) {
+  const { rows } = await tx.execute<{ ok: boolean }>(
+    sql`select pg_try_advisory_xact_lock(hashtext('door_cards')) as ok`
+  )
+  if (!rows[0]?.ok) throw new Error("卡機正在處理別的操作，稍後再試")
+}
+
 /** Runs fn holding the card lock, then writes the attempt down. fn returns
  * the error to throw (after its row writes commit) or the detail to log.
  * When the database fails after the reader changed, says so. */
@@ -122,9 +131,7 @@ async function locked(
   let outcome: Awaited<ReturnType<typeof fn>>
   try {
     outcome = await db.transaction(async (tx) => {
-      await tx.execute(
-        sql`select pg_advisory_xact_lock(hashtext('door_cards'))`
-      )
+      await cardLock(tx)
       return fn(tx, () => (reader = true))
     })
   } catch (error) {
@@ -166,13 +173,13 @@ async function record(
 
 /** Who a card goes to: a member (named on the reader by their name unless
  * a name is given) or a guest, named by the admin. */
-async function holderOf(input: {
-  holderId?: string | null
-  holderName?: string
-}) {
+async function holderOf(
+  tx: Tx,
+  input: { holderId?: string | null; holderName?: string }
+) {
   let name = input.holderName?.trim()
   if (input.holderId) {
-    const [member] = await db
+    const [member] = await tx
       .select({ name: user.name })
       .from(user)
       .where(eq(user.id, input.holderId))
@@ -208,8 +215,8 @@ export const addDoorCard = defineAction({
       if (existing?.syncState === "synced")
         throw new Error("這張卡已經在名單上，要換人請用修改")
       if (existing?.syncState === "deleting")
-        throw new Error("這張卡還在刪除中，請先按「與卡機比對」")
-      const holder = await holderOf({
+        throw new Error("這張卡還沒確認刪掉，請再刪一次")
+      const holder = await holderOf(tx, {
         holderId:
           input.holderId === undefined ? existing?.holderId : input.holderId,
         holderName: input.holderName ?? existing?.holderName,
@@ -248,7 +255,7 @@ export const updateDoorCard = defineAction({
   admin: "door",
   title: "修改門禁卡",
   description:
-    "Changes who holds a card, its name on the reader or its note. Door admins only. Give the holder the same way as add_door_card: holderId for a member (their name unless holderName is given), holderName alone for a guest. Only a new name touches the reader; it renames by deleting and re-adding the card.",
+    "Changes who holds a card, its name on the reader or its note. Door admins only. Give the holder the same way as add_door_card: holderId for a member (their name unless holderName is given), holderId null and holderName for a guest; without holderId the card keeps its member. Only a new name touches the reader; it renames by deleting and re-adding the card.",
   kind: "mutation",
   input: z.object({ cardId, ...holderInput }),
   run: async (actor, input) =>
@@ -259,8 +266,12 @@ export const updateDoorCard = defineAction({
         .where(eq(doorCards.cardId, input.cardId))
       if (!card) throw new Error("名單上沒有這張卡")
       if (card.syncState === "deleting")
-        throw new Error("這張卡還在刪除中，請先按「與卡機比對」")
-      const holder = await holderOf(input)
+        throw new Error("這張卡還沒確認刪掉，請再刪一次")
+      // Without holderId the card keeps its member.
+      const holder = await holderOf(tx, {
+        holderId: input.holderId === undefined ? card.holderId : input.holderId,
+        holderName: input.holderName,
+      })
       const renamed = holder.holderName !== card.holderName
       const handedOver =
         holder.holderId !== card.holderId ||
@@ -347,9 +358,7 @@ export async function compareCards(userId: string | null) {
     }
     try {
       result = await db.transaction(async (tx) => {
-        await tx.execute(
-          sql`select pg_advisory_xact_lock(hashtext('door_cards'))`
-        )
+        await cardLock(tx)
         const reader = await readerCards()
         const rows = await tx
           .select({ cardId: doorCards.cardId, syncState: doorCards.syncState })
@@ -376,7 +385,9 @@ export async function compareCards(userId: string | null) {
               .update(doorCards)
               .set({ syncState: "missing" })
               .where(inArray(doorCards.cardId, ids(missing)))
-          if (deleted.length > 0)
+          // Only a full listing proves a card gone: the reader can claim
+          // more cards than it managed to list.
+          if (deleted.length > 0 && reader.cards.length === reader.count)
             await tx
               .delete(doorCards)
               .where(inArray(doorCards.cardId, ids(deleted)))
@@ -387,7 +398,9 @@ export async function compareCards(userId: string | null) {
           synced: synced.length,
           missing: ids(missing),
           deleting: ids(
-            suspect ? deleting : deleting.filter((r) => onReader.has(r.cardId))
+            suspect || reader.cards.length !== reader.count
+              ? deleting
+              : deleting.filter((r) => onReader.has(r.cardId))
           ),
           extra: extra.map((card) => ({
             cardId: card.card_id,
@@ -492,7 +505,7 @@ export const listDoorCards = defineAction({
   admin: "door",
   title: "門禁卡",
   description:
-    "The cards the door reader lets in, for door admins only: the 10-digit card number, the holder name stored on the reader, the member it belongs to (null for a guest card), a note, and whether it matched the reader at the last comparison (sync_state: synced, missing from the reader, or unknown after an unconfirmed write). strangers are cards swiped at the door in the last 14 days that are on no list, newest first: how a new card's number is found. lastCompare is the latest comparison with the reader.",
+    "The cards the door reader lets in, for door admins only: the 10-digit card number, the holder name stored on the reader, the member it belongs to (null for a guest card), a note, and whether it matched the reader at the last comparison (sync_state: synced, missing from the reader, unknown after an unconfirmed write, or deleting after an unconfirmed delete, which delete_door_card retries). strangers are cards swiped at the door in the last 14 days that are on no list, newest first: how a new card's number is found. lastCompare is the latest comparison with the reader.",
   kind: "query",
   input: z.object({}),
   run: async () => {
