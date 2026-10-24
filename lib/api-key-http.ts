@@ -5,6 +5,7 @@ import { ApiRefusal, checkApiKey } from "@/lib/actions/api-keys"
 import { type Action, errorMessage, runAction } from "@/lib/actions/define"
 import { actions, appOfAction } from "@/lib/actions/registry"
 import { apiApps } from "@/lib/api-apps"
+import { recordRefusal } from "@/lib/otel"
 
 // The HTTP API: the same actions as MCP and the pages, run with an API key
 // as its owner, in the apps the key names. Actions kept off MCP are kept
@@ -20,6 +21,26 @@ export const apiError = (
   headers: Record<string, string> = {}
 ) => Response.json({ error }, { status, headers: { ...noStore, ...headers } })
 
+/** apiError for a refused call, recorded as a span. */
+function refuse(
+  status: number,
+  error: string,
+  attributes: { action?: string; key?: string; retryAfter?: number } = {}
+) {
+  recordRefusal("api refused", {
+    "http.status": status,
+    "action.name": attributes.action,
+    "api_key.id": attributes.key,
+  })
+  return apiError(
+    status,
+    error,
+    attributes.retryAfter
+      ? { "retry-after": String(attributes.retryAfter) }
+      : {}
+  )
+}
+
 type KeyHolder = { userId: string; keyId: string; apps: Set<string> }
 
 /** The key in the Authorization header, or the response refusing it. */
@@ -29,9 +50,9 @@ export async function authenticate(
   const token = /^Bearer (\S{1,256})$/i.exec(
     request.headers.get("authorization") ?? ""
   )?.[1]
-  if (!token) return apiError(401, "missing bearer key")
+  if (!token) return refuse(401, "missing bearer key")
   const check = await checkApiKey(token)
-  if (!check.ok) return apiError(check.status, check.error)
+  if (!check.ok) return refuse(check.status, check.error)
   return { userId: check.userId, keyId: check.keyId, apps: new Set(check.apps) }
 }
 
@@ -52,18 +73,24 @@ export async function runWithKey(
   input: unknown
 ) {
   const action = actions.find((a) => a.name === name)
+  // The name comes from the URL: capped, so a span never carries a long one.
+  const who = { action: name.slice(0, 64), key: holder.keyId }
   if (!action || action.mcpExcludedBecause)
-    return apiError(404, `no action ${name}`)
+    return refuse(404, `no action ${name}`, who)
   const app = appOfAction.get(name)
   if (!reachable(action, holder.apps))
-    return apiError(
+    return refuse(
       403,
       app
         ? `this key is not allowed into ${app} (${apiApps[app]})`
-        : `${name} cannot be called with an API key`
+        : `${name} cannot be called with an API key`,
+      who
     )
+  // The gateway in front of the portal appends the address it saw, so the
+  // last entry is the one a client cannot set (issue 146).
   const ip =
-    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || undefined
+    request.headers.get("x-forwarded-for")?.split(",").at(-1)?.trim() ||
+    undefined
   try {
     const result = await runAction(
       action,
@@ -73,11 +100,10 @@ export async function runWithKey(
     return Response.json(result ?? null, { headers: noStore })
   } catch (error) {
     if (error instanceof ApiRefusal)
-      return apiError(
-        error.status,
-        error.message,
-        error.retryAfter ? { "retry-after": String(error.retryAfter) } : {}
-      )
+      return refuse(error.status, error.message, {
+        ...who,
+        retryAfter: error.retryAfter,
+      })
     return apiError(400, errorMessage(error))
   }
 }

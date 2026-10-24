@@ -19,8 +19,7 @@ import { apiKeys, user } from "@/lib/db/schema"
 const PREFIX = "wak_"
 const TOKEN = /^w(ak|dt)_[A-Za-z0-9_-]{43}$/
 const MAX_PER_MEMBER = 10
-// One door opening per key every 5 seconds, at most 30 in an hour-long
-// window.
+// One door opening per key every 5 seconds, at most 30 in any hour.
 const MIN_GAP_SECONDS = 5
 const PER_HOUR = 30
 
@@ -171,7 +170,7 @@ export async function checkApiKey(token: string): Promise<ApiKeyCheck> {
 /** A refusal the HTTP API answers with its own status (and Retry-After). */
 export class ApiRefusal extends Error {
   constructor(
-    readonly status: 403 | 429 | 503,
+    readonly status: 401 | 403 | 429 | 503,
     message: string,
     readonly retryAfter?: number
   ) {
@@ -192,12 +191,17 @@ export async function claimDoorOpening(keyId: string, userId: string) {
   if (!member) throw new ApiRefusal(403, "not a lab member")
 
   // One statement checks both limits and claims the slot, so calls that
-  // arrive together, or while the relay is slow, cannot share one.
+  // arrive together, or while the relay is slow, cannot share one. A call
+  // waiting on the row lock checks again against the row it then sees.
   const fresh = sql`(${apiKeys.windowStartedAt} is null or ${apiKeys.windowStartedAt} <= now() - interval '1 hour')`
+  const recent = sql`array(select t from unnest(${apiKeys.recentOpenings}) t where t >= now() - interval '1 hour')`
   const [claimed] = await db
     .update(apiKeys)
     .set({
       lastOpenedAt: sql`now()`,
+      recentOpenings: sql`array_append(${recent}, now())`,
+      // Still kept for the previous release, so a rollback finds the hour's
+      // count instead of an empty window.
       windowStartedAt: sql`case when ${fresh} then now() else ${apiKeys.windowStartedAt} end`,
       windowCount: sql`case when ${fresh} then 1 else ${apiKeys.windowCount} + 1 end`,
     })
@@ -212,19 +216,22 @@ export async function claimDoorOpening(keyId: string, userId: string) {
             sql`now() - make_interval(secs => ${MIN_GAP_SECONDS})`
           )
         ),
-        or(fresh, lt(apiKeys.windowCount, PER_HOUR))
+        sql`cardinality(${recent}) < ${PER_HOUR}`
       )
     )
     .returning({ id: apiKeys.id })
   if (claimed) return
   const [state] = await db
     .select({
-      full: sql<boolean>`not ${fresh} and ${apiKeys.windowCount} >= ${PER_HOUR}`,
-      resetIn: sql<number>`greatest(1, ceil(extract(epoch from ${apiKeys.windowStartedAt} + interval '1 hour' - now())))::int`,
+      revoked: sql<boolean>`${apiKeys.revokedAt} is not null`,
+      full: sql<boolean>`cardinality(${recent}) >= ${PER_HOUR}`,
+      // When the oldest opening of the hour leaves the window.
+      resetIn: sql<number>`greatest(1, ceil(extract(epoch from (select min(t) from unnest(${recent}) t) + interval '1 hour' - now())))::int`,
     })
     .from(apiKeys)
     .where(eq(apiKeys.id, keyId))
-  if (!state) throw new ApiRefusal(403, "key revoked")
+  if (!state || state.revoked)
+    throw new ApiRefusal(401, "invalid or revoked key")
   throw state.full
     ? new ApiRefusal(
         429,
