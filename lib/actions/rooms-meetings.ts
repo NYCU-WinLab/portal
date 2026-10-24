@@ -1,5 +1,5 @@
-// A booking's Teams meeting. The portal asks the GitLab pipeline to create
-// or cancel it and the pipeline answers minutes later on
+// A booking's Teams meeting. The portal asks the GitLab pipeline to create,
+// update or cancel it and the pipeline answers minutes later on
 // /api/rooms/meeting-callback; until then the invite's link
 // (/rooms/join/<booking>) says the meeting is on its way. Not actions:
 // the callback is the pipeline, not a member, and the rest runs inside
@@ -24,6 +24,8 @@ export const joinUrl = (bookingId: string) =>
   `${process.env.BETTER_AUTH_URL}/rooms/join/${bookingId}`
 
 type Booking = typeof roomBookings.$inferSelect
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0]
+type Ask = { booking: Booking; variables: Record<string, string> }
 
 /**
  * Asks the pipeline for a booking's Teams meeting, or to cancel it. The
@@ -33,17 +35,38 @@ type Booking = typeof roomBookings.$inferSelect
  */
 async function ask(
   booking: Booking,
-  kind: "create" | "cancel",
+  kind: "create" | "update" | "cancel",
   variables: Record<string, string>
+) {
+  return askIf(kind, async () => ({ booking, variables }))
+}
+
+/**
+ * ask, when decide (run in the transaction that records the request)
+ * still wants it; null from decide asks nothing.
+ */
+async function askIf(
+  kind: "create" | "update" | "cancel",
+  decide: (tx: Tx) => Promise<Ask | null>
 ) {
   const requestId = `room-booking-${randomBytes(6).toString("hex")}`
   const callbackToken = randomBytes(32).toString("hex")
-  await db.insert(roomMeetingRequests).values({
-    requestId,
-    bookingId: booking.id,
-    kind,
-    callbackTokenHash: sha256(callbackToken),
+  const asked = await db.transaction(async (tx) => {
+    const wanted = await decide(tx)
+    if (!wanted) return null
+    await tx.insert(roomMeetingRequests).values({
+      requestId,
+      bookingId: wanted.booking.id,
+      kind,
+      callbackTokenHash: sha256(callbackToken),
+      ...(kind === "cancel"
+        ? {}
+        : { subject: wanted.booking.title, agenda: wanted.booking.agenda }),
+    })
+    return wanted
   })
+  if (!asked) return null
+  const { booking, variables } = asked
   try {
     const pipelineId = await triggerMeetingPipeline({
       REQUEST_ID: requestId,
@@ -101,6 +124,76 @@ const cancelVariables = (
   START_TIME: taipeiOffsetIso(booking.date, booking.startTime),
   CANCELLATION_MESSAGE: "此會議已取消（教室預約已取消）",
 })
+
+/**
+ * Where the booking's Teams meeting stands against its current title:
+ * "busy" while a create or update is still out or no meeting exists yet,
+ * "current" when the last one asked for that title (a failed update is
+ * not asked again; the daily run mails it), else "stale" with the create
+ * request whose meeting to rename. Only the title counts: an update posts
+ * in the channel, and an agenda alone is not worth that.
+ */
+async function teamsTopicState(tx: Tx, booking: Booking) {
+  const asked = await tx
+    .select()
+    .from(roomMeetingRequests)
+    .where(
+      and(
+        eq(roomMeetingRequests.bookingId, booking.id),
+        inArray(roomMeetingRequests.kind, ["create", "update"])
+      )
+    )
+    .orderBy(desc(roomMeetingRequests.createdAt))
+  const meeting = asked.find(
+    (row) => row.kind === "create" && row.cancelId && row.messageId
+  )
+  if (!meeting || asked.some((row) => row.status === "pending"))
+    return { state: "busy" as const }
+  return asked[0]!.subject === booking.title
+    ? { state: "current" as const }
+    : {
+        state: "stale" as const,
+        meeting: {
+          requestId: meeting.requestId,
+          cancelId: meeting.cancelId!,
+          messageId: meeting.messageId!,
+        },
+      }
+}
+
+/**
+ * Renames a booking's Teams meeting to its current title and agenda,
+ * keeping the meeting and its link, when Teams shows another title. The
+ * booking row is locked while deciding, so two callers ask once. Returns
+ * why the ask failed, or null.
+ */
+export async function renameTeamsMeeting(bookingId: string) {
+  if (!meetingPipelineConfigured()) return null
+  return askIf("update", async (tx) => {
+    const [booking] = await tx
+      .select()
+      .from(roomBookings)
+      .where(eq(roomBookings.id, bookingId))
+      .for("update")
+    if (!booking || booking.status !== "booked" || !booking.online) return null
+    const topic = await teamsTopicState(tx, booking)
+    if (topic.state !== "stale") return null
+    const start = taipeiOffsetIso(booking.date, booking.startTime)
+    return {
+      booking,
+      variables: {
+        BOOKING_REQUEST_ID: topic.meeting.requestId,
+        // The same 04000000… GlobalObjectId a cancellation sends.
+        EVENT_ID: topic.meeting.cancelId,
+        MESSAGE_ID: topic.meeting.messageId,
+        START_TIME: start,
+        END_TIME: taipeiOffsetIso(booking.date, booking.endTime),
+        ORIGINAL_START_TIME: start,
+        ...(booking.agenda ? { AGENDA: booking.agenda } : {}),
+      },
+    }
+  })
+}
 
 /**
  * Takes down a cancelled booking's Teams meeting. Returns why it could not,
@@ -176,8 +269,8 @@ export type MeetingState = {
 
 // The pipeline's answer. A creation succeeded when a join_url came back,
 // whatever the status says: OPTIONS_FAILED means the meeting exists without
-// auto-recording, and asking again would make a second one. A cancellation
-// has only its status.
+// auto-recording, and asking again would make a second one. An update or a
+// cancellation has only its status; an update keeps the create's link.
 type Callback = {
   request_id?: unknown
   action?: unknown
@@ -216,7 +309,10 @@ export async function applyMeetingCallback(
     !timingSafeEqual(stored, presented)
   )
     return { status: 401, body: { error: "unauthorized" } }
-  const action = body.action === "cancel" ? "cancel" : "create"
+  const action =
+    body.action === "cancel" || body.action === "update"
+      ? body.action
+      : "create"
   if (action !== request.kind)
     return {
       status: 400,
@@ -239,9 +335,9 @@ export async function applyMeetingCallback(
       ? rawJoin
       : null
   const succeeded =
-    action === "cancel"
-      ? body.status === "success" && !errorCode
-      : join !== null
+    action === "create"
+      ? join !== null
+      : body.status === "success" && !errorCode
   const cancelId = text(body.meeting?.cancel_id)
   const messageId = text(body.meeting?.message_id)
   await db
@@ -377,7 +473,9 @@ export async function sweepMeetingRequests() {
           subject:
             row.kind === "cancel"
               ? `[WinLab 會議] Teams 會議沒有取消：${row.title}`
-              : `[WinLab 會議] 會議連結建立失敗：${row.title}`,
+              : row.kind === "update"
+                ? `[WinLab 會議] Teams 會議名稱沒有更新：${row.title}`
+                : `[WinLab 會議] 會議連結建立失敗：${row.title}`,
           ...mailBody({
             title: row.title,
             rows: [
@@ -390,7 +488,9 @@ export async function sweepMeetingRequests() {
             paragraphs: [
               row.kind === "cancel"
                 ? "預約已取消，但 Teams 會議還在，時間到仍會開始並錄影，請到 Teams 手動刪除。"
-                : "教室預約不受影響，但這場會議沒有 Teams 連結，需要的話請在 Teams 手動開。",
+                : row.kind === "update"
+                  ? "會議和連結都沒變，但 Teams 上還是舊的名稱，錄影也會用舊名稱存檔。"
+                  : "教室預約不受影響，但這場會議沒有 Teams 連結，需要的話請在 Teams 手動開。",
             ],
             action: row.pipelineUrl
               ? { label: "查看 Pipeline", url: row.pipelineUrl }

@@ -3,7 +3,8 @@
 // while the week has no title, and the week gets its Teams meeting through
 // the rooms pipeline as soon as the title is in. On Friday from 12:00
 // announce@winlab.tw gets the week, with the Teams meeting's calendar invite
-// (made then when the title never came).
+// (made then when the title never came). A later change of paper or
+// presenter renames that Teams meeting, keeping its link.
 import { and, asc, eq, inArray, sql } from "drizzle-orm"
 
 import { queueMail } from "@/lib/actions/mail"
@@ -18,7 +19,7 @@ import {
   placeBooking,
   type Booking,
 } from "@/lib/actions/rooms"
-import { joinUrl } from "@/lib/actions/rooms-meetings"
+import { joinUrl, renameTeamsMeeting } from "@/lib/actions/rooms-meetings"
 import { db } from "@/lib/db"
 import {
   admins,
@@ -401,6 +402,49 @@ async function announce(
   }
 }
 
+/**
+ * Keeps the week's Teams meeting named after what is presented: a new
+ * paper, presenter or questioners update the booking, and a new title also
+ * renames its Teams meeting and GitLab record through an update that keeps
+ * the link. A time or place change is not this: it releases the week.
+ */
+async function syncTeamsTopic(meeting: ScheduledMeeting) {
+  if (meeting.kind === "holiday") return
+  const held = await heldBooking(meeting.id)
+  if (!held) return
+  const topicOf = (m: ScheduledMeeting) => ({
+    title: composeTopic(LAB_GROUP, recordingTopic(m)),
+    agenda: recordAgenda(m),
+  })
+  const seen = topicOf(meeting)
+  if (held.title !== seen.title || held.agenda !== seen.agenda) {
+    const [renamed] = await db
+      .transaction(async (tx) => {
+        await lockCurrent(tx, meeting)
+        // Read again under the lock every schedule change takes: the
+        // snapshot may predate a change whose own sync already ran, and
+        // writing it would rename the meeting back.
+        const fresh = (
+          await readSchedule({ fromDate: addDays(meeting.date, -1) })
+        ).find((m) => m.id === meeting.id)
+        if (!fresh) throw new AlreadySent()
+        return tx
+          .update(roomBookings)
+          .set(topicOf(fresh))
+          .where(
+            and(eq(roomBookings.id, held.id), eq(roomBookings.status, "booked"))
+          )
+          .returning()
+      })
+      .catch((error) => {
+        if (error instanceof AlreadySent) return []
+        throw error
+      })
+    if (!renamed) return
+  }
+  await renameTeamsMeeting(held.id)
+}
+
 /** A Teams booking a schedule change let go, and whether the lab heard of it. */
 type Released = { booking: Booking; announced: boolean }
 
@@ -491,6 +535,7 @@ export async function runMeetingMail(now = new Date()) {
       meeting,
       schedule.find((m) => m.date === addDays(monday, 7))
     )
+  await syncTeamsTopic(meeting)
 }
 
 /** Checks every 10 minutes; called once per server process. */
