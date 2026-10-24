@@ -2,7 +2,11 @@
 
 import { revalidatePath } from "next/cache"
 
-import { removeMyAvatar, setMyAvatar } from "@/lib/actions/avatars"
+import {
+  loadMyGravatar,
+  removeMyAvatar,
+  setMyAvatar,
+} from "@/lib/actions/avatars"
 import { type Action, errorMessage, runAction } from "@/lib/actions/define"
 import { setDoorSpeakName, setDoorSuffix } from "@/lib/actions/door-greetings"
 import { setMySignature, setSignatureSettings } from "@/lib/actions/signature"
@@ -32,4 +36,5 @@ export const saveDoorSpeakName = async (speak: boolean) =>
 
 export const saveAvatar = async (base64: string) =>
   call(setMyAvatar, { base64 })
+export const loadGravatar = async () => call(loadMyGravatar, {})
 export const removeAvatar = async () => call(removeMyAvatar, {})

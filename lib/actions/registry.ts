@@ -154,6 +154,8 @@ import {
 } from "@/lib/actions/receipts"
 import {
   getMemberAvatar,
+  loadGravatars,
+  loadMyGravatar,
   removeMemberAvatar,
   removeMyAvatar,
   setMyAvatar,
@@ -311,6 +313,8 @@ export const actions: Action[] = [
   setMySignature,
   setSignatureSettings,
   setMyAvatar,
+  loadMyGravatar,
+  loadGravatars,
   removeMyAvatar,
   removeMemberAvatar,
   getMemberAvatar,
