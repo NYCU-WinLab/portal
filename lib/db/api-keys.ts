@@ -1,12 +1,5 @@
 import { sql } from "drizzle-orm"
-import {
-  index,
-  integer,
-  pgTable,
-  text,
-  timestamp,
-  uuid,
-} from "drizzle-orm/pg-core"
+import { index, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core"
 
 import { user } from "@/lib/db/auth-schema"
 
@@ -45,10 +38,6 @@ export const apiKeys = pgTable(
       .array()
       .notNull()
       .default(sql`'{}'::timestamptz[]`),
-    // The fixed window before recentOpenings; no longer read, still written
-    // so a rollback keeps the hour's count. Dropped with the table rename (issue 144).
-    windowStartedAt: timestamp({ withTimezone: true }),
-    windowCount: integer().default(0).notNull(),
     revokedAt: timestamp({ withTimezone: true }),
     revokedBy: uuid().references(() => user.id, { onDelete: "set null" }),
   },

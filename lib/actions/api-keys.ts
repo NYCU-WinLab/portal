@@ -193,17 +193,12 @@ export async function claimDoorOpening(keyId: string, userId: string) {
   // One statement checks both limits and claims the slot, so calls that
   // arrive together, or while the relay is slow, cannot share one. A call
   // waiting on the row lock checks again against the row it then sees.
-  const fresh = sql`(${apiKeys.windowStartedAt} is null or ${apiKeys.windowStartedAt} <= now() - interval '1 hour')`
   const recent = sql`array(select t from unnest(${apiKeys.recentOpenings}) t where t >= now() - interval '1 hour')`
   const [claimed] = await db
     .update(apiKeys)
     .set({
       lastOpenedAt: sql`now()`,
       recentOpenings: sql`array_append(${recent}, now())`,
-      // Still kept for the previous release, so a rollback finds the hour's
-      // count instead of an empty window.
-      windowStartedAt: sql`case when ${fresh} then now() else ${apiKeys.windowStartedAt} end`,
-      windowCount: sql`case when ${fresh} then 1 else ${apiKeys.windowCount} + 1 end`,
     })
     .where(
       and(
