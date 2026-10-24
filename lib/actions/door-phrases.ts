@@ -36,6 +36,8 @@ import {
 // speaks them with.
 
 const PART_MAX = 40
+// Each phrase is a clip the voice job makes for the member's name.
+const OWN_MAX = 20
 const part = z
   .string()
   .max(200)
@@ -131,6 +133,13 @@ async function save(
       .returning()
     if (!row) throw new Error("找不到這條問候語")
     return row
+  }
+  if (values.userId) {
+    const [{ count }] = await tx
+      .select({ count: sql<number>`count(*)::int` })
+      .from(doorPhrases)
+      .where(eq(doorPhrases.userId, values.userId))
+    if (count >= OWN_MAX) throw new Error(`每人最多 ${OWN_MAX} 句`)
   }
   const [row] = await tx.insert(doorPhrases).values(values).returning()
   return row
