@@ -201,8 +201,9 @@ const DENIED: Record<string, string> = {
   "003E": "密碼錯誤",
   "0043": "防反潛回限制",
 }
-// A swipe is greeted only when it just happened and arrives alone (or in
-// a pair); a bigger batch is the bridge catching up, not people at the door.
+// A swipe is greeted only when the bridge just read it and it arrives alone
+// (or in a pair); a bigger batch is the bridge catching up, not people at
+// the door. The bridge's clock decides: the reader's drifts by minutes.
 const GREET_WITHIN_MS = 2 * 60_000
 const GREET_MAX_BATCH = 2
 
@@ -258,7 +259,7 @@ export async function recordCardSwipes(
         .returning({
           name: doorEvents.name,
           ok: doorEvents.ok,
-          at: doorEvents.at,
+          receivedAt: doorEvents.receivedAt,
         })
       if (stored.length > 0) await announceChange("card_swipe").catch(() => {})
       if (stored.length <= GREET_MAX_BATCH)
@@ -266,7 +267,8 @@ export async function recordCardSwipes(
           if (
             event.ok &&
             event.name !== "卡片" &&
-            Math.abs(Date.now() - event.at.getTime()) < GREET_WITHIN_MS
+            event.receivedAt &&
+            Math.abs(Date.now() - event.receivedAt.getTime()) < GREET_WITHIN_MS
           )
             void greet(event.name)
       return events.map((event) => event.event_id)
