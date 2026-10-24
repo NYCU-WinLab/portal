@@ -14,12 +14,17 @@ import {
 } from "@/lib/actions/meetings-shared"
 import {
   bookingCalendar,
-  cancelBooking,
+  markCancelled,
   organizerOf,
   placeBooking,
   type Booking,
 } from "@/lib/actions/rooms"
-import { joinUrl, renameTeamsMeeting } from "@/lib/actions/rooms-meetings"
+import {
+  cancelTeamsMeeting,
+  joinUrl,
+  renameTeamsMeeting,
+  takedownPending,
+} from "@/lib/actions/rooms-meetings"
 import { db } from "@/lib/db"
 import {
   admins,
@@ -325,6 +330,8 @@ function labBooking(
 async function bookEarly(meeting: ScheduledMeeting) {
   if (meeting.kind === "holiday" || !meeting.title) return
   if (await heldBooking(meeting.id)) return
+  // The week's previous Teams meeting is still being taken down.
+  if (await takedownPending(meeting.id)) return
   const organizer = await organizerFor(meeting)
   if (!organizer) return
   try {
@@ -382,6 +389,9 @@ async function announce(
     await queueOnce(meeting, "announce", announcement(meeting, next, null))
     return
   }
+  // A replacement waits until the week's previous Teams meeting is gone,
+  // or two would start and record.
+  if (await takedownPending(meeting.id)) return
   // The announcement is the booking's invite, so it carries the event, and
   // the claim commits with both.
   try {
@@ -448,19 +458,19 @@ async function syncTeamsTopic(meeting: ScheduledMeeting) {
   await renameTeamsMeeting(held.id)
 }
 
-/** A Teams booking a schedule change let go, and whether the lab heard of it. */
-type Released = { booking: Booking; announced: boolean }
-
 /**
- * Inside a schedule change: the week's Teams booking, if any, and lets the
- * announcement go out again for the dates touched. The caller cancels the
- * booking with cancelLabMeeting once the change commits.
+ * Inside a schedule change: cancels the week's Teams booking, if any, in
+ * the change's own transaction (mailing the lab only when the announcement
+ * had invited it), and lets the announcement go out again for the dates
+ * touched. The caller takes the Teams meeting down with cancelLabMeeting
+ * once the change commits; if that never happens, the scheduler retries.
  */
 export async function releaseWeek(
   tx: Tx,
   meetingId: string,
-  dates: string[]
-): Promise<Released | null> {
+  dates: string[],
+  cancelledBy: string
+): Promise<Booking | null> {
   const held = await heldBooking(meetingId, tx)
   const sent = await tx
     .delete(meetingMailRuns)
@@ -473,21 +483,12 @@ export async function releaseWeek(
     .returning()
   // dates[0] is the week's own date before the change.
   const announced = sent.some((run) => run.date === dates[0])
-  return held ? { booking: held, announced } : null
+  return held ? markCancelled(tx, held, cancelledBy, announced) : null
 }
 
-/**
- * Takes down a released week's Teams meeting, mailing the lab the
- * cancellation only when the announcement had invited it.
- */
-export async function cancelLabMeeting(
-  released: Released | null,
-  actorId: string
-) {
-  if (released)
-    await cancelBooking(released.booking, actorId, {
-      notify: released.announced,
-    })
+/** Takes down a released week's Teams meeting. */
+export async function cancelLabMeeting(released: Booking | null) {
+  if (released) await cancelTeamsMeeting(released)
 }
 
 const minutesNow = (now: Date) => {

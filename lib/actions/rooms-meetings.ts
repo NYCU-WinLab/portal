@@ -100,17 +100,19 @@ async function askIf(
   }
 }
 
+const createVariables = (booking: Booking) => ({
+  START_TIME: taipeiOffsetIso(booking.date, booking.startTime),
+  END_TIME: taipeiOffsetIso(booking.date, booking.endTime),
+  ...(booking.agenda ? { AGENDA: booking.agenda } : {}),
+  ...(booking.deliverables.length
+    ? { DELIVERABLES: booking.deliverables.join(",") }
+    : {}),
+})
+
 /** Asks for the Teams meeting of a booking just made. */
 export async function requestTeamsMeeting(booking: Booking) {
   if (!booking.online || !meetingPipelineConfigured()) return
-  await ask(booking, "create", {
-    START_TIME: taipeiOffsetIso(booking.date, booking.startTime),
-    END_TIME: taipeiOffsetIso(booking.date, booking.endTime),
-    ...(booking.agenda ? { AGENDA: booking.agenda } : {}),
-    ...(booking.deliverables.length
-      ? { DELIVERABLES: booking.deliverables.join(",") }
-      : {}),
-  })
+  await ask(booking, "create", createVariables(booking))
 }
 
 const cancelVariables = (
@@ -195,38 +197,136 @@ export async function renameTeamsMeeting(bookingId: string) {
   })
 }
 
-/**
- * Takes down a cancelled booking's Teams meeting. Returns why it could not,
- * since a meeting left behind still starts and records; null when it was
- * handed over, never existed, or is still being made (its callback then
- * sees the booking cancelled and takes it down itself).
- */
-export async function cancelTeamsMeeting(booking: Booking) {
-  if (!booking.online || !meetingPipelineConfigured()) return null
-  const created = await db
+// A Teams meeting is taken down at most this many times before the
+// organizer is mailed to delete it by hand.
+const CANCEL_TRIES = 3
+
+/** The Teams meeting a booking's create request made, if Teams named it:
+ * a success, or a failure that still made one (a link that is not a
+ * Teams link). */
+async function madeMeeting(tx: Tx | typeof db, bookingId: string) {
+  const created = await tx
     .select()
     .from(roomMeetingRequests)
     .where(
       and(
-        eq(roomMeetingRequests.bookingId, booking.id),
+        eq(roomMeetingRequests.bookingId, bookingId),
         eq(roomMeetingRequests.kind, "create")
       )
     )
     .orderBy(desc(roomMeetingRequests.createdAt))
   const meeting = created.find((row) => row.cancelId && row.messageId)
-  if (!meeting)
-    return created.some((row) => row.status === "success")
-      ? "Teams 沒有回報會議識別碼"
-      : null
-  return ask(
-    booking,
-    "cancel",
-    cancelVariables(booking, {
-      requestId: meeting.requestId,
-      cancelId: meeting.cancelId!,
-      messageId: meeting.messageId!,
-    })
-  )
+  return {
+    meeting: meeting
+      ? {
+          requestId: meeting.requestId,
+          cancelId: meeting.cancelId!,
+          messageId: meeting.messageId!,
+        }
+      : null,
+    succeeded: created.some((row) => row.status === "success"),
+  }
+}
+
+/** A booking's cancel requests: one still out or done, and how many failed. */
+async function cancelsOf(tx: Tx | typeof db, bookingId: string) {
+  const rows = await tx
+    .select({ status: roomMeetingRequests.status })
+    .from(roomMeetingRequests)
+    .where(
+      and(
+        eq(roomMeetingRequests.bookingId, bookingId),
+        eq(roomMeetingRequests.kind, "cancel")
+      )
+    )
+  return {
+    settled: rows.some((row) => row.status !== "failed"),
+    failed: rows.filter((row) => row.status === "failed").length,
+  }
+}
+
+/**
+ * Takes down a cancelled booking's Teams meeting. Returns why it could not,
+ * since a meeting left behind still starts and records; null when it was
+ * handed over, never existed, is already being taken down, or is still
+ * being made (its callback then sees the booking cancelled and takes it
+ * down itself). The booking row is locked while deciding, so the callback
+ * and a cancel arriving together ask once.
+ */
+export async function cancelTeamsMeeting(booking: Booking) {
+  if (!booking.online || !meetingPipelineConfigured()) return null
+  let missing = false
+  const error = await askIf("cancel", async (tx) => {
+    const [row] = await tx
+      .select()
+      .from(roomBookings)
+      .where(eq(roomBookings.id, booking.id))
+      .for("update")
+    if (!row || row.status === "booked") return null
+    const made = await madeMeeting(tx, row.id)
+    if (!made.meeting) {
+      missing = made.succeeded
+      return null
+    }
+    const cancels = await cancelsOf(tx, row.id)
+    if (cancels.settled || cancels.failed >= CANCEL_TRIES) return null
+    return { booking: row, variables: cancelVariables(row, made.meeting) }
+  })
+  return error ?? (missing ? "Teams 沒有回報會議識別碼" : null)
+}
+
+/**
+ * Whether the week's lab meeting has a cancelled booking (from today on)
+ * whose Teams meeting may still be up: one still being made, or one made
+ * and not yet taken down with tries left. A new booking for that week
+ * waits, or two Teams meetings would start and record. Stops waiting once
+ * the take-down has failed CANCEL_TRIES times or the creation failed with
+ * no meeting to take down (the organizer was mailed either way).
+ */
+export async function takedownPending(meetingId: string) {
+  const today = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Taipei",
+  }).format(new Date())
+  const cancelled = await db
+    .select({ id: roomBookings.id })
+    .from(roomBookings)
+    .where(
+      and(
+        eq(roomBookings.meetingId, meetingId),
+        eq(roomBookings.status, "cancelled"),
+        eq(roomBookings.online, true),
+        sql`${roomBookings.date} >= ${today}`
+      )
+    )
+  for (const { id } of cancelled) {
+    const making = await db
+      .select({ id: roomMeetingRequests.id })
+      .from(roomMeetingRequests)
+      .where(
+        and(
+          eq(roomMeetingRequests.bookingId, id),
+          eq(roomMeetingRequests.kind, "create"),
+          eq(roomMeetingRequests.status, "pending")
+        )
+      )
+    if (making.length) return true
+    const made = await madeMeeting(db, id)
+    if (!made.meeting) continue
+    const rows = await db
+      .select({ status: roomMeetingRequests.status })
+      .from(roomMeetingRequests)
+      .where(
+        and(
+          eq(roomMeetingRequests.bookingId, id),
+          eq(roomMeetingRequests.kind, "cancel")
+        )
+      )
+    if (rows.some((row) => row.status === "success")) continue
+    if (rows.filter((row) => row.status === "failed").length >= CANCEL_TRIES)
+      continue
+    return true
+  }
+  return false
 }
 
 /** The latest create request of each booking, for showing its link. */
@@ -356,6 +456,10 @@ export async function applyMeetingCallback(
         : {
             ...pipeline,
             status: "failed",
+            // A creation that failed only for its link still made a meeting,
+            // which a cancellation must be able to take down.
+            cancelId,
+            messageId,
             errorCode:
               errorCode ??
               (rawJoin && !join ? "INVALID_JOIN_URL" : "UNEXPECTED_RESPONSE"),
@@ -364,23 +468,14 @@ export async function applyMeetingCallback(
     )
     .where(eq(roomMeetingRequests.id, request.id))
   // Cancelled while the meeting was being made: take it down now. A failed
-  // ask records a failed cancel request, which the daily run mails.
-  if (action === "create" && succeeded) {
+  // ask records a failed cancel request, which the scheduler retries.
+  if (action === "create" && (succeeded || (cancelId && messageId))) {
     const [booking] = await db
       .select()
       .from(roomBookings)
       .where(eq(roomBookings.id, request.bookingId))
     if (booking && booking.status !== "booked") {
-      if (cancelId && messageId)
-        await ask(
-          booking,
-          "cancel",
-          cancelVariables(booking, {
-            requestId: request.requestId,
-            cancelId,
-            messageId,
-          })
-        )
+      if (cancelId && messageId) await cancelTeamsMeeting(booking)
       else
         await db.insert(roomMeetingRequests).values({
           requestId: `room-booking-${randomBytes(6).toString("hex")}`,
@@ -416,6 +511,97 @@ export async function meetingForJoin(bookingId: string) {
 }
 
 const STUCK_MINUTES = 30
+// A booking older than this with no create request lost it to a restart
+// between its commit and the ask.
+const ORPHAN_MINUTES = 10
+
+/**
+ * Every scheduler tick: asks again for what a restart or a failed call
+ * left undone. A booking that never asked for its Teams meeting asks now,
+ * and a cancelled booking whose Teams meeting is still up asks to take it
+ * down again, up to CANCEL_TRIES times. Only meetings not over yet: a
+ * past one has already happened.
+ */
+export async function reconcileTeams() {
+  if (!meetingPipelineConfigured()) return
+  const today = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Taipei",
+  }).format(new Date())
+  const now = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Taipei",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(new Date())
+  // Not over yet: a later day, or today before its end.
+  const ahead = sql`(${roomBookings.date} > ${today} or (${roomBookings.date} = ${today} and ${roomBookings.endTime} > ${now}))`
+  const asked = sql`exists (select 1 from ${roomMeetingRequests} where ${roomMeetingRequests.bookingId} = ${roomBookings.id} and ${roomMeetingRequests.kind} = 'create')`
+  const orphans = await db
+    .select()
+    .from(roomBookings)
+    .where(
+      and(
+        eq(roomBookings.status, "booked"),
+        eq(roomBookings.online, true),
+        ahead,
+        lt(
+          roomBookings.createdAt,
+          sql`now() - make_interval(mins => ${ORPHAN_MINUTES})`
+        ),
+        sql`not ${asked}`
+      )
+    )
+  for (const booking of orphans)
+    await askIf("create", async (tx) => {
+      // Locked and checked again, so two runs of this ask once.
+      const [row] = await tx
+        .select()
+        .from(roomBookings)
+        .where(eq(roomBookings.id, booking.id))
+        .for("update")
+      if (!row || row.status !== "booked") return null
+      const [existing] = await tx
+        .select({ id: roomMeetingRequests.id })
+        .from(roomMeetingRequests)
+        .where(
+          and(
+            eq(roomMeetingRequests.bookingId, row.id),
+            eq(roomMeetingRequests.kind, "create")
+          )
+        )
+      return existing ? null : { booking: row, variables: createVariables(row) }
+    })
+  const cancelled = await db
+    .select()
+    .from(roomBookings)
+    .where(
+      and(
+        eq(roomBookings.status, "cancelled"),
+        eq(roomBookings.online, true),
+        ahead,
+        sql`exists (select 1 from ${roomMeetingRequests} where ${roomMeetingRequests.bookingId} = ${roomBookings.id} and ${roomMeetingRequests.kind} = 'create' and ${roomMeetingRequests.cancelId} is not null and ${roomMeetingRequests.messageId} is not null)`,
+        sql`not exists (select 1 from ${roomMeetingRequests} where ${roomMeetingRequests.bookingId} = ${roomBookings.id} and ${roomMeetingRequests.kind} = 'cancel' and ${roomMeetingRequests.status} <> 'failed')`
+      )
+    )
+  for (const booking of cancelled) {
+    const { failed } = await cancelsOf(db, booking.id)
+    if (failed >= CANCEL_TRIES) continue
+    // A retry is coming: its earlier failures need no mail of their own.
+    if (failed > 0)
+      await db
+        .update(roomMeetingRequests)
+        .set({ notifiedAt: sql`now()` })
+        .where(
+          and(
+            eq(roomMeetingRequests.bookingId, booking.id),
+            eq(roomMeetingRequests.kind, "cancel"),
+            eq(roomMeetingRequests.status, "failed"),
+            isNull(roomMeetingRequests.notifiedAt)
+          )
+        )
+    await cancelTeamsMeeting(booking)
+  }
+}
 
 /**
  * Part of the daily run: requests with no answer after 30 minutes are
@@ -440,9 +626,13 @@ export async function sweepMeetingRequests() {
         )
       )
     )
+  const today = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Taipei",
+  }).format(new Date())
   const failed = await db
     .select({
       id: roomMeetingRequests.id,
+      bookingId: roomMeetingRequests.bookingId,
       kind: roomMeetingRequests.kind,
       errorCode: roomMeetingRequests.errorCode,
       errorMessage: roomMeetingRequests.errorMessage,
@@ -464,7 +654,28 @@ export async function sweepMeetingRequests() {
       )
     )
   for (const row of failed) {
+    // reconcileTeams will try that take-down again: mail only the last.
+    // One with no meeting ids to send cannot be retried and is mailed now.
+    if (
+      row.kind === "cancel" &&
+      row.date >= today &&
+      (await madeMeeting(db, row.bookingId)).meeting &&
+      (await cancelsOf(db, row.bookingId)).failed < CANCEL_TRIES
+    )
+      continue
     await db.transaction(async (tx) => {
+      // Claimed first, so two sweeps at once mail it once.
+      const [claimed] = await tx
+        .update(roomMeetingRequests)
+        .set({ notifiedAt: sql`now()` })
+        .where(
+          and(
+            eq(roomMeetingRequests.id, row.id),
+            isNull(roomMeetingRequests.notifiedAt)
+          )
+        )
+        .returning({ id: roomMeetingRequests.id })
+      if (!claimed) return
       // A failed creation for a booking since cancelled leaves nothing to do.
       if (row.kind === "cancel" || row.bookingStatus === "booked") {
         const reason = `${MEETING_FAILURES[row.errorCode ?? ""] ?? row.errorCode}（${row.errorMessage ?? ""}）`
@@ -490,7 +701,9 @@ export async function sweepMeetingRequests() {
                 ? "預約已取消，但 Teams 會議還在，時間到仍會開始並錄影，請到 Teams 手動刪除。"
                 : row.kind === "update"
                   ? "會議和連結都沒變，但 Teams 上還是舊的名稱，錄影也會用舊名稱存檔。"
-                  : "教室預約不受影響，但這場會議沒有 Teams 連結，需要的話請在 Teams 手動開。",
+                  : row.errorCode === "INVALID_JOIN_URL"
+                    ? "Teams 會議已經建立，但邀請裡的連結打不開，請到 Teams 頻道找這場會議。取消預約時會一併取消它。"
+                    : "教室預約不受影響，但這場會議沒有 Teams 連結，需要的話請在 Teams 手動開。",
             ],
             action: row.pipelineUrl
               ? { label: "查看 Pipeline", url: row.pipelineUrl }
@@ -498,10 +711,6 @@ export async function sweepMeetingRequests() {
           }),
         })
       }
-      await tx
-        .update(roomMeetingRequests)
-        .set({ notifiedAt: sql`now()` })
-        .where(eq(roomMeetingRequests.id, row.id))
     })
   }
 }
