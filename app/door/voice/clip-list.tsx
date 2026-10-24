@@ -11,6 +11,7 @@ import { report } from "@/lib/report"
 
 import { PlayButton } from "../sounds/play-button"
 import { rerecord } from "./actions"
+import { VoiceProgress } from "./voice-progress"
 
 type Clip = { id: string; text: string }
 
@@ -58,13 +59,13 @@ export function ClipList({
           <span className="min-w-0 flex-1 truncate text-muted-foreground">
             {text}
           </span>
-          <Badge variant="muted">
-            {text === job.text
-              ? `錄製中 ${job.step}/${job.steps}`
-              : job.online
-                ? "排隊中"
-                : "等 furnace"}
-          </Badge>
+          {text === job.text ? (
+            <VoiceProgress step={job.step} steps={job.steps} />
+          ) : (
+            <Badge variant="muted">
+              {job.online ? "排隊中" : "等 furnace"}
+            </Badge>
+          )}
         </li>
       ))}
     </ul>
