@@ -197,8 +197,10 @@ export const doorPlaylistItems = pgTable(
 // name + after ("晚安，" 詠翔 "。這麼晚來，很認真喔。"). Times are minutes
 // after midnight in Asia/Taipei; ends_at at or before starts_at runs past
 // midnight into the next day. days is a bitmask of the weekday the range
-// starts on, Monday 1 to Sunday 64. Door admins keep the schedule; when no
-// enabled rule matches, the door says "Hi <name>". first_visit phrases are
+// starts on, Monday 1 to Sunday 64. Each member keeps their own phrases and
+// door admins keep the defaults (user_id null): the door says one of the
+// member's own phrases in force, else one of the defaults in force, else
+// "Hi <name>". first_visit phrases are
 // said only on a member's first opening of the day (from 06:00), and win
 // over the others in force then.
 export const doorPhrases = pgTable(
@@ -212,6 +214,9 @@ export const doorPhrases = pgTable(
     days: smallint().default(127).notNull(),
     enabled: boolean().default(true).notNull(),
     firstVisit: boolean().default(false).notNull(),
+    // The member whose own phrase this is; null for the lab's defaults,
+    // which the door says to a member none of their own phrases covers.
+    userId: uuid().references(() => user.id, { onDelete: "cascade" }),
     createdBy: uuid().references(() => user.id, { onDelete: "set null" }),
     updatedBy: uuid().references(() => user.id, { onDelete: "set null" }),
     createdAt: timestamp({ withTimezone: true }).defaultNow().notNull(),
@@ -227,6 +232,7 @@ export const doorPhrases = pgTable(
       sql`${table.startsAt} between 0 and 1439 and ${table.endsAt} between 0 and 1439 and ${table.startsAt} <> ${table.endsAt}`
     ),
     check("door_phrases_days", sql`${table.days} between 1 and 127`),
+    index("door_phrases_user_id_idx").on(table.userId),
   ]
 )
 

@@ -1,7 +1,17 @@
-import { asc, eq, notInArray, sql } from "drizzle-orm"
+import {
+  and,
+  asc,
+  eq,
+  isNull,
+  notInArray,
+  or,
+  type SQL,
+  sql,
+} from "drizzle-orm"
 import { z } from "zod"
 
-import { defineAction } from "@/lib/actions/define"
+import { isAdmin, requireAdmin } from "@/lib/actions/authz"
+import { type Actor, defineAction } from "@/lib/actions/define"
 import { db } from "@/lib/db"
 import {
   doorCards,
@@ -21,8 +31,9 @@ import {
   weekRanges,
 } from "@/lib/door-greeting"
 
-// The door's spoken greeting by the time of day, kept by door admins, and
-// the voice clips it is spoken with.
+// The door's spoken greeting by the time of day: each member's own phrases,
+// the lab's defaults that door admins keep, and the voice clips the door
+// speaks them with.
 
 const PART_MAX = 40
 const part = z
@@ -35,6 +46,12 @@ const part = z
 const time = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "時間要像 22:00")
 const minutes = (value: string) =>
   Number(value.slice(0, 2)) * 60 + Number(value.slice(3))
+const lab = z
+  .boolean()
+  .default(false)
+  .describe(
+    "true for one of the lab's default phrases (door admins only), false for your own."
+  )
 const fields = z.object({
   before: part.describe('Said before the name, e.g. "晚安，"; may be empty.'),
   after: part.describe(
@@ -57,6 +74,7 @@ const fields = z.object({
     .describe(
       "Say it only on the member's first opening of the day (the day starts at 06:00 Asia/Taipei); first-visit phrases in force win over the others then."
     ),
+  default: lab,
 })
 
 const mask = (days: number[]) =>
@@ -74,8 +92,24 @@ const shape = (row: Row) => ({
   days: dayList(row.days),
   enabled: row.enabled,
   first_visit: row.firstVisit,
+  default: row.userId === null,
 })
 export type DoorPhrase = ReturnType<typeof shape>
+
+const inForce = (rows: Row[], minute: number) =>
+  rows.filter(
+    (row) =>
+      row.enabled &&
+      weekRanges(row).some(([start, end]) => start <= minute && minute < end)
+  )
+
+/** The rows an actor may change: their own, or the defaults for a door
+ * admin. */
+async function scope(actor: Actor, isDefault: boolean) {
+  if (!isDefault) return eq(doorPhrases.userId, actor.userId)
+  await requireAdmin(actor, "door")
+  return isNull(doorPhrases.userId)
+}
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0]
 
@@ -84,16 +118,16 @@ type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0]
 async function save(
   tx: Tx,
   values: Omit<typeof doorPhrases.$inferInsert, "id">,
-  id?: string
+  where?: { id: string; scope: SQL }
 ) {
   if (!values.before && !values.after) throw new Error("名字前後至少填一個")
   if (values.startsAt === values.endsAt)
     throw new Error("開始和結束不能是同一個時間")
-  if (id) {
+  if (where) {
     const [row] = await tx
       .update(doorPhrases)
       .set({ ...values, updatedAt: sql`now()` })
-      .where(eq(doorPhrases.id, id))
+      .where(and(eq(doorPhrases.id, where.id), where.scope))
       .returning()
     if (!row) throw new Error("找不到這條問候語")
     return row
@@ -115,43 +149,54 @@ const values = (input: z.infer<typeof fields>, userId: string) => ({
 
 export const listDoorPhrases = defineAction({
   name: "list_door_phrases",
-  admin: "door",
   title: "門口問候語",
   description:
-    'The door\'s pool of spoken greetings (door admins only): each phrase says before + member name + after (e.g. "晚安，" name "這麼晚來，很認真喔。") from starts_at to ends_at (HH:MM, Asia/Taipei, past midnight when ends_at <= starts_at) on the listed weekdays (1 Monday to 7 Sunday, the day the range starts). Phrases may share a time; at each opening the door picks one of the enabled phrases in force at random, and says "Hi <name>" when none is. first_visit phrases are said only on a member\'s first opening of the day (from 06:00) and win over the others then. now lists the ids of the phrases in force right now.',
+    'What the door says when you open it, by the time of day: mine is your own phrases, defaults the lab\'s (door admins keep them). Each phrase says before + your name + after (e.g. "晚安，" name "這麼晚來，很認真喔。") from starts_at to ends_at (HH:MM, Asia/Taipei, past midnight when ends_at <= starts_at) on the listed weekdays (1 Monday to 7 Sunday, the day the range starts). At each opening the door picks at random one of your enabled phrases in force, else one of the enabled defaults in force, else says "Hi <name>". first_visit phrases are said only on a member\'s first opening of the day (from 06:00) and win over the others then. now lists the ids the door picks from for you right now; can_edit_defaults tells whether you may change the defaults.',
   kind: "query",
   input: z.object({}),
-  run: async () => {
-    const rows = await db
-      .select()
-      .from(doorPhrases)
-      .orderBy(asc(doorPhrases.startsAt), asc(doorPhrases.createdAt))
+  run: async (actor) => {
+    const [rows, admin] = await Promise.all([
+      db
+        .select()
+        .from(doorPhrases)
+        .where(
+          or(eq(doorPhrases.userId, actor.userId), isNull(doorPhrases.userId))
+        )
+        .orderBy(asc(doorPhrases.startsAt), asc(doorPhrases.createdAt)),
+      isAdmin(actor, "door"),
+    ])
+    const mine = rows.filter((row) => row.userId !== null)
+    const defaults = rows.filter((row) => row.userId === null)
     const minute = taipeiWeekMinute(new Date())
-    const now = rows
-      .filter(
-        (row) =>
-          row.enabled &&
-          weekRanges(row).some(
-            ([start, end]) => start <= minute && minute < end
-          )
-      )
-      .map((row) => row.id)
-    return { phrases: rows.map(shape), now }
+    const own = inForce(mine, minute)
+    const now = (own.length ? own : inForce(defaults, minute)).map(
+      (row) => row.id
+    )
+    return {
+      mine: mine.map(shape),
+      defaults: defaults.map(shape),
+      now,
+      can_edit_defaults: admin,
+    }
   },
 })
 
 export const createDoorPhrase = defineAction({
   name: "create_door_phrase",
-  admin: "door",
   refreshesDoorPanel: true,
   title: "新增門口問候語",
   description:
-    "Adds a phrase to the door's spoken greeting pool (door admins). The door speaks it in CC's cloned voice once the voice job has made its clips, and in the stock voice until then.",
+    "Adds one of your own phrases to what the door says when you open it, or with default true one of the lab's defaults (door admins). The door speaks it in CC's cloned voice once the voice job has made its clips, and in the stock voice until then.",
   kind: "mutation",
   input: fields,
   run: async (actor, input) => {
+    await scope(actor, input.default)
     const row = await db.transaction((tx) =>
-      save(tx, { ...values(input, actor.userId), createdBy: actor.userId })
+      save(tx, {
+        ...values(input, actor.userId),
+        userId: input.default ? null : actor.userId,
+        createdBy: actor.userId,
+      })
     )
     return shape(row)
   },
@@ -159,16 +204,16 @@ export const createDoorPhrase = defineAction({
 
 export const updateDoorPhrase = defineAction({
   name: "update_door_phrase",
-  admin: "door",
   refreshesDoorPanel: true,
   title: "修改門口問候語",
   description:
-    "Replaces one phrase of the door's spoken greeting pool (door admins); send every field back as list_door_phrases returns it, since a field left out goes back to its default. Set enabled false to pause it without deleting it.",
+    "Replaces one of your own phrases, or with default true one of the lab's defaults (door admins); send every field back as list_door_phrases returns it, since a field left out goes back to its default. Set enabled false to pause it without deleting it.",
   kind: "mutation",
   input: fields.extend({ id: z.uuid("找不到這條問候語") }),
   run: async (actor, { id, ...input }) => {
+    const where = { id, scope: await scope(actor, input.default) }
     const row = await db.transaction((tx) =>
-      save(tx, values(input, actor.userId), id)
+      save(tx, values(input, actor.userId), where)
     )
     return shape(row)
   },
@@ -176,17 +221,16 @@ export const updateDoorPhrase = defineAction({
 
 export const deleteDoorPhrase = defineAction({
   name: "delete_door_phrase",
-  admin: "door",
   refreshesDoorPanel: true,
   title: "刪除門口問候語",
   description:
-    "Deletes one phrase of the door's spoken greeting pool (door admins).",
+    "Deletes one of your own phrases, or with default true one of the lab's defaults (door admins).",
   kind: "mutation",
-  input: z.object({ id: z.uuid("找不到這條問候語") }),
-  run: async (actor, { id }) => {
+  input: z.object({ id: z.uuid("找不到這條問候語"), default: lab }),
+  run: async (actor, { id, default: isDefault }) => {
     const [row] = await db
       .delete(doorPhrases)
-      .where(eq(doorPhrases.id, id))
+      .where(and(eq(doorPhrases.id, id), await scope(actor, isDefault)))
       .returning({ id: doorPhrases.id })
     if (!row) throw new Error("找不到這條問候語")
     return { id }
@@ -254,34 +298,55 @@ export const deleteDoorVoiceClip = defineAction({
 // What the door and the voice job read (not actions: both are machines with
 // the panel's secret, /api/door/greetings and /api/door/voice).
 
-/** The enabled rules, as the door evaluates them at open time. */
+export type PanelRule = {
+  before: string
+  after: string
+  start: number
+  end: number
+  days: number
+  first: boolean
+}
+
+/** The enabled rules, as the door evaluates them at open time: the lab's
+ * defaults, and each member's own by the member's id. */
 export async function panelPhrases() {
   const rows = await db
     .select()
     .from(doorPhrases)
     .where(eq(doorPhrases.enabled, true))
     .orderBy(asc(doorPhrases.startsAt))
-  return rows.map((row) => ({
-    before: row.before,
-    after: row.after,
-    start: row.startsAt,
-    end: row.endsAt,
-    days: row.days,
-    first: row.firstVisit,
-  }))
+  const defaults: PanelRule[] = []
+  const members = new Map<string, PanelRule[]>()
+  for (const row of rows) {
+    const rule = {
+      before: row.before,
+      after: row.after,
+      start: row.startsAt,
+      end: row.endsAt,
+      days: row.days,
+      first: row.firstVisit,
+    }
+    if (row.userId === null) defaults.push(rule)
+    else members.set(row.userId, [...(members.get(row.userId) ?? []), rule])
+  }
+  return { defaults, members }
 }
 
-/** Every text the door may speak as one clip: the rules' parts, the default
- * "Hi，", and each name it greets, ending in "。" and, when some rule says
- * more after the name, in "，". paused also counts paused rules and members
- * who turned the spoken Hi off, whose clips are kept for when they return. */
+/** Every text the door may speak as one clip: each name with the default
+ * "Hi，", the defaults' parts and the member's own phrases' parts, the name
+ * ending in "。" and, when some rule says more after it, in "，". paused
+ * also counts paused rules and members who turned the spoken Hi off, whose
+ * clips are kept for when they return. */
 export async function voiceTexts({ paused = false } = {}) {
   const [phrases, members, cards, greetings] = await Promise.all([
-    paused
-      ? db
-          .select({ before: doorPhrases.before, after: doorPhrases.after })
-          .from(doorPhrases)
-      : panelPhrases(),
+    db
+      .select({
+        before: doorPhrases.before,
+        after: doorPhrases.after,
+        userId: doorPhrases.userId,
+      })
+      .from(doorPhrases)
+      .where(paused ? undefined : eq(doorPhrases.enabled, true)),
     db.select({ id: user.id, name: user.name }).from(user),
     db
       .select({ holderId: doorCards.holderId, name: doorCards.holderName })
@@ -295,20 +360,22 @@ export async function voiceTexts({ paused = false } = {}) {
       .from(doorGreetings),
   ])
   const byUser = new Map(greetings.map((row) => [row.userId, row]))
+  const defaults = [
+    { before: DEFAULT_BEFORE, after: "" },
+    ...phrases.filter((rule) => rule.userId === null),
+  ]
   const texts = new Set<string>()
-  const rules = [{ before: DEFAULT_BEFORE, after: "" }, ...phrases]
-  const names = new Set<string>()
   const add = (label: string, userId: string | null) => {
     const greeting = userId ? byUser.get(userId) : undefined
     if (!label || (!paused && greeting?.speakName === false)) return
-    names.add(spokenName(label, greeting?.suffix ?? null))
+    const name = spokenName(label, greeting?.suffix ?? null)
+    const own = userId ? phrases.filter((rule) => rule.userId === userId) : []
+    for (const rule of [...defaults, ...own])
+      for (const text of voiceParts(name, rule.before, rule.after))
+        texts.add(text)
   }
   for (const member of members) add(panelName(member.name), member.id)
   for (const card of cards) add(panelName(card.name), card.holderId)
-  for (const name of names)
-    for (const rule of rules)
-      for (const text of voiceParts(name, rule.before, rule.after))
-        texts.add(text)
   return [...texts].sort()
 }
 
@@ -349,7 +416,9 @@ export async function missingVoiceTexts() {
   ])
   const done = new Set(have.map((row) => row.text))
   const own = new Set(
-    rules.flatMap((rule) => voiceParts("", rule.before, rule.after))
+    [rules.defaults, ...rules.members.values()]
+      .flat()
+      .flatMap((rule) => voiceParts("", rule.before, rule.after))
   )
   const missing = needed.filter((t) => !done.has(t))
   return {
