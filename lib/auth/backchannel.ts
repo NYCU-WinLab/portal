@@ -6,8 +6,8 @@ import { account, session } from "@/lib/db/schema"
 
 // OIDC back-channel logout: when a Keycloak session ends (the member signs
 // out of Keycloak or another app on it, or an admin ends their sessions),
-// Keycloak posts a signed logout token here and the portal ends the
-// member's web sessions at once. MCP and API keys are not sessions: they
+// Keycloak posts a signed logout token here and the portal ends all of the
+// member's web sessions from before it, on every device. MCP and API keys are not sessions: they
 // stop only when the member leaves the lab (lib/auth/member.ts).
 
 const EVENT = "http://schemas.openid.net/event/backchannel-logout"
@@ -21,13 +21,16 @@ export class BadLogoutToken extends Error {}
  * how many ended. */
 export async function backchannelLogout(token: string) {
   const issuer = process.env.KEYCLOAK_ISSUER
-  if (!issuer) throw new Error("KEYCLOAK_ISSUER is not set")
+  const audience = process.env.KEYCLOAK_CLIENT_ID
+  // Without an audience jose would skip that check.
+  if (!issuer || !audience)
+    throw new Error("KEYCLOAK_ISSUER and KEYCLOAK_CLIENT_ID must be set")
   keys ??= createRemoteJWKSet(
     new URL(`${issuer}/protocol/openid-connect/certs`)
   )
   const { payload } = await jwtVerify(token, keys, {
     issuer,
-    audience: process.env.KEYCLOAK_CLIENT_ID,
+    audience,
     maxTokenAge: "5m",
   }).catch((error: unknown) => {
     throw new BadLogoutToken(

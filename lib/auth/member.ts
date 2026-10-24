@@ -89,7 +89,15 @@ export async function sweepMembers() {
 
 /** Starts the sweep; called once per server process. */
 export function startMemberSweep() {
-  const run = () => void sweepMembers().catch(() => {})
+  // A slow Keycloak can make one run outlast the interval: skip, never stack.
+  let running = false
+  const run = () => {
+    if (running) return
+    running = true
+    void sweepMembers()
+      .catch(() => {})
+      .finally(() => (running = false))
+  }
   setInterval(run, CHECK_EVERY_MS).unref()
   run()
 }
