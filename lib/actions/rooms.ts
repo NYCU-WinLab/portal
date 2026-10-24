@@ -16,7 +16,7 @@ import {
 import type { Mail } from "@/lib/mail"
 import { mailBody } from "@/lib/mail-body"
 import { db } from "@/lib/db"
-import { roomBookings, user } from "@/lib/db/schema"
+import { bookingLeases, roomBookings, user } from "@/lib/db/schema"
 import {
   epicIssues,
   epicsConfigured,
@@ -29,7 +29,7 @@ import {
   labAccount,
   listBusy,
   listRooms,
-  findLabReservation,
+  findLabReservations,
   release,
   reserve,
   Unanswered,
@@ -431,9 +431,10 @@ export type NewBooking = {
 
 /**
  * Reserves a room. When the system gives no clear answer, looks for the
- * lab's reservation of exactly that room and span and releases it unless a
- * portal booking holds it (another member's, booked a moment earlier), so
- * nothing stays held that nobody can cancel.
+ * lab's reservations of exactly that room and span and releases those no
+ * portal booking holds. The caller holds the room's lease, so no other
+ * portal booking of that room is half done, and an unclaimed one can only
+ * be this attempt's.
  */
 async function reserveOrClean(reservation: {
   room: string
@@ -447,24 +448,29 @@ async function reserveOrClean(reservation: {
   }
   // A slow system may still be writing it down.
   await new Promise((resolve) => setTimeout(resolve, 3000))
-  const found = await findLabReservation(reservation).catch(() => undefined)
-  if (found === undefined)
+  const found = await findLabReservations(reservation).catch(() => null)
+  if (found === null)
     throw new Error(
       "系上借用系統沒有回應，也查不到有沒有借到，請到系上借用系統確認"
     )
-  if (found) {
-    const [ours] = await db
-      .select({ id: roomBookings.id })
-      .from(roomBookings)
-      .where(
-        and(
-          eq(roomBookings.externalId, found),
-          eq(roomBookings.status, "booked")
+  const claimed = found.length
+    ? await db
+        .select({ id: roomBookings.externalId })
+        .from(roomBookings)
+        .where(
+          and(
+            inArray(roomBookings.externalId, found),
+            eq(roomBookings.status, "booked")
+          )
         )
-      )
-    if (!ours) await release(found, reservation)
-  }
-  throw new Error("系上借用系統沒有回應，這次沒有借到教室，請再試一次")
+    : []
+  const unclaimed = found.filter((id) => !claimed.some((row) => row.id === id))
+  for (const id of unclaimed) await release(id, reservation)
+  throw new Error(
+    unclaimed.length
+      ? "系上借用系統沒有回應，這次沒有借到教室，請再試一次"
+      : "系上借用系統沒有回應，也沒找到借到的紀錄；它可能晚一點才記下，請先到系上借用系統確認再重試"
+  )
 }
 
 /**
@@ -475,79 +481,101 @@ async function reserveOrClean(reservation: {
 export async function placeBooking(input: NewBooking) {
   const start = taipeiIso(input.date, input.startTime)
   const end = taipeiIso(input.date, input.endTime)
-  const externalId = input.room
-    ? await reserveOrClean({ room: input.room, start, end })
-    : null
-  let booking: Booking
-  try {
-    booking = await db.transaction(async (tx) => {
-      await input.inTransaction?.(tx)
-      const [created] = await tx
-        .insert(roomBookings)
-        .values({
-          externalId,
-          room: input.room,
-          date: input.date,
-          startTime: input.startTime,
-          endTime: input.endTime,
-          title: input.title,
-          attendees: input.attendees,
-          online: input.online,
-          meetingPrefix: input.meetingPrefix,
-          groupName: input.groupName,
-          agenda: input.agenda,
-          issueRefs: input.issueRefs,
-          deliverables: input.deliverables,
-          seriesId: input.seriesId,
-          meetingId: input.meetingId,
-          place: input.place,
-          requestedBy: input.organizer.id,
-        })
-        .returning()
-      const invite = input.invite
-        ? input.invite(created)
-        : inviteMail(created, input.organizer, "REQUEST")
-      if (invite) await queueMail(tx, invite)
-      return created
-    })
-  } catch (error) {
-    if (externalId && input.room)
-      await release(externalId, { room: input.room, start, end }).catch(
-        () => {}
-      )
-    throw error
+  // The room's lease covers the reserve and the insert, so a clean-up after
+  // an unanswered reserve never meets another booking of it half done.
+  const record = async (externalId: string | null) => {
+    try {
+      return await db.transaction(async (tx) => {
+        await input.inTransaction?.(tx)
+        const [created] = await tx
+          .insert(roomBookings)
+          .values({
+            externalId,
+            room: input.room,
+            date: input.date,
+            startTime: input.startTime,
+            endTime: input.endTime,
+            title: input.title,
+            attendees: input.attendees,
+            online: input.online,
+            meetingPrefix: input.meetingPrefix,
+            groupName: input.groupName,
+            agenda: input.agenda,
+            issueRefs: input.issueRefs,
+            deliverables: input.deliverables,
+            seriesId: input.seriesId,
+            meetingId: input.meetingId,
+            place: input.place,
+            requestedBy: input.organizer.id,
+          })
+          .returning()
+        const invite = input.invite
+          ? input.invite(created)
+          : inviteMail(created, input.organizer, "REQUEST")
+        if (invite) await queueMail(tx, invite)
+        return created
+      })
+    } catch (error) {
+      if (externalId && input.room)
+        await release(externalId, { room: input.room, start, end }).catch(
+          () => {}
+        )
+      throw error
+    }
   }
+  const room = input.room
+  const booking = room
+    ? await withLease(`room ${room} ${input.date}`, async () =>
+        record(await reserveOrClean({ room, start, end }))
+      )
+    : await record(null)
   await requestTeamsMeeting(booking)
   return booking
 }
 
-const BUSY = Symbol("busy")
+/**
+ * Runs fn holding the lease named key: taken by inserting a row (or
+ * taking over one that ran out), so a caller that waits holds no
+ * connection. Waits up to a minute; the lease runs out after 3 minutes if
+ * its holder dies, longer than any reserve takes.
+ */
+export async function withLease<T>(key: string, fn: () => Promise<T>) {
+  const token = crypto.randomUUID()
+  for (let attempt = 0; ; attempt++) {
+    const taken = await db
+      .insert(bookingLeases)
+      .values({ key, token, expiresAt: sql`now() + interval '3 minutes'` })
+      .onConflictDoUpdate({
+        target: bookingLeases.key,
+        set: { token, expiresAt: sql`now() + interval '3 minutes'` },
+        setWhere: sql`${bookingLeases.expiresAt} < now()`,
+      })
+      .returning({ key: bookingLeases.key })
+    if (taken.length) break
+    if (attempt >= 120)
+      throw new Error("同一時段的另一筆預約還在處理，稍後再試")
+    await new Promise((resolve) => setTimeout(resolve, 500))
+  }
+  try {
+    return await fn()
+  } finally {
+    await db
+      .delete(bookingLeases)
+      .where(and(eq(bookingLeases.key, key), eq(bookingLeases.token, token)))
+      .catch(() => {})
+  }
+}
 
 /**
- * Runs fn holding a lock on one member's bookings for one day, so a hand
+ * Runs fn holding a lease on one member's bookings for one day, so a hand
  * booking and the standing meeting catch-up cannot both book the same slot
- * for them. Held through the reserve and the insert. A caller that finds
- * it taken waits without a connection and tries again, for up to a
- * minute, so waiters cannot fill the pool.
+ * for them.
  */
-export async function withBookingLock<T>(
+export const withBookingLock = <T>(
   userId: string,
   date: string,
   fn: () => Promise<T>
-) {
-  for (let attempt = 0; attempt < 120; attempt++) {
-    const result = await db.transaction(async (tx) => {
-      const { rows } = await tx.execute<{ ok: boolean }>(
-        sql`select pg_try_advisory_xact_lock(hashtext('room_bookings'), hashtext(${`${userId} ${date}`})) as ok`
-      )
-      if (!rows[0]?.ok) return BUSY
-      return { value: await fn() }
-    })
-    if (result !== BUSY) return result.value
-    await new Promise((resolve) => setTimeout(resolve, 500))
-  }
-  throw new Error("同一天的另一筆預約還在處理，稍後再試")
-}
+) => withLease(`member ${userId} ${date}`, fn)
 
 export async function organizerOf(userId: string) {
   const [me] = await db

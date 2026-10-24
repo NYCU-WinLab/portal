@@ -104,10 +104,21 @@ export async function listBusy(rooms: string[], days: string[], fresh = false) {
   return byDay
 }
 
+// Nothing is submitted before signing in, so a failure there is a plain
+// no (Refused), never an unanswered reserve.
 async function signIn() {
+  try {
+    return await signInOnce()
+  } catch (error) {
+    if (error instanceof Refused) throw error
+    throw new Refused(error instanceof Error ? error.message : String(error))
+  }
+}
+
+async function signInOnce() {
   const userId = process.env.MEETINGROOM_SERVICE_USER
   const password = process.env.MEETINGROOM_SERVICE_PASSWORD
-  if (!userId || !password) throw new Error("系上借用帳號沒有設定")
+  if (!userId || !password) throw new Refused("系上借用帳號沒有設定")
   const response = await fetch(`${base()}/login/auth`, {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded" },
@@ -119,7 +130,7 @@ async function signIn() {
     .getSetCookie()
     .map((value) => value.split(";")[0])
     .find((value) => value.startsWith("ci_session="))
-  if (!cookie) throw new Error("系上借用帳號登入失敗")
+  if (!cookie) throw new Refused("系上借用帳號登入失敗")
   return cookie
 }
 
@@ -128,9 +139,10 @@ type Reservation = { room: string; start: string; end: string }
 // The system's own client posts the whole reservation for add and delete
 // alike. "free" is its "open for others to register" box, left unset.
 async function post(path: string, body: Record<string, string>) {
+  const cookie = await signIn()
   const response = await fetch(`${base()}/${path}`, {
     method: "POST",
-    headers: { "content-type": "application/json", cookie: await signIn() },
+    headers: { "content-type": "application/json", cookie },
     body: JSON.stringify({
       type: "short",
       subscriber: labAccount(),
@@ -158,23 +170,24 @@ class Refused extends Error {}
 export class Unanswered extends Error {}
 
 /**
- * The lab's reservation for exactly that room and span, if the system
- * has one: its id, else null. Whose it is, the caller decides.
+ * The ids of the lab's reservations for exactly that room and span. Whose
+ * they are, the caller decides.
  */
-export async function findLabReservation(reservation: Reservation) {
+export async function findLabReservations(reservation: Reservation) {
   const day = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Taipei",
   }).format(new Date(reservation.start))
   const rows = await getJson<
     { id: string; start: string; end: string; subscriber: string }[]
   >(`reservation/get/${encodeURIComponent(reservation.room)}/${day}`)
-  const held = rows.find(
-    (row) =>
-      row.subscriber === labAccount() &&
-      Number(row.start) === Date.parse(reservation.start) &&
-      Number(row.end) === Date.parse(reservation.end)
-  )
-  return held ? String(held.id) : null
+  return rows
+    .filter(
+      (row) =>
+        row.subscriber === labAccount() &&
+        Number(row.start) === Date.parse(reservation.start) &&
+        Number(row.end) === Date.parse(reservation.end)
+    )
+    .map((row) => String(row.id))
 }
 
 /** Books a room; returns the system's reservation id. Throws Unanswered

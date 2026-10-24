@@ -178,3 +178,14 @@ export const roomDailyRuns = pgTable("room_daily_runs", {
   date: date({ mode: "string" }).primaryKey(),
   ranAt: timestamp({ withTimezone: true }).defaultNow().notNull(),
 })
+
+// Short leases that serialize bookings: one per member and day (a hand
+// booking against the standing meeting catch-up) and one per room and day
+// (the reserve, and the clean-up after an unanswered one). A row, not an
+// advisory lock, so waiting holds no connection; a holder that dies leaves
+// a lease that runs out by itself.
+export const bookingLeases = pgTable("booking_leases", {
+  key: text().primaryKey(),
+  token: uuid().notNull(),
+  expiresAt: timestamp({ withTimezone: true }).notNull(),
+})

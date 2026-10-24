@@ -148,13 +148,17 @@ async function strayLabHold(
         gt(roomBookings.endTime, start)
       )
     )
-  const room = held.find((r) => !ours.some((row) => row.room === r))
-  if (!room) return null
   const before = slots.find((slot) => slot.end === start)
   const after = slots.find((slot) => slot.start === end)
-  const exact =
-    !before?.labRooms.includes(room) && !after?.labRooms.includes(room)
-  return { room, exact }
+  const strays = held
+    .filter((r) => !ours.some((row) => row.room === r))
+    .map((room) => ({
+      room,
+      exact:
+        !before?.labRooms.includes(room) && !after?.labRooms.includes(room),
+    }))
+  // An exact one matters most, whichever room it is in.
+  return strays.find((stray) => stray.exact) ?? strays[0] ?? null
 }
 
 /**
