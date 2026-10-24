@@ -16,7 +16,10 @@ import {
   roomFor,
   seriesBookings,
 } from "@/lib/actions/rooms"
-import { sweepMeetingRequests } from "@/lib/actions/rooms-meetings"
+import {
+  reconcileTeams,
+  sweepMeetingRequests,
+} from "@/lib/actions/rooms-meetings"
 import { mailBody } from "@/lib/mail-body"
 import { db } from "@/lib/db"
 import { roomBookings, roomDailyRuns, roomSeries, user } from "@/lib/db/schema"
@@ -460,6 +463,10 @@ export function startRoomsScheduler() {
       .format(new Date())
       .split(":")
       .map(Number)
+    // What a restart or a failed call left undone with Teams, any hour.
+    void reconcileTeams()
+      .then(sweepMeetingRequests)
+      .catch((error) => emitErrorLog(error, {}))
     if (hour * 60 + minute < 4 * 60 + 30) return
     void runDailyRooms().catch((error) => emitErrorLog(error, {}))
   }

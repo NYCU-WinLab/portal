@@ -29,6 +29,7 @@ import {
   meetingKinds,
   meetingQuestioners,
   meetings,
+  roomBookings,
   semesters,
 } from "@/lib/db/schema"
 import { taipeiToday } from "@/lib/leave-dates"
@@ -178,11 +179,11 @@ export const updateLabMeeting = defineAction({
         next.location !== meeting.location ||
         (next.kind === "holiday") !== (meeting.kind === "holiday")
       const held = moved
-        ? await releaseWeek(tx, id, [meeting.date, next.date])
+        ? await releaseWeek(tx, id, [meeting.date, next.date], actor.userId)
         : null
       return { date: next.date, held }
     }).then(async ({ date, held }) => {
-      await cancelLabMeeting(held, actor.userId)
+      await cancelLabMeeting(held)
       return { date }
     })
   },
@@ -200,11 +201,11 @@ export const deleteLabMeeting = defineAction({
     return changeSchedule(async (tx) => {
       const meeting = await meetingOn(tx, date)
       // Read before the delete unlinks the booking.
-      const held = await releaseWeek(tx, meeting.id, [date])
+      const held = await releaseWeek(tx, meeting.id, [date], actor.userId)
       await tx.delete(meetings).where(eq(meetings.id, meeting.id))
       return held
     }).then(async (held) => {
-      await cancelLabMeeting(held, actor.userId)
+      await cancelLabMeeting(held)
       return { date }
     })
   },
@@ -243,6 +244,23 @@ export const swapLabMeetings = defineAction({
         Object.fromEntries(swapped.map((key) => [key, row[key]]))
       await tx.update(meetings).set(pick(b)).where(eq(meetings.id, a.id))
       await tx.update(meetings).set(pick(a)).where(eq(meetings.id, b.id))
+      // A week's Teams booking made early belongs to its new presenter now:
+      // they send the invite and hear about its failures. The title follows
+      // on the next sync.
+      for (const [week, presenterId] of [
+        [a, b.presenterId],
+        [b, a.presenterId],
+      ] as const)
+        if (presenterId)
+          await tx
+            .update(roomBookings)
+            .set({ requestedBy: presenterId })
+            .where(
+              and(
+                eq(roomBookings.meetingId, week.id),
+                eq(roomBookings.status, "booked")
+              )
+            )
       return { first, second }
     })
   },

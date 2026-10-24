@@ -621,6 +621,42 @@ export const cancelMeeting = defineAction({
 })
 
 /**
+ * Marks a booking cancelled inside the caller's transaction, mailing
+ * everyone the cancellation when notify. Returns the row, or null when it
+ * was no longer booked. Its Teams meeting is taken down after the commit
+ * (cancelTeamsMeeting); a take-down that never happens is retried by the
+ * scheduler (reconcileTeams), since the row already says cancelled.
+ */
+export async function markCancelled(
+  tx: Tx,
+  booking: Booking,
+  cancelledBy: string,
+  notify: boolean
+) {
+  const [row] = await tx
+    .update(roomBookings)
+    .set({
+      status: "cancelled",
+      cancelledAt: sql`now()`,
+      cancelledBy,
+      // A CANCEL must outrank the REQUEST, or calendars ignore it.
+      inviteSequence: sql`${roomBookings.inviteSequence} + 1`,
+    })
+    // Two cancels at once: only the first changes the row.
+    .where(
+      and(eq(roomBookings.id, booking.id), eq(roomBookings.status, "booked"))
+    )
+    .returning()
+  if (!row) return null
+  if (notify)
+    await queueMail(
+      tx,
+      inviteMail(row, await organizerOf(booking.requestedBy), "CANCEL")
+    )
+  return row
+}
+
+/**
  * Cancels a booking: releases its department room, mails everyone the
  * cancellation and takes down its Teams meeting. teams_error says why the
  * Teams meeting could not be taken down. notify false skips the mail, for a
@@ -637,24 +673,9 @@ export async function cancelBooking(
       start: taipeiIso(booking.date, booking.startTime),
       end: taipeiIso(booking.date, booking.endTime),
     })
-  const organizer = await organizerOf(booking.requestedBy)
   const cancelled = await db.transaction(async (tx) => {
-    const [row] = await tx
-      .update(roomBookings)
-      .set({
-        status: "cancelled",
-        cancelledAt: sql`now()`,
-        cancelledBy,
-        // A CANCEL must outrank the REQUEST, or calendars ignore it.
-        inviteSequence: sql`${roomBookings.inviteSequence} + 1`,
-      })
-      // Two cancels at once: only the first changes the row.
-      .where(
-        and(eq(roomBookings.id, booking.id), eq(roomBookings.status, "booked"))
-      )
-      .returning()
+    const row = await markCancelled(tx, booking, cancelledBy, notify)
     if (!row) throw new Error("這筆預約已經取消")
-    if (notify) await queueMail(tx, inviteMail(row, organizer, "CANCEL"))
     return row
   })
   const teamsError = await cancelTeamsMeeting(cancelled)
