@@ -267,32 +267,41 @@ export type RealmAccount = {
   attributes: Record<string, string | undefined>
 }
 
-/**
- * Accounts that exist to try the lab's apps, not people: a "test" token in
- * the username (test, winlab-test-master). They carry real groups and
- * attributes, so the username is the one thing that sets them apart.
- */
-const TEST_ACCOUNT = /(^|[-_.])test([-_.]|$)/i
-
 let accounts: { list: RealmAccount[]; at: number } | null = null
 
 /**
- * Every enabled account in the realm except test accounts, with each
+ * Ids in the realm's /system group: accounts that are not people (shared,
+ * bot and test accounts). They carry real groups and attributes, so
+ * Keycloak marks them here instead of the portal guessing from a username.
+ */
+async function systemAccountIds(): Promise<Set<string>> {
+  const group = await adminGet<{ id: string }>("/group-by-path/system")
+  const people = await adminGet<{ id: string }[]>(
+    `/groups/${group.id}/members?max=1000&briefRepresentation=true`
+  )
+  return new Set(people.map(({ id }) => id))
+}
+
+/**
+ * Every enabled account in the realm except those in /system, with each
  * attribute's first value. Most alumni are in no /lab-member group, so the
  * member directory starts here, not from labDirectory(). Cached 10 minutes.
  */
 export async function realmAccounts(): Promise<RealmAccount[]> {
   if (accounts && Date.now() - accounts.at < LAB_DIRECTORY_TTL_MS)
     return accounts.list
-  const users = await adminGet<
-    (Omit<RealmAccount, "attributes"> & {
-      enabled?: boolean
-      attributes?: Record<string, string[]>
-    })[]
-  >("/users?max=5000&briefRepresentation=false")
+  const [system, users] = await Promise.all([
+    systemAccountIds(),
+    adminGet<
+      (Omit<RealmAccount, "attributes"> & {
+        enabled?: boolean
+        attributes?: Record<string, string[]>
+      })[]
+    >("/users?max=5000&briefRepresentation=false"),
+  ])
   // Keycloak ignores enabled=true on this endpoint, so filter here.
   const list = users
-    .filter((u) => u.enabled && !TEST_ACCOUNT.test(u.username))
+    .filter((u) => u.enabled && !system.has(u.id))
     .map((u) => ({
       id: u.id,
       username: u.username,
