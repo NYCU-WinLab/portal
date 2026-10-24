@@ -14,6 +14,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core"
 
+import { apiKeys } from "@/lib/db/api-keys"
 import { user } from "@/lib/db/auth-schema"
 
 // Every attempt to open the lab door: a press on /door (web), an agent
@@ -22,9 +23,8 @@ import { user } from "@/lib/db/auth-schema"
 // a press, the card holder's for a swipe ("卡片" when the card had none).
 // A card swipe's at is the reader's clock; ok is null for reader events that
 // are neither a grant nor a known denial.
-// A member's key for POST /api/door/open, from a script or a phone shortcut.
-// Only the SHA-256 of the token is kept; prefix is its first characters, to
-// tell keys apart on /door/tokens. A revoked key stays, for the log.
+// The door tokens before they became API keys (api_keys, same ids). Kept
+// one release so a rollback finds its table; dropped in the next.
 export const doorTokens = pgTable(
   "door_tokens",
   {
@@ -65,8 +65,8 @@ export const doorEvents = pgTable(
     // The bridge's id for a swipe, so a batch sent twice is stored once.
     sourceEventId: text().unique(),
     receivedAt: timestamp({ withTimezone: true }),
-    // An opening through POST /api/door/open: which token, from where.
-    tokenId: uuid().references(() => doorTokens.id, { onDelete: "set null" }),
+    // An opening with an API key: which key, from where.
+    tokenId: uuid().references(() => apiKeys.id, { onDelete: "set null" }),
     ip: text(),
   },
   (table) => [

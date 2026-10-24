@@ -8,8 +8,8 @@ import { traced } from "@/lib/otel"
 
 /**
  * Who is acting: the signed-in member, and whether through a page, an MCP
- * client or a door token on POST /api/door/open (recorded on the action's
- * span). tokenId and ip come only with via api.
+ * client or an API key on /api/actions (recorded on the action's span).
+ * tokenId (the API key's id) and ip come only with via api.
  */
 export type Actor = {
   userId: string

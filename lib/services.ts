@@ -130,6 +130,13 @@ export const serviceGroups: { title: string; apps: Service[] }[] = [
         href: "/admins",
       },
       {
+        key: "api-keys",
+        label: "API Keys",
+        name: "API 金鑰",
+        emoji: "🔑",
+        href: "/api-keys",
+      },
+      {
         key: "developers",
         label: "Developers",
         name: "開發者應用",

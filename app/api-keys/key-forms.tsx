@@ -14,37 +14,64 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
-import { curlLine } from "@/lib/door-token"
+import { Switch } from "@/components/ui/switch"
+import { apiApps, apiAppKeys, curlLine, type ApiApp } from "@/lib/api-apps"
 import { report } from "@/lib/report"
 
-import { createDoorTokenAction, revokeDoorTokenAction } from "./actions"
+import { createApiKeyAction, revokeApiKeyAction } from "./actions"
 
-export function CreateToken() {
+export function CreateKey() {
   const [token, setToken] = React.useState<string | null>(null)
+  const [apps, setApps] = React.useState<Set<ApiApp>>(new Set())
 
   async function submit(data: FormData) {
-    const { token, error } = await createDoorTokenAction(
-      String(data.get("name") ?? "")
-    )
+    const { token, error } = await createApiKeyAction({
+      name: String(data.get("name") ?? ""),
+      apps: [...apps],
+    })
     if (error) {
       toast.error(error)
       throw new Error(error)
     }
     toast.success("已建立")
+    setApps(new Set())
     setToken(token!)
+  }
+
+  function toggle(app: ApiApp, on: boolean) {
+    setApps((current) => {
+      const next = new Set(current)
+      if (on) next.add(app)
+      else next.delete(app)
+      return next
+    })
   }
 
   return (
     <>
       <FormDialog
         trigger={<Button>建立金鑰</Button>}
-        title="建立開門金鑰"
+        title="建立 API 金鑰"
         submitLabel="建立"
         onSubmit={submit}
       >
         <FormField label="名稱" required>
           <Input name="name" maxLength={60} placeholder="iPhone 捷徑" />
         </FormField>
+        <fieldset className="flex flex-col gap-2">
+          <legend className="mb-2">可以用的 app</legend>
+          <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+            {apiAppKeys.map((app) => (
+              <label key={app} className="flex items-center gap-3">
+                <Switch
+                  checked={apps.has(app)}
+                  onCheckedChange={(on) => toggle(app, on)}
+                />
+                {apiApps[app]}
+              </label>
+            ))}
+          </div>
+        </fieldset>
       </FormDialog>
       <Dialog
         open={token !== null}
@@ -56,7 +83,7 @@ export function CreateToken() {
           </DialogHeader>
           <p className="font-mono break-all select-all">{token}</p>
           <p className="text-muted-foreground">
-            拿到金鑰的人都能用你的名字開門，不要放進 git 或傳給別人。
+            拿到金鑰的人都能用你的名字使用選的 app，不要放進 git 或傳給別人。
           </p>
           <p className="font-mono break-all text-muted-foreground select-all">
             {token && curlLine(token)}
@@ -67,7 +94,7 @@ export function CreateToken() {
   )
 }
 
-export function RevokeToken({ id, name }: { id: string; name: string }) {
+export function RevokeKey({ id, name }: { id: string; name: string }) {
   return (
     <ConfirmDialog
       trigger={
@@ -78,7 +105,7 @@ export function RevokeToken({ id, name }: { id: string; name: string }) {
       title={`撤銷「${name}」？`}
       confirmLabel="撤銷"
       variant="destructive"
-      onConfirm={() => report(revokeDoorTokenAction(id), "已撤銷")}
+      onConfirm={() => report(revokeApiKeyAction(id), "已撤銷")}
     />
   )
 }
