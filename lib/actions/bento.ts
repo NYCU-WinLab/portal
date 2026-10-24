@@ -403,13 +403,13 @@ export const copyBentoOrder = defineAction({
 
 export const createBentoOrder = defineAction({
   name: "create_bento_order",
+  admin: "bento",
   title: "開單",
   description:
     "Opens a lunch order to one active restaurant (bento admins only). date defaults to today in Taipei; a day may have several orders.",
   kind: "mutation",
   input: z.object({ restaurantId: id, date: isoDate.optional() }),
   run: async (actor, { restaurantId, date }) => {
-    await requireAdmin(actor, "bento")
     const [restaurant] = await db
       .select({ active: bentoRestaurants.active })
       .from(bentoRestaurants)
@@ -430,8 +430,7 @@ export const createBentoOrder = defineAction({
 
 const setStatus =
   (status: "open" | "closed") =>
-  async (actor: Actor, { orderId }: { orderId: string }) => {
-    await requireAdmin(actor, "bento")
+  async (_actor: Actor, { orderId }: { orderId: string }) => {
     const [updated] = await db
       .update(bentoOrders)
       .set({ status, closedAt: status === "closed" ? new Date() : null })
@@ -443,6 +442,7 @@ const setStatus =
 
 export const closeBentoOrder = defineAction({
   name: "close_bento_order",
+  admin: "bento",
   title: "關單",
   description:
     "Closes an order once it is sent to the restaurant (bento admins only): no more lines can be added, removed or copied.",
@@ -453,6 +453,7 @@ export const closeBentoOrder = defineAction({
 
 export const reopenBentoOrder = defineAction({
   name: "reopen_bento_order",
+  admin: "bento",
   title: "重開訂單",
   description:
     "Opens a closed order again so members can change their lines (bento admins only).",
@@ -463,13 +464,13 @@ export const reopenBentoOrder = defineAction({
 
 export const deleteBentoOrder = defineAction({
   name: "delete_bento_order",
+  admin: "bento",
   title: "刪除訂單",
   description:
     "Deletes an order with every line on it (bento admins only). It cannot be undone; confirm with the member first.",
   kind: "mutation",
   input: z.object({ orderId: id }),
   run: async (actor, { orderId }) => {
-    await requireAdmin(actor, "bento")
     const removed = await db
       .delete(bentoOrders)
       .where(eq(bentoOrders.id, orderId))

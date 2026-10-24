@@ -1,7 +1,6 @@
 import { desc, eq, sql } from "drizzle-orm"
 import { z } from "zod"
 
-import { requireAdmin } from "@/lib/actions/authz"
 import { defineAction } from "@/lib/actions/define"
 import { db } from "@/lib/db"
 import { reimburseEgress, reimburseIngress, user } from "@/lib/db/schema"
@@ -210,13 +209,13 @@ const egressFields = {
 
 export const addReimburseEgress = defineAction({
   name: "add_reimburse_egress",
+  admin: "reimburse",
   title: "新增支出",
   description:
     "Records money paid back to a member (reimburse admins only): applicantId (list_members), item, amount and invoiceDate; transferDate once the money is sent (null while owed) and the bank transferFee the lab paid on top. Confirm the entry with the member first.",
   kind: "mutation",
   input: z.object(egressFields),
   run: async (actor, input) => {
-    await requireAdmin(actor, "reimburse")
     const applicantName = await memberName(input.applicantId)
     const [created] = await db
       .insert(reimburseEgress)
@@ -228,6 +227,7 @@ export const addReimburseEgress = defineAction({
 
 export const updateReimburseEgress = defineAction({
   name: "update_reimburse_egress",
+  admin: "reimburse",
   title: "修改支出",
   description:
     "Changes an egress entry (reimburse admins only); leave out what stays the same. Set transferDate when the money is sent, or null to mark it owed again.",
@@ -242,7 +242,6 @@ export const updateReimburseEgress = defineAction({
     transferFee: amount.optional(),
   }),
   run: async (actor, { entryId, applicantId, ...changes }) => {
-    await requireAdmin(actor, "reimburse")
     const applicant = applicantId
       ? { applicantId, applicantName: await memberName(applicantId) }
       : {}
@@ -258,13 +257,13 @@ export const updateReimburseEgress = defineAction({
 
 export const deleteReimburseEgress = defineAction({
   name: "delete_reimburse_egress",
+  admin: "reimburse",
   title: "刪除支出",
   description:
     "Deletes an egress entry (reimburse admins only). It cannot be undone; confirm with the member first.",
   kind: "mutation",
   input: z.object({ entryId: id }),
   run: async (actor, { entryId }) => {
-    await requireAdmin(actor, "reimburse")
     const removed = await db
       .delete(reimburseEgress)
       .where(eq(reimburseEgress.id, entryId))
@@ -283,13 +282,13 @@ const note = z
 
 export const addReimburseIngress = defineAction({
   name: "add_reimburse_ingress",
+  admin: "reimburse",
   title: "新增收入",
   description:
     "Records money coming into the lab fund (reimburse admins only): date, amount in whole NT$ and an optional note.",
   kind: "mutation",
   input: z.object({ date: isoDate, amount, note }),
   run: async (actor, input) => {
-    await requireAdmin(actor, "reimburse")
     const [created] = await db
       .insert(reimburseIngress)
       .values({ ...input, recordedBy: actor.userId })
@@ -300,6 +299,7 @@ export const addReimburseIngress = defineAction({
 
 export const updateReimburseIngress = defineAction({
   name: "update_reimburse_ingress",
+  admin: "reimburse",
   title: "修改收入",
   description:
     "Changes an ingress entry (reimburse admins only); leave out what stays the same, and pass an empty note to clear it.",
@@ -311,7 +311,6 @@ export const updateReimburseIngress = defineAction({
     note: note.optional(),
   }),
   run: async (actor, { entryId, ...changes }) => {
-    await requireAdmin(actor, "reimburse")
     const [updated] = await db
       .update(reimburseIngress)
       .set(changes)
@@ -324,13 +323,13 @@ export const updateReimburseIngress = defineAction({
 
 export const deleteReimburseIngress = defineAction({
   name: "delete_reimburse_ingress",
+  admin: "reimburse",
   title: "刪除收入",
   description:
     "Deletes an ingress entry (reimburse admins only). It cannot be undone; confirm with the member first.",
   kind: "mutation",
   input: z.object({ entryId: id }),
   run: async (actor, { entryId }) => {
-    await requireAdmin(actor, "reimburse")
     const removed = await db
       .delete(reimburseIngress)
       .where(eq(reimburseIngress.id, entryId))

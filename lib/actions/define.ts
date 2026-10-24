@@ -1,6 +1,8 @@
 import { z } from "zod"
 
+import { requireAdmin } from "@/lib/actions/authz"
 import { announceChange } from "@/lib/actions/changes"
+import type { AdminApp } from "@/lib/apps"
 import { reloadGreetings } from "@/lib/display"
 import { traced } from "@/lib/otel"
 
@@ -37,6 +39,9 @@ export type Action<
   kind: "query" | "mutation"
   input: Input
   run: (actor: Actor, input: z.infer<Input>) => Promise<Output>
+  /** Only this app's admins may run it at all: runAction refuses anyone
+   * else, and MCP leaves it out of their tool list. */
+  admin?: AdminApp
   /** Set only to keep it off MCP, with the reason. */
   mcpExcludedBecause?: string
   /** Set when it changes what /api/door/greetings serves, so the door
@@ -65,7 +70,9 @@ export async function runAction<Input extends z.ZodObject, Output>(
     `action ${action.name}`,
     { "action.name": action.name, "action.kind": action.kind, via: actor.via },
     async () => {
-      const result = await action.run(actor, action.input.parse(input))
+      const parsed = action.input.parse(input)
+      if (action.admin) await requireAdmin(actor, action.admin)
+      const result = await action.run(actor, parsed)
       // Open pages refresh on this; a failed announcement never fails the
       // change itself.
       if (action.kind === "mutation")

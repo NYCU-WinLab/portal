@@ -1,7 +1,6 @@
 import { desc, eq, sql } from "drizzle-orm"
 import { z } from "zod"
 
-import { requireAdmin } from "@/lib/actions/authz"
 import { defineAction } from "@/lib/actions/define"
 import { mailStatus, queueMail } from "@/lib/actions/mail"
 import { mailBody } from "@/lib/mail-body"
@@ -78,13 +77,13 @@ export const listAnnouncements = defineAction({
 
 export const createAnnouncement = defineAction({
   name: "create_announcement",
+  admin: "portal",
   title: "發公告",
   description:
     "Posts an announcement to the lab board, for portal admins only. notify=true also mails it to every current lab member (the Keycloak /lab-member groups, alumni left out), once; notify=false posts quietly. Mail cannot be recalled, so confirm the wording and whether to notify with the member first.",
   kind: "mutation",
   input: z.object({ title, content, notify: z.boolean().default(false) }),
   run: async (actor, post) => {
-    await requireAdmin(actor, "portal")
     const bcc = post.notify ? await labEmails() : []
     if (post.notify && bcc.length === 0)
       throw new Error("找不到實驗室成員的信箱，沒有發出")
@@ -108,13 +107,13 @@ export const createAnnouncement = defineAction({
 
 export const updateAnnouncement = defineAction({
   name: "update_announcement",
+  admin: "portal",
   title: "編輯公告",
   description:
     "Changes an announcement's title and content, for portal admins only. Never mails again, even when the post was mailed; members see the change on the board.",
   kind: "mutation",
   input: z.object({ id, title, content }),
   run: async (actor, { id, title, content }) => {
-    await requireAdmin(actor, "portal")
     const [updated] = await db
       .update(announcements)
       .set({ title, content, updatedAt: sql`now()` })
@@ -127,13 +126,13 @@ export const updateAnnouncement = defineAction({
 
 export const deleteAnnouncement = defineAction({
   name: "delete_announcement",
+  admin: "portal",
   title: "刪除公告",
   description:
     "Deletes an announcement from the board, for portal admins only. Mail already sent stays in members' inboxes; mail still queued is not sent.",
   kind: "mutation",
   input: z.object({ id }),
   run: async (actor, { id }) => {
-    await requireAdmin(actor, "portal")
     return db.transaction(async (tx) => {
       const [removed] = await tx
         .delete(announcements)

@@ -1,7 +1,7 @@
 import { and, asc, count, desc, eq, inArray, notInArray } from "drizzle-orm"
 import { z } from "zod"
 
-import { isAdmin, requireAdmin } from "@/lib/actions/authz"
+import { isAdmin } from "@/lib/actions/authz"
 import { defineAction } from "@/lib/actions/define"
 import { db } from "@/lib/db"
 import {
@@ -199,13 +199,13 @@ const restaurantFields = {
 
 export const createBentoRestaurant = defineAction({
   name: "create_bento_restaurant",
+  admin: "bento",
   title: "新增餐廳",
   description:
     "Adds a restaurant (bento admins only). Add its dishes after with set_bento_menu and its options with set_bento_option_groups.",
   kind: "mutation",
   input: z.object(restaurantFields),
   run: async (actor, input) => {
-    await requireAdmin(actor, "bento")
     const [created] = await db
       .insert(bentoRestaurants)
       .values(input)
@@ -216,6 +216,7 @@ export const createBentoRestaurant = defineAction({
 
 export const updateBentoRestaurant = defineAction({
   name: "update_bento_restaurant",
+  admin: "bento",
   title: "修改餐廳",
   description:
     "Changes a restaurant's name, phone or map link, pins it to the top (pinned), or switches it off (active false: no new orders, hidden from members; past orders stay). Bento admins only; leave out what stays the same.",
@@ -232,7 +233,6 @@ export const updateBentoRestaurant = defineAction({
     pinned: z.boolean().optional(),
   }),
   run: async (actor, { restaurantId, ...changes }) => {
-    await requireAdmin(actor, "bento")
     const [updated] = await db
       .update(bentoRestaurants)
       .set(changes)
@@ -245,13 +245,13 @@ export const updateBentoRestaurant = defineAction({
 
 export const deleteBentoRestaurant = defineAction({
   name: "delete_bento_restaurant",
+  admin: "bento",
   title: "刪除餐廳",
   description:
     "Deletes a restaurant with its menu (bento admins only). Refused once it has any order; switch it off with update_bento_restaurant instead.",
   kind: "mutation",
   input: z.object({ restaurantId: id }),
   run: async (actor, { restaurantId }) => {
-    await requireAdmin(actor, "bento")
     const [used] = await db
       .select({ id: bentoOrders.id })
       .from(bentoOrders)
@@ -269,6 +269,7 @@ export const deleteBentoRestaurant = defineAction({
 
 export const setBentoMenu = defineAction({
   name: "set_bento_menu",
+  admin: "bento",
   title: "編輯菜單",
   description:
     "Replaces a restaurant's whole dish list (bento admins only). Pass every dish that should remain: with its id to keep or change it, without an id to add it; dishes left out are removed. Past orders keep their own copy of names and prices.",
@@ -291,7 +292,6 @@ export const setBentoMenu = defineAction({
       .max(500, "最多 500 道菜"),
   }),
   run: async (actor, { restaurantId, items }) => {
-    await requireAdmin(actor, "bento")
     await findRestaurant(restaurantId)
     return db.transaction(async (tx) => {
       const kept = items.flatMap((item) => (item.id ? [item.id] : []))
@@ -336,6 +336,7 @@ export const setBentoMenu = defineAction({
 
 export const setBentoOptionGroups = defineAction({
   name: "set_bento_option_groups",
+  admin: "bento",
   title: "編輯選項",
   description:
     "Replaces a restaurant's option groups (bento admins only), in the order given: name (甜度, 冰量, 不醬), required (every dish needs a pick), multiple (several picks allowed), and values with a label and priceDelta in NT$. Past orders keep the labels they were ordered with.",
@@ -367,7 +368,6 @@ export const setBentoOptionGroups = defineAction({
       .max(20, "最多 20 組選項"),
   }),
   run: async (actor, { restaurantId, groups }) => {
-    await requireAdmin(actor, "bento")
     await findRestaurant(restaurantId)
     await db.transaction(async (tx) => {
       await tx
@@ -400,6 +400,7 @@ export const setBentoOptionGroups = defineAction({
 
 export const setBentoMenuImage = defineAction({
   name: "set_bento_menu_image",
+  admin: "bento",
   title: "上傳菜單照片",
   description: `Sets or removes a restaurant's menu photo (bento admins only). image is base64 of a JPEG, PNG, WebP or GIF up to ${MENU_IMAGE_LIMIT / 1024 / 1024} MB; null removes it.`,
   kind: "mutation",
@@ -413,7 +414,6 @@ export const setBentoMenuImage = defineAction({
       .nullable(),
   }),
   run: async (actor, { restaurantId, image }) => {
-    await requireAdmin(actor, "bento")
     await findRestaurant(restaurantId)
     if (!image) {
       await db

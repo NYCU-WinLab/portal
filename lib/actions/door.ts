@@ -1,7 +1,6 @@
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm"
 import { z } from "zod"
 
-import { requireAdmin } from "@/lib/actions/authz"
 import { announceChange } from "@/lib/actions/changes"
 import { defineAction } from "@/lib/actions/define"
 import { db } from "@/lib/db"
@@ -82,6 +81,7 @@ export type DoorEvent = {
 
 export const listDoorEvents = defineAction({
   name: "list_door_events",
+  admin: "door",
   title: "開門紀錄",
   description:
     "Door openings, newest first, for door admins only: presses on /door (web), presses by an agent (mcp), calls to POST /api/door/open with a member's door token (api) and card swipes (card, timed by the reader's clock). ok is null for reader events that are neither a grant nor a known denial. Page back with before set to the id of the last event returned.",
@@ -92,7 +92,6 @@ export const listDoorEvents = defineAction({
     source: source.optional(),
   }),
   run: async (actor, { limit, before, source }) => {
-    await requireAdmin(actor, "door")
     const rows = await db
       .select({
         id: doorEvents.id,
@@ -124,13 +123,13 @@ export const listDoorEvents = defineAction({
 
 export const listDoorCards = defineAction({
   name: "list_door_cards",
+  admin: "door",
   title: "門禁卡",
   description:
     "The cards the door reader lets in, for door admins only: the 10-digit card number, the holder name stored on the reader, the member it belongs to (null for a guest card), a note, and whether it matched the reader at the last comparison (sync_state).",
   kind: "query",
   input: z.object({}),
-  run: async (actor) => {
-    await requireAdmin(actor, "door")
+  run: async () => {
     const cards = await db
       .select({
         cardId: doorCards.cardId,

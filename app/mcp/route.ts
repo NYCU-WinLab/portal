@@ -1,5 +1,6 @@
 import { requireMcpAuth } from "@better-auth/mcp"
 
+import { adminAppsOf } from "@/lib/actions/authz"
 import { auth, mcpResource } from "@/lib/auth"
 import { isLabMember } from "@/lib/auth/member"
 import { mcpHandler } from "@/lib/mcp/server"
@@ -32,6 +33,12 @@ export const POST = requireMcpAuth(
     } catch {
       return refuse(503, "cannot reach Keycloak to check membership")
     }
+    let adminApps: string[]
+    try {
+      adminApps = [...(await adminAppsOf({ userId: claims.sub, via: "mcp" }))]
+    } catch {
+      return refuse(503, "cannot read the member's admin roles")
+    }
     return mcpHandler.fetch(request, {
       authInfo: {
         token: "",
@@ -40,7 +47,10 @@ export const POST = requireMcpAuth(
           .split(" ")
           .filter(Boolean),
         expiresAt: claims.exp,
-        extra: { userId: claims.sub },
+        extra: {
+          userId: claims.sub,
+          adminApps,
+        },
       },
     })
   },

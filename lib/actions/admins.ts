@@ -1,7 +1,6 @@
 import { and, asc, eq, notInArray } from "drizzle-orm"
 import { z } from "zod"
 
-import { requireAdmin } from "@/lib/actions/authz"
 import { defineAction } from "@/lib/actions/define"
 import { adminAppKeys, adminApps, ownAdminsOnly } from "@/lib/apps"
 import { db } from "@/lib/db"
@@ -57,13 +56,13 @@ const grantInput = z.object({
 
 export const grantAdmin = defineAction({
   name: "grant_admin",
+  admin: "portal",
   title: "新增管理員",
   description:
     "Makes a member an admin of one app. Only portal admins can. userId comes from list_members; app is one of the keys list_admins shows.",
   kind: "mutation",
   input: grantInput,
   run: async (actor, { userId, app }) => {
-    await requireAdmin(actor, "portal")
     return db.transaction(async (tx) => {
       // Locking the member serializes every grant for them, so a portal
       // grant and an app grant at once cannot leave a stray app row.
@@ -103,13 +102,13 @@ export const grantAdmin = defineAction({
 
 export const revokeAdmin = defineAction({
   name: "revoke_admin",
+  admin: "portal",
   title: "移除管理員",
   description:
     "Removes a member's admin role for one app. Only portal admins can, and the last portal admin cannot be removed.",
   kind: "mutation",
   input: grantInput,
   run: async (actor, { userId, app }) => {
-    await requireAdmin(actor, "portal")
     return db.transaction(async (tx) => {
       if (app === "portal") {
         // Lock the portal rows so two revokes at once cannot both pass.
