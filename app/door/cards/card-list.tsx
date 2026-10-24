@@ -1,6 +1,11 @@
 "use client"
 
-import { PencilIcon, RotateCcwIcon, Trash2Icon } from "lucide-react"
+import {
+  ChevronDownIcon,
+  PencilIcon,
+  RotateCcwIcon,
+  Trash2Icon,
+} from "lucide-react"
 import * as React from "react"
 import { toast } from "sonner"
 
@@ -155,9 +160,15 @@ export function Strangers({
   members: Member[]
 }) {
   return (
-    <section className="flex flex-col gap-2">
-      <SectionHeader title="刷過但沒登錄的卡" />
-      <ul className="flex flex-col">
+    <details className="group flex flex-col gap-2">
+      <summary className="flex cursor-pointer list-none items-center gap-2 font-semibold [&::-webkit-details-marker]:hidden">
+        刷過但沒登錄的卡
+        <span className="font-normal text-muted-foreground tabular-nums">
+          {strangers.length}
+        </span>
+        <ChevronDownIcon className="size-4 text-muted-foreground transition-transform duration-state group-open:rotate-180" />
+      </summary>
+      <ul className="mt-2 flex flex-col">
         {strangers.map((stranger) => (
           <li
             key={stranger.cardId}
@@ -177,7 +188,7 @@ export function Strangers({
           </li>
         ))}
       </ul>
-    </section>
+    </details>
   )
 }
 
@@ -225,19 +236,11 @@ export function Extra({
   )
 }
 
-function CardRow({ card, members }: { card: Card; members: Member[] }) {
+/** One card under its holder: number, state and what can be done to it. */
+function CardLine({ card, members }: { card: Card; members: Member[] }) {
   const state = states[card.syncState]
   return (
-    <li className="flex min-h-14 items-center gap-4 border-b border-border py-2">
-      <span className="min-w-0 flex-1 truncate">
-        <span className="font-medium">{card.member ?? card.holderName}</span>
-        {card.member && card.member !== card.holderName && (
-          <span className="ml-2 text-muted-foreground">{card.holderName}</span>
-        )}
-        {card.note && (
-          <span className="ml-2 text-muted-foreground">{card.note}</span>
-        )}
-      </span>
+    <div className="flex min-h-10 items-center justify-end gap-4">
       {state && <Badge variant="destructive">{state}</Badge>}
       <span className="shrink-0 text-muted-foreground tabular-nums">
         {card.cardId}
@@ -282,16 +285,17 @@ function CardRow({ card, members }: { card: Card; members: Member[] }) {
               <Trash2Icon />
             </Button>
           }
-          title={`刪除 ${card.holderName} 的卡？刪了就刷不進門`}
+          title={`刪除 ${card.holderName} 的卡 ${card.cardId}？刪了就刷不進門`}
           confirmLabel="刪除"
           variant="destructive"
           onConfirm={() => report(remove(card.cardId), "已從卡機刪除")}
         />
       </div>
-    </li>
+    </div>
   )
 }
 
+/** One row per holder: a member's cards together, a guest's by name. */
 export function CardList({
   cards,
   members,
@@ -300,11 +304,48 @@ export function CardList({
   members: Member[]
 }) {
   if (cards.length === 0) return <EmptyState noun="門禁卡" />
+  const holders = new Map<string, Card[]>()
+  for (const card of cards) {
+    const key = card.holderId ?? `guest:${card.holderName}`
+    holders.set(key, [...(holders.get(key) ?? []), card])
+  }
   return (
     <ul className="flex flex-col">
-      {cards.map((card) => (
-        <CardRow key={card.cardId} card={card} members={members} />
-      ))}
+      {[...holders].map(([key, held]) => {
+        const first = held[0]!
+        const names = [...new Set(held.map((card) => card.holderName))]
+        const notes = [
+          ...new Set(held.flatMap((card) => (card.note ? [card.note] : []))),
+        ]
+        const shown = first.member ?? first.holderName
+        return (
+          <li
+            key={key}
+            className="flex flex-col border-b border-border py-2 sm:flex-row sm:items-start sm:gap-4"
+          >
+            <span className="flex min-h-10 min-w-0 flex-1 items-center truncate">
+              <span className="font-medium">{shown}</span>
+              {names
+                .filter((name) => name !== shown)
+                .map((name) => (
+                  <span key={name} className="ml-2 text-muted-foreground">
+                    {name}
+                  </span>
+                ))}
+              {notes.map((note) => (
+                <span key={note} className="ml-2 text-muted-foreground">
+                  {note}
+                </span>
+              ))}
+            </span>
+            <div className="flex flex-col sm:shrink-0">
+              {held.map((card) => (
+                <CardLine key={card.cardId} card={card} members={members} />
+              ))}
+            </div>
+          </li>
+        )
+      })}
     </ul>
   )
 }
