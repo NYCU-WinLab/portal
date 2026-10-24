@@ -1,0 +1,6 @@
+[Unit]
+Description=Upgrade yt-dlp for the WinLab Music player
+
+[Service]
+Type=oneshot
+ExecStart=/opt/winlab-music-player/venv/bin/pip install --quiet --upgrade yt-dlp[default]

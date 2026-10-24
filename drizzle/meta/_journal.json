@@ -274,6 +274,13 @@
       "when": 1792826334201,
       "tag": "0038_personal_door_phrases",
       "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1792829200941,
+      "tag": "0039_music",
+      "breakpoints": true
     }
   ]
 }

@@ -44,6 +44,7 @@
     "recharts": "^3.10.1",
     "sharp": "^0.35.5",
     "sonner": "^2.0.8",
+    "youtubei.js": "18.3.0",
     "zod": "^4.6.5"
   },
   "devDependencies": {
