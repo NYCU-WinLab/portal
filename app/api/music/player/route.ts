@@ -3,18 +3,12 @@ import { timingSafeEqual } from "node:crypto"
 import { z } from "zod"
 
 import { onChange } from "@/lib/actions/changes"
-import {
-  playerReport,
-  playerState,
-  playerVersion,
-} from "@/lib/actions/music-player"
+import { playerReport, playerState } from "@/lib/actions/music-player"
 
 // The music player on the lab network (music-player/ in this repo) talks
-// only to this route, with MUSIC_PLAYER_TOKEN. GET long-polls: it answers at once when the
-// version differs from ?version, else when anything changes, else after
-// 25 seconds. POST reports what the player did.
-
-const WAIT_MS = 25_000
+// only to this route, with MUSIC_PLAYER_TOKEN. GET is server-sent events:
+// the player state at once, then again each time its version changes. POST
+// reports what the player did.
 
 function authorized(request: Request) {
   const token = process.env.MUSIC_PLAYER_TOKEN
@@ -27,27 +21,70 @@ function authorized(request: Request) {
 
 export async function GET(request: Request) {
   if (!authorized(request)) return new Response(null, { status: 401 })
-  const known = Number(new URL(request.url).searchParams.get("version") ?? -1)
-  if ((await playerVersion()) === known) {
-    await new Promise<void>((resolve) => {
-      let off = () => {}
-      const done = () => {
-        clearTimeout(timer)
-        off()
-        resolve()
+
+  const encoder = new TextEncoder()
+  let stop = () => {}
+  const stream = new ReadableStream({
+    async start(controller) {
+      const send = (text: string) => {
+        try {
+          controller.enqueue(encoder.encode(text))
+        } catch {
+          stop()
+        }
       }
-      const timer = setTimeout(done, WAIT_MS)
-      request.signal.addEventListener("abort", done)
-      onChange(async () => {
-        if ((await playerVersion()) !== known) done()
+      let sent = -1
+      // Changes arrive faster than a state read; one read at a time, and
+      // one more after it when something changed meanwhile.
+      let reading: Promise<void> | null = null
+      let again = false
+      const push = () => {
+        if (reading) {
+          again = true
+          return
+        }
+        reading = (async () => {
+          do {
+            again = false
+            const state = await playerState()
+            if (state.version !== sent) {
+              sent = state.version
+              send(`data: ${JSON.stringify(state)}\n\n`)
+            }
+          } while (again)
+        })()
+          .catch(() => {})
+          .finally(() => {
+            reading = null
+          })
+      }
+      send("retry: 3000\n\n")
+      const off = await onChange(push)
+      push()
+      // Keeps proxies from closing a quiet connection.
+      const ping = setInterval(() => send(": ping\n\n"), 25_000)
+      stop = () => {
+        clearInterval(ping)
+        off()
+      }
+      request.signal.addEventListener("abort", () => {
+        stop()
+        try {
+          controller.close()
+        } catch {}
       })
-        .then((stop) => {
-          off = stop
-        })
-        .catch(done)
-    })
-  }
-  return Response.json(await playerState())
+    },
+    cancel() {
+      stop()
+    },
+  })
+  return new Response(stream, {
+    headers: {
+      "content-type": "text/event-stream",
+      "cache-control": "no-cache, no-transform",
+      "x-accel-buffering": "no",
+    },
+  })
 }
 
 const report = z.object({
