@@ -3,9 +3,9 @@
 import * as React from "react"
 import { toast } from "sonner"
 
+import { AdminMenu, type DialogControl } from "@/components/admin-menu"
 import { FormDialog } from "@/components/form-dialog"
 import { type Member, MemberCombobox } from "@/components/member-combobox"
-import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import {
   Select,
@@ -17,13 +17,29 @@ import {
 
 import { grantAdminAction } from "./actions"
 
-export function GrantDialog({
-  members,
-  apps,
-}: {
+type GrantProps = {
   members: { id: string; name: string; email: string }[]
   apps: { value: string; label: string }[]
-}) {
+}
+
+export function GrantDialog(props: GrantProps) {
+  return (
+    <AdminMenu
+      items={[
+        {
+          label: "新增管理員",
+          dialog: (control) => <GrantForm {...props} control={control} />,
+        },
+      ]}
+    />
+  )
+}
+
+function GrantForm({
+  members,
+  apps,
+  control,
+}: GrantProps & { control: DialogControl }) {
   const [userId, setUserId] = React.useState<string | null>(null)
 
   async function submit(data: FormData) {
@@ -41,7 +57,7 @@ export function GrantDialog({
 
   return (
     <FormDialog
-      trigger={<Button>新增</Button>}
+      {...control}
       title="新增管理員"
       submitLabel="新增"
       onSubmit={submit}

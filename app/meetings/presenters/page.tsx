@@ -9,7 +9,7 @@ import { type MemberStats, listLabMeetingStats } from "@/lib/actions/stats"
 import { requireActor } from "@/lib/auth/session"
 
 import { meetingsNav, meetingsPage } from "../nav"
-import { AddPresenter, PresenterRowActions } from "./presenter-actions"
+import { PresentersAdmin, PresenterRowActions } from "./presenter-actions"
 
 export const dynamic = "force-dynamic"
 
@@ -60,7 +60,7 @@ export default async function PresentersPage() {
           title="報告順序"
           actions={
             admin && (
-              <AddPresenter
+              <PresentersAdmin
                 members={members.filter((member) => !listed.has(member.id))}
               />
             )

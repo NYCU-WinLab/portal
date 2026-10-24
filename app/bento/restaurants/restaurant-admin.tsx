@@ -4,6 +4,7 @@ import { PlusIcon, XIcon } from "lucide-react"
 import * as React from "react"
 import { toast } from "sonner"
 
+import { AdminMenu } from "@/components/admin-menu"
 import { ConfirmDialog } from "@/components/confirm-dialog"
 import { FormDialog, FormField } from "@/components/form-dialog"
 import { Button } from "@/components/ui/button"
@@ -43,23 +44,32 @@ function InfoFields({ info }: { info?: Info }) {
 
 export function AddRestaurant() {
   return (
-    <FormDialog
-      trigger={<Button>新增</Button>}
-      title="新增餐廳"
-      submitLabel="新增"
-      onSubmit={(data) =>
-        report(
-          addRestaurant({
-            name: value(data, "name"),
-            phone: value(data, "phone"),
-            mapUrl: value(data, "mapUrl"),
-          }),
-          "已新增"
-        )
-      }
-    >
-      <InfoFields />
-    </FormDialog>
+    <AdminMenu
+      items={[
+        {
+          label: "新增餐廳",
+          dialog: (control) => (
+            <FormDialog
+              {...control}
+              title="新增餐廳"
+              submitLabel="新增"
+              onSubmit={(data) =>
+                report(
+                  addRestaurant({
+                    name: value(data, "name"),
+                    phone: value(data, "phone"),
+                    mapUrl: value(data, "mapUrl"),
+                  }),
+                  "已新增"
+                )
+              }
+            >
+              <InfoFields />
+            </FormDialog>
+          ),
+        },
+      ]}
+    />
   )
 }
 

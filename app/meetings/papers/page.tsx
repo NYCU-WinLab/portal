@@ -6,7 +6,7 @@ import { listPapers, listPaperTags } from "@/lib/actions/papers"
 import { requireActor } from "@/lib/auth/session"
 
 import { meetingsNav, meetingsPage } from "../nav"
-import { PaperDialog, TagsDialog } from "./paper-actions"
+import { PapersAdmin } from "./paper-actions"
 import { PaperList } from "./paper-list"
 
 export const dynamic = "force-dynamic"
@@ -26,14 +26,7 @@ export default async function PapersPage() {
       <div className="flex flex-col gap-12">
         <PageHeader
           title="論文"
-          actions={
-            admin && (
-              <>
-                <TagsDialog tags={tags} />
-                <PaperDialog tags={tags} />
-              </>
-            )
-          }
+          actions={admin && <PapersAdmin tags={tags} />}
         />
         <PaperList
           papers={papers}

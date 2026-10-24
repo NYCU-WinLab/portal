@@ -52,7 +52,6 @@ export default async function OrderPage({
           title={restaurant.name}
           actions={
             <>
-              {admin && <OrderAdmin orderId={order.id} status={order.status} />}
               {open && (
                 <OrderDialog
                   orderId={order.id}
@@ -64,6 +63,7 @@ export default async function OrderPage({
                   me={actor.userId}
                 />
               )}
+              {admin && <OrderAdmin orderId={order.id} status={order.status} />}
             </>
           }
         />
