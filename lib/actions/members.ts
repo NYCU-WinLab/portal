@@ -29,7 +29,7 @@ export const listLabMembers = defineAction({
   name: "list_lab_members",
   title: "成員通訊錄",
   description:
-    "The lab's member directory from Keycloak: every enabled account except test accounts, current members and alumni. Each has id (Keycloak id), name (Chinese), name_en, username, email, phone, student_id, status (teacher, assistant, doctoral, master, undergrad, alumni or other), cohort (ROC admission year) and title (博三 for students, else the position Keycloak holds). status and cohort come from the /lab-member groups, falling back to the role and admissionYear attributes. Sorted by status, then cohort, then name.",
+    "The lab's member directory from Keycloak: every enabled account except those Keycloak marks as not people (the /system group), current members and alumni. Each has id (Keycloak id), name (Chinese), name_en, username, email, phone, student_id, status (teacher, assistant, doctoral, master, undergrad, alumni or other), cohort (ROC admission year) and title (博三 for students, else the position Keycloak holds). status and cohort come from the /lab-member groups, falling back to the role and admissionYear attributes. Sorted by status, then cohort, then name.",
   kind: "query",
   input: z.object({}),
   run: async () => {
