@@ -4,7 +4,6 @@ import { PencilIcon, Trash2Icon } from "lucide-react"
 import * as React from "react"
 import { toast } from "sonner"
 
-import { AdminMenu, type DialogControl } from "@/components/admin-menu"
 import { ConfirmDialog } from "@/components/confirm-dialog"
 import { FormDialog, FormField } from "@/components/form-dialog"
 import { type Member, MemberCombobox } from "@/components/member-combobox"
@@ -35,13 +34,11 @@ function EgressForm({
   members,
   today,
   trigger,
-  control,
 }: {
   entry?: Egress
   members: Member[]
   today: string
-  trigger?: React.ReactElement
-  control?: DialogControl
+  trigger: React.ReactElement
 }) {
   const [applicant, setApplicant] = React.useState<string | null>(
     entry?.applicantId ?? null
@@ -74,11 +71,7 @@ function EgressForm({
   return (
     <FormDialog
       trigger={trigger}
-      open={control?.open}
-      onOpenChange={(open) => {
-        if (open) setApplicant(entry?.applicantId ?? null)
-        control?.onOpenChange(open)
-      }}
+      onOpenChange={(open) => open && setApplicant(entry?.applicantId ?? null)}
       title={entry ? "修改支出" : "新增支出"}
       submitLabel={entry ? "儲存" : "新增"}
       onSubmit={submit}
@@ -136,12 +129,10 @@ function IngressForm({
   entry,
   today,
   trigger,
-  control,
 }: {
   entry?: Ingress
   today: string
-  trigger?: React.ReactElement
-  control?: DialogControl
+  trigger: React.ReactElement
 }) {
   async function submit(data: FormData) {
     const fields = {
@@ -160,7 +151,6 @@ function IngressForm({
   return (
     <FormDialog
       trigger={trigger}
-      {...control}
       title={entry ? "修改收入" : "新增收入"}
       submitLabel={entry ? "儲存" : "新增"}
       onSubmit={submit}
@@ -186,20 +176,17 @@ export function AddEntries({
   today: string
 }) {
   return (
-    <AdminMenu
-      items={[
-        {
-          label: "新增支出",
-          dialog: (control) => (
-            <EgressForm members={members} today={today} control={control} />
-          ),
-        },
-        {
-          label: "新增收入",
-          dialog: (control) => <IngressForm today={today} control={control} />,
-        },
-      ]}
-    />
+    <>
+      <IngressForm
+        today={today}
+        trigger={<Button variant="outline">新增收入</Button>}
+      />
+      <EgressForm
+        members={members}
+        today={today}
+        trigger={<Button>新增支出</Button>}
+      />
+    </>
   )
 }
 

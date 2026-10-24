@@ -13,8 +13,9 @@ import {
 import { user } from "@/lib/db/auth-schema"
 
 // The lab's ledger: money paid out to a member for something they bought
-// (egress) and money coming in (ingress). Every member reads it; reimburse
-// admins write it. Amounts are whole NT$.
+// (egress) and money coming in (ingress). Only reimburse admins read and
+// write it; a member sees their own total on their profile. Amounts are
+// whole NT$.
 
 export const reimburseEgress = pgTable(
   "reimburse_egress",

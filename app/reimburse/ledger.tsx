@@ -31,12 +31,10 @@ const monthLabel = (month: string) =>
 // The ledger by month, newest first, filtered on the page.
 export function Ledger({
   entries,
-  admin,
   members,
   today,
 }: {
   entries: LedgerEntry[]
-  admin: boolean
   members: Member[]
   today: string
 }) {
@@ -119,13 +117,7 @@ export function Ledger({
                     )}
                   </span>
                   <span className="shrink-0 tabular-nums">{signed(entry)}</span>
-                  {admin && (
-                    <EntryActions
-                      entry={entry}
-                      members={members}
-                      today={today}
-                    />
-                  )}
+                  <EntryActions entry={entry} members={members} today={today} />
                 </li>
               ))}
             </ul>
