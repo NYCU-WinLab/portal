@@ -48,6 +48,7 @@ import type { Action } from "@/lib/actions/define"
 import type { ApiApp } from "@/lib/api-apps"
 import { listHomePins, setHomePin } from "@/lib/actions/home"
 import { getDoorStatus, listDoorEvents, openDoor } from "@/lib/actions/door"
+import { listMyDoorCards, listMyDoorEvents } from "@/lib/actions/door-mine"
 import {
   addDoorCard,
   compareDoorCards,
@@ -273,7 +274,13 @@ export const actionGroups: { app: ApiApp | null; actions: Action[] }[] = [
   },
   {
     app: "door",
-    actions: [getDoorStatus, openDoor, listDoorEvents],
+    actions: [
+      getDoorStatus,
+      openDoor,
+      listDoorEvents,
+      listMyDoorCards,
+      listMyDoorEvents,
+    ],
   },
   {
     app: "greetings",
