@@ -4,8 +4,9 @@ export const doorPage = {
   tip: "實驗室的門",
 }
 
-/** Every member gets the door, the sound pool and their greetings; the
- * voice clips, the cards and the log are door admins' alone. API keys
+/** Every member gets the door, the sound pool, their greetings and their
+ * own cards and openings; the voice clips, every card and the full log are
+ * door admins' alone. API keys
  * moved to /api-keys. */
 export const doorNav = [
   { label: "開門", href: "/door", tip: "按一下開門" },
@@ -14,6 +15,11 @@ export const doorNav = [
     label: "問候語",
     href: "/door/greetings",
     tip: "門口依時段跟你說的話",
+  },
+  {
+    label: "我的紀錄",
+    href: "/door/mine",
+    tip: "我的門禁卡與開門紀錄",
   },
   {
     label: "語音",
