@@ -134,9 +134,7 @@ export function CompareButton() {
           if (error || !result) toast.error(error ?? "失敗了")
           else if (result.suspect) toast.error("卡機的卡表疑似損毀")
           else if (result.partial)
-            toast.warning(
-              `卡機只列出 ${result.synced + result.extra.length} 張，沒列到的卡先不判定`
-            )
+            toast.warning(`卡機只列出 ${result.listed} 張，沒列到的卡先不判定`)
           else if (result.deleting.length > 0)
             toast.error(
               `${result.deleting.length} 張要刪的卡還在卡機上，請再刪一次`

@@ -34,7 +34,7 @@ export const compare = async () =>
   call<{
     suspect: boolean
     partial: boolean
-    synced: number
+    listed: number
     missing: string[]
     deleting: string[]
     extra: unknown[]

@@ -136,9 +136,17 @@ async function locked(
     })
   } catch (error) {
     // Refused before the reader was called (lock busy, a card still being
-    // deleted, no such member): written down too, as an attempt.
+    // deleted, no such member): written down too, as an attempt. Only our
+    // own refusals keep their message; a database error's message carries
+    // the query's parameters (names, notes), so it is just db_failed.
     if (!reader) {
-      await record(action, userId, card, error).catch(() => {})
+      const refusal =
+        error instanceof z.ZodError
+          ? (error.issues[0]?.message ?? "invalid")
+          : error instanceof Error && error.constructor === Error
+            ? error.message
+            : "db_failed"
+      await record(action, userId, card, refusal).catch(() => {})
       throw error
     }
     await record(action, userId, card, "db_failed").catch(() => {})
@@ -357,6 +365,7 @@ export async function compareCards(userId: string | null) {
       readerCount: number
       suspect: boolean
       partial: boolean
+      listed: number
       synced: number
       missing: string[]
       deleting: string[]
@@ -403,6 +412,7 @@ export async function compareCards(userId: string | null) {
           readerCount: reader.count,
           suspect,
           partial,
+          listed: reader.cards.length,
           synced: synced.length,
           missing: ids(missing),
           deleting: ids(
