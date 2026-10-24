@@ -69,6 +69,13 @@ export const serviceGroups: { title: string; apps: Service[] }[] = [
         emoji: "🗓️",
         href: "/meetings",
       },
+      {
+        key: "music",
+        label: "Music",
+        name: "點歌",
+        emoji: "🎵",
+        href: "https://music.winlab.tw",
+      },
     ],
   },
   {
