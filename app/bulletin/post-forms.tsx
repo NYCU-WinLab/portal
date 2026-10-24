@@ -3,6 +3,7 @@
 import { PencilIcon, Trash2Icon } from "lucide-react"
 import * as React from "react"
 
+import { AdminMenu, type DialogControl } from "@/components/admin-menu"
 import { ConfirmDialog } from "@/components/confirm-dialog"
 import { FormDialog, FormField } from "@/components/form-dialog"
 import { Button } from "@/components/ui/button"
@@ -21,9 +22,11 @@ const text = (data: FormData, key: string) => String(data.get(key) ?? "")
 function PostForm({
   post,
   trigger,
+  control,
 }: {
   post?: Post
-  trigger: React.ReactElement
+  trigger?: React.ReactElement
+  control?: DialogControl
 }) {
   const [notify, setNotify] = React.useState(true)
 
@@ -43,7 +46,11 @@ function PostForm({
   return (
     <FormDialog
       trigger={trigger}
-      onOpenChange={(open) => open && setNotify(true)}
+      open={control?.open}
+      onOpenChange={(open) => {
+        if (open) setNotify(true)
+        control?.onOpenChange(open)
+      }}
       size="wide"
       title={post ? "編輯公告" : "發公告"}
       submitLabel={post ? "儲存" : "發布"}
@@ -75,7 +82,16 @@ function PostForm({
 }
 
 export function NewPost() {
-  return <PostForm trigger={<Button>發公告</Button>} />
+  return (
+    <AdminMenu
+      items={[
+        {
+          label: "發公告",
+          dialog: (control) => <PostForm control={control} />,
+        },
+      ]}
+    />
+  )
 }
 
 export function PostActions({ post }: { post: Post }) {

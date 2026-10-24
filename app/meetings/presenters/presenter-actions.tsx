@@ -3,6 +3,7 @@
 import { ArrowDownIcon, ArrowUpIcon } from "lucide-react"
 import * as React from "react"
 
+import { AdminMenu, type DialogControl } from "@/components/admin-menu"
 import { ConfirmDialog } from "@/components/confirm-dialog"
 import { FormDialog } from "@/components/form-dialog"
 import { type Member, MemberCombobox } from "@/components/member-combobox"
@@ -12,11 +13,27 @@ import { Label } from "@/components/ui/label"
 import { presenterAdd, presenterMove, presenterRemove } from "../actions"
 import { report } from "@/lib/report"
 
-export function AddPresenter({ members }: { members: Member[] }) {
+export function PresentersAdmin({ members }: { members: Member[] }) {
+  return (
+    <AdminMenu
+      items={[
+        {
+          label: "加入報告順序",
+          dialog: (control) => <AddPresenter members={members} {...control} />,
+        },
+      ]}
+    />
+  )
+}
+
+function AddPresenter({
+  members,
+  ...control
+}: { members: Member[] } & DialogControl) {
   const [userId, setUserId] = React.useState<string | null>(null)
   return (
     <FormDialog
-      trigger={<Button>加入</Button>}
+      {...control}
       title="加入報告順序"
       submitLabel="加入"
       onSubmit={async () => {

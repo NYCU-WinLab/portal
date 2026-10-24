@@ -44,8 +44,8 @@ export default async function TripDetailPage({
           title={trip.name}
           actions={
             <>
-              {admin && <TripAdmin trip={trip} files={files} />}
               {open && <UploadDialog tripId={trip.id} />}
+              {admin && <TripAdmin trip={trip} files={files} />}
             </>
           }
         />

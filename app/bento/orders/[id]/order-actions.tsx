@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation"
 import { XIcon } from "lucide-react"
 
+import { AdminMenu } from "@/components/admin-menu"
 import { ConfirmDialog } from "@/components/confirm-dialog"
 import { Button } from "@/components/ui/button"
 import { PROFESSOR_ID } from "@/lib/bento"
@@ -77,34 +78,42 @@ export function OrderAdmin({
   status: string
 }) {
   const router = useRouter()
+  const open = status === "open"
   return (
-    <>
-      {status === "open" ? (
-        <ConfirmDialog
-          trigger={<Button variant="outline">關單</Button>}
-          title="關單？之後不能再點或刪"
-          confirmLabel="關單"
-          variant="default"
-          onConfirm={() => report(closeOrder(orderId), "已關單")}
-        />
-      ) : (
-        <ConfirmDialog
-          trigger={<Button variant="outline">重開</Button>}
-          title="重開這張訂單？"
-          confirmLabel="重開"
-          variant="default"
-          onConfirm={() => report(reopenOrder(orderId), "已重開")}
-        />
-      )}
-      <ConfirmDialog
-        trigger={<Button variant="destructive">刪除</Button>}
-        title="刪除這張訂單和所有人點的餐？"
-        confirmLabel="刪除"
-        onConfirm={async () => {
-          await report(deleteOrder(orderId), "已刪除")
-          router.push("/bento")
-        }}
-      />
-    </>
+    <AdminMenu
+      items={[
+        {
+          label: open ? "關單" : "重開",
+          dialog: (control) => (
+            <ConfirmDialog
+              {...control}
+              title={open ? "關單？之後不能再點或刪" : "重開這張訂單？"}
+              confirmLabel={open ? "關單" : "重開"}
+              variant="default"
+              onConfirm={() =>
+                open
+                  ? report(closeOrder(orderId), "已關單")
+                  : report(reopenOrder(orderId), "已重開")
+              }
+            />
+          ),
+        },
+        {
+          label: "刪除訂單",
+          destructive: true,
+          dialog: (control) => (
+            <ConfirmDialog
+              {...control}
+              title="刪除這張訂單和所有人點的餐？"
+              confirmLabel="刪除"
+              onConfirm={async () => {
+                await report(deleteOrder(orderId), "已刪除")
+                router.push("/bento")
+              }}
+            />
+          ),
+        },
+      ]}
+    />
   )
 }

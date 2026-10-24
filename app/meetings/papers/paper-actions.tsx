@@ -3,6 +3,7 @@
 import { PencilIcon, Trash2Icon } from "lucide-react"
 import * as React from "react"
 
+import { AdminMenu, type DialogControl } from "@/components/admin-menu"
 import { ConfirmDialog } from "@/components/confirm-dialog"
 import { FormDialog, FormField } from "@/components/form-dialog"
 import { Button } from "@/components/ui/button"
@@ -95,19 +96,44 @@ function TagPicker({
   )
 }
 
-export function PaperDialog({ paper, tags }: { paper?: Paper; tags: Tag[] }) {
+// Adding papers and managing tags, behind the page's admin menu.
+export function PapersAdmin({ tags }: { tags: Tag[] }) {
+  return (
+    <AdminMenu
+      items={[
+        {
+          label: "新增論文",
+          dialog: (control) => <PaperDialog tags={tags} control={control} />,
+        },
+        {
+          label: "論文標籤",
+          dialog: (control) => <TagsDialog tags={tags} control={control} />,
+        },
+      ]}
+    />
+  )
+}
+
+export function PaperDialog({
+  paper,
+  tags,
+  control,
+}: {
+  paper?: Paper
+  tags: Tag[]
+  control?: DialogControl
+}) {
   const [tagIds, setTagIds] = React.useState(
     paper?.tags.map((tag) => tag.id) ?? []
   )
   return (
     <FormDialog
+      {...control}
       trigger={
-        paper ? (
+        control ? undefined : (
           <IconAction label="編輯">
             <PencilIcon />
           </IconAction>
-        ) : (
-          <Button>新增</Button>
         )
       }
       title={paper ? "編輯論文" : "新增論文"}
@@ -171,10 +197,16 @@ export function PaperRowActions({
 }
 
 // Admins add, rename and delete tags in one place.
-export function TagsDialog({ tags }: { tags: Tag[] }) {
+function TagsDialog({
+  tags,
+  control,
+}: {
+  tags: Tag[]
+  control: DialogControl
+}) {
   return (
     <FormDialog
-      trigger={<Button variant="outline">標籤</Button>}
+      {...control}
       title="論文標籤"
       submitLabel="新增"
       onSubmit={(data) =>
