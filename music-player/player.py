@@ -285,7 +285,8 @@ class Mixer(AudioSource):
         self.clips.clear()
         if self.ffmpeg and self.ffmpeg.returncode is None:
             self.ffmpeg.kill()
-            await self.ffmpeg.wait()
+            # Not wait(): it never returns while unread audio sits in the pipe.
+            await self.ffmpeg.communicate()
 
     async def get_metadata(self):
         return MediaMetadata()
@@ -426,7 +427,9 @@ class Player:
                     self.offset = self.position()
                     await self.stop()
                 self.state = "idle"
-                await self.api.report(current and current["itemId"], "idle", self.offset if current else None)
+                # Only a song this player played has a position to keep; a fresh start knows none.
+                mine = current and self.playing == current["itemId"]
+                await self.api.report(current and current["itemId"], "idle", self.offset if mine else None)
                 self.playing = None
                 continue
             if self.mixer and self.mixer.clip is not None:
