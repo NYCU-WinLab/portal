@@ -3,8 +3,8 @@
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 
+import { AdminMenu } from "@/components/admin-menu"
 import { FormDialog, FormField } from "@/components/form-dialog"
-import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
@@ -41,30 +41,42 @@ export function CreateOrder({
   }
 
   return (
-    <FormDialog
-      trigger={<Button>開單</Button>}
-      title="開單"
-      submitLabel="開單"
-      onSubmit={submit}
-    >
-      <div className="flex flex-col gap-2">
-        <Label htmlFor="bento-restaurant">餐廳</Label>
-        <Select name="restaurantId" required items={restaurants}>
-          <SelectTrigger id="bento-restaurant" className="w-full">
-            <SelectValue placeholder="選擇餐廳" />
-          </SelectTrigger>
-          <SelectContent>
-            {restaurants.map((restaurant) => (
-              <SelectItem key={restaurant.value} value={restaurant.value}>
-                {restaurant.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-      <FormField label="日期" required>
-        <Input name="date" type="date" defaultValue={today} />
-      </FormField>
-    </FormDialog>
+    <AdminMenu
+      items={[
+        {
+          label: "開單",
+          dialog: (control) => (
+            <FormDialog
+              {...control}
+              title="開單"
+              submitLabel="開單"
+              onSubmit={submit}
+            >
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="bento-restaurant">餐廳</Label>
+                <Select name="restaurantId" required items={restaurants}>
+                  <SelectTrigger id="bento-restaurant" className="w-full">
+                    <SelectValue placeholder="選擇餐廳" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {restaurants.map((restaurant) => (
+                      <SelectItem
+                        key={restaurant.value}
+                        value={restaurant.value}
+                      >
+                        {restaurant.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <FormField label="日期" required>
+                <Input name="date" type="date" defaultValue={today} />
+              </FormField>
+            </FormDialog>
+          ),
+        },
+      ]}
+    />
   )
 }
