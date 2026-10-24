@@ -1,6 +1,6 @@
 // Every mail the portal sends is built here, as plain text and as HTML in
 // the ui.winlab.tw look: flat, text-title and text-body, the primary color
-// only on the one action. Mail clients read no CSS variables or oklch, so
+// only on the one action; other links are outlined buttons beside it. Mail clients read no CSS variables or oklch, so
 // this file keeps hex copies of the tokens in app/globals.css.
 
 export type MailBody = {
@@ -11,6 +11,8 @@ export type MailBody = {
   paragraphs?: string[]
   /** The one thing to do next, as a button. */
   action?: { label: string; url: string }
+  /** Other places to go, as outlined buttons after the action. */
+  links?: { label: string; url: string }[]
 }
 
 const light = {
@@ -57,8 +59,22 @@ export function mailBody(body: MailBody): { text: string; html: string } {
     body.title,
     ...(rows.length ? ["", ...rows.map(([k, v]) => `${k}：${v}`)] : []),
     ...paragraphs.flatMap((p) => ["", p]),
-    ...(body.action ? ["", `${body.action.label}：${body.action.url}`] : []),
+    ...(body.action || body.links?.length ? [""] : []),
+    ...[...(body.action ? [body.action] : []), ...(body.links ?? [])].map(
+      (link) => `${link.label}：${link.url}`
+    ),
   ].join("\n")
+  const buttons = [
+    ...(body.action
+      ? [
+          `<a class="action" href="${escape(body.action.url)}" style="display:inline-block;margin:0 8px 8px 0;padding:10px 20px;border:1px solid ${light.primary};border-radius:16px;background:${light.primary};color:${light.primaryForeground};font-weight:500;text-decoration:none">${escape(body.action.label)}</a>`,
+        ]
+      : []),
+    ...(body.links ?? []).map(
+      (link) =>
+        `<a class="secondary" href="${escape(link.url)}" style="display:inline-block;margin:0 8px 8px 0;padding:10px 20px;border:1px solid ${light.border};border-radius:16px;color:${light.foreground};font-weight:500;text-decoration:none">${escape(link.label)}</a>`
+    ),
+  ]
 
   const home = process.env.BETTER_AUTH_URL ?? "https://portal.winlab.tw"
   const html = `<!doctype html>
@@ -75,6 +91,7 @@ export function mailBody(body: MailBody): { text: string; html: string } {
   .rule { border-color: ${dark.border} !important; }
   .link { color: ${dark.foreground} !important; }
   .action { background: ${dark.primary} !important; color: ${dark.primaryForeground} !important; }
+  .secondary { color: ${dark.foreground} !important; border-color: ${dark.border} !important; }
 }
 </style>
 </head>
@@ -95,11 +112,7 @@ ${rows
     : ""
 }
 ${paragraphs.map((p) => `<p style="margin:0 0 16px">${inline(p)}</p>`).join("\n")}
-${
-  body.action
-    ? `<p style="margin:24px 0"><a class="action" href="${escape(body.action.url)}" style="display:inline-block;padding:10px 20px;border-radius:16px;background:${light.primary};color:${light.primaryForeground};font-weight:500;text-decoration:none">${escape(body.action.label)}</a></p>`
-    : ""
-}
+${buttons.length ? `<p style="margin:24px 0 16px">${buttons.join("")}</p>` : ""}
 <p class="muted rule" style="margin:40px 0 0;padding-top:16px;border-top:1px solid ${light.border};color:${light.muted}"><a class="muted" href="${escape(home)}" style="color:${light.muted};text-decoration:none">WinLab Portal</a></p>
 </div>
 </div>

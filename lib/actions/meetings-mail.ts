@@ -144,12 +144,15 @@ function announcement(
               : []),
             ...nextWeekRow(next),
           ],
-      paragraphs: holiday
-        ? []
-        : [`請假：${site()}/leave\n訂便當：${site()}/bento`],
       action: booking
         ? { label: "加入會議", url: joinUrl(booking.id) }
         : undefined,
+      links: holiday
+        ? []
+        : [
+            { label: "請假", url: `${site()}/leave` },
+            { label: "訂便當", url: `${site()}/bento` },
+          ],
     }),
   }
 }
