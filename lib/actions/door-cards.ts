@@ -135,7 +135,12 @@ async function locked(
       return fn(tx, () => (reader = true))
     })
   } catch (error) {
-    if (!reader) throw error
+    // Refused before the reader was called (lock busy, a card still being
+    // deleted, no such member): written down too, as an attempt.
+    if (!reader) {
+      await record(action, userId, card, error).catch(() => {})
+      throw error
+    }
     await record(action, userId, card, "db_failed").catch(() => {})
     throw new Error(AHEAD)
   }
@@ -351,6 +356,7 @@ export async function compareCards(userId: string | null) {
     let result: {
       readerCount: number
       suspect: boolean
+      partial: boolean
       synced: number
       missing: string[]
       deleting: string[]
@@ -372,6 +378,9 @@ export async function compareCards(userId: string | null) {
         const deleted = deleting.filter((row) => !onReader.has(row.cardId))
         const extra = reader.cards.filter((card) => !listed.has(card.card_id))
         const suspect = reader.count > SUSPECT_COUNT
+        // The reader can claim more cards than it managed to list; then a
+        // card left out of the listing proves nothing.
+        const partial = reader.cards.length !== reader.count
         const ids = (list: { cardId: string }[]) => list.map((r) => r.cardId)
         // A damaged table says nothing about which cards are there.
         if (!suspect) {
@@ -380,14 +389,12 @@ export async function compareCards(userId: string | null) {
               .update(doorCards)
               .set({ syncState: "synced", lastSeenAt: new Date() })
               .where(inArray(doorCards.cardId, ids(synced)))
-          if (missing.length > 0)
+          if (missing.length > 0 && !partial)
             await tx
               .update(doorCards)
               .set({ syncState: "missing" })
               .where(inArray(doorCards.cardId, ids(missing)))
-          // Only a full listing proves a card gone: the reader can claim
-          // more cards than it managed to list.
-          if (deleted.length > 0 && reader.cards.length === reader.count)
+          if (deleted.length > 0 && !partial)
             await tx
               .delete(doorCards)
               .where(inArray(doorCards.cardId, ids(deleted)))
@@ -395,10 +402,11 @@ export async function compareCards(userId: string | null) {
         return {
           readerCount: reader.count,
           suspect,
+          partial,
           synced: synced.length,
           missing: ids(missing),
           deleting: ids(
-            suspect || reader.cards.length !== reader.count
+            suspect || partial
               ? deleting
               : deleting.filter((r) => onReader.has(r.cardId))
           ),
@@ -426,7 +434,7 @@ export const compareDoorCards = defineAction({
   admin: "door",
   title: "與卡機比對",
   description:
-    "Reads the door reader's card table and compares it with the card list: marks each listed card synced or missing, and returns the reader's cards the list lacks (extra). suspect means the reader claims an impossible count (table damage); then nothing is marked. Door admins only. Also runs by itself every morning.",
+    "Reads the door reader's card table and compares it with the card list: marks each listed card synced or missing, and returns the reader's cards the list lacks (extra). suspect means the reader claims an impossible count (table damage); then nothing is marked. partial means the reader listed fewer cards than it counts; then no card is marked missing or confirmed deleted, and missing and deleting are only the cards it left out. Door admins only. Also runs by itself every morning.",
   kind: "mutation",
   input: z.object({}),
   run: (actor) => compareCards(actor.userId),
