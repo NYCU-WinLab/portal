@@ -9,6 +9,7 @@ import {
   paperTagLinks,
   papers,
   paperTags,
+  showPresentedPapers,
   user,
 } from "@/lib/db/schema"
 import { taipeiToday } from "@/lib/leave-dates"
@@ -17,12 +18,15 @@ export const listPapers = defineAction({
   name: "list_papers",
   title: "論文清單",
   description:
-    "The papers a presenter may choose from: id, title, link, venue, tags, and every week that uses it (date, presenter, past true when already presented, false when chosen for an upcoming week). A regular week's paper must be one of these; pass its id to update_my_lab_meeting (the presenter) or update_lab_meeting (an admin). tagIds keeps only papers with any of those tags.",
+    "The papers a presenter may choose from: id, title, link, venue, tags, and every week that uses it (date, presenter, past true when already presented, false when chosen for an upcoming week). A regular week's paper must be one of these; pass its id to update_my_lab_meeting (the presenter) or update_lab_meeting (an admin). tagIds keeps only papers with any of those tags. presented=false leaves out papers already presented, true keeps them; left out, it follows showPresented, the member's own choice on the paper list (hidden by default).",
   kind: "query",
-  input: z.object({ tagIds: z.array(z.uuid()).default([]) }),
-  run: async (_actor, { tagIds }) => {
+  input: z.object({
+    tagIds: z.array(z.uuid()).default([]),
+    presented: z.boolean().optional(),
+  }),
+  run: async (actor, { tagIds, presented }) => {
     const today = taipeiToday()
-    const [rows, links, uses] = await Promise.all([
+    const [rows, links, uses, [shows]] = await Promise.all([
       db
         .select({
           id: papers.id,
@@ -51,8 +55,15 @@ export const listPapers = defineAction({
         .leftJoin(user, eq(user.id, meetings.presenterId))
         .where(sql`${meetings.paperId} is not null`)
         .orderBy(asc(meetings.date)),
+      db
+        .select({ userId: showPresentedPapers.userId })
+        .from(showPresentedPapers)
+        .where(eq(showPresentedPapers.userId, actor.userId)),
     ])
+    const showPresented = !!shows
+    const keepPresented = presented ?? showPresented
     return {
+      showPresented,
       papers: rows
         .map((paper) => ({
           ...paper,
@@ -69,10 +80,32 @@ export const listPapers = defineAction({
         }))
         .filter(
           (paper) =>
-            tagIds.length === 0 ||
-            paper.tags.some((tag) => tagIds.includes(tag.id))
+            (tagIds.length === 0 ||
+              paper.tags.some((tag) => tagIds.includes(tag.id))) &&
+            (keepPresented || !paper.uses.some((use) => use.past))
         ),
     }
+  },
+})
+
+export const setShowPresentedPapers = defineAction({
+  name: "set_show_presented_papers",
+  title: "顯示報告過的論文",
+  description:
+    "The signed-in member's own choice on the paper list: show=true also lists papers already presented, show=false (the default) hides them. It is what list_papers follows when called without presented.",
+  kind: "mutation",
+  input: z.object({ show: z.boolean() }),
+  run: async (actor, { show }) => {
+    if (show)
+      await db
+        .insert(showPresentedPapers)
+        .values({ userId: actor.userId })
+        .onConflictDoNothing()
+    else
+      await db
+        .delete(showPresentedPapers)
+        .where(eq(showPresentedPapers.userId, actor.userId))
+    return { show }
   },
 })
 

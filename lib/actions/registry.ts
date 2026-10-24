@@ -133,6 +133,7 @@ import {
   listPapers,
   listPaperTags,
   renamePaperTag,
+  setShowPresentedPapers,
   updatePaper,
 } from "@/lib/actions/papers"
 import {
@@ -305,6 +306,7 @@ export const actionGroups: { app: ApiApp | null; actions: Action[] }[] = [
       updateMyLabMeeting,
       listPapers,
       listPaperTags,
+      setShowPresentedPapers,
       listPresenters,
       listLabMeetingStats,
       generateSemester,

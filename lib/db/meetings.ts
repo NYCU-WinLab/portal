@@ -59,6 +59,15 @@ export const paperTagLinks = pgTable(
   (table) => [primaryKey({ columns: [table.paperId, table.tagId] })]
 )
 
+// Members who chose to see papers already presented on the paper list. No
+// row is the default: presented papers are hidden.
+export const showPresentedPapers = pgTable("show_presented_papers", {
+  userId: uuid()
+    .primaryKey()
+    .references(() => user.id, { onDelete: "cascade" }),
+  createdAt: timestamp({ withTimezone: true }).defaultNow().notNull(),
+})
+
 // The first week of classes of each semester, one per semester window
 // (lib/semester.ts), and how many weeks of classes it has, both as the admin
 // set them when generating it. Week labels are counted from them: 第 1 週 to

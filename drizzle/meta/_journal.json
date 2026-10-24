@@ -295,6 +295,13 @@
       "when": 1792836176651,
       "tag": "0041_door_sliding_window",
       "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1792836699116,
+      "tag": "0042_show_presented_papers",
+      "breakpoints": true
     }
   ]
 }
