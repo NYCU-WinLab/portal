@@ -664,20 +664,20 @@ export const bookMeeting = defineAction({
               input.allow_paid
             )
         const booking = await placeBooking({
-        date: input.date,
-        startTime: input.start_time,
-        endTime: input.end_time,
-        room: room?.room ?? null,
-        title: composeTopic(prefix, input.title),
-        attendees,
-        organizer,
-        // Every portal meeting gets a recording to look back at.
-        online: true,
-        meetingPrefix: prefix,
-        groupName: group,
-        agenda: input.agenda || null,
-        ...epic,
-      })
+          date: input.date,
+          startTime: input.start_time,
+          endTime: input.end_time,
+          room: room?.room ?? null,
+          title: composeTopic(prefix, input.title),
+          attendees,
+          organizer,
+          // Every portal meeting gets a recording to look back at.
+          online: true,
+          meetingPrefix: prefix,
+          groupName: group,
+          agenda: input.agenda || null,
+          ...epic,
+        })
         return { booking, room }
       }
     )
