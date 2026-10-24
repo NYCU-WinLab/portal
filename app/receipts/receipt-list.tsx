@@ -12,6 +12,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
 import type { Receipt } from "@/lib/actions/receipts"
 import { depositAccounts, receiptStatuses } from "@/lib/receipts"
 
@@ -106,42 +114,58 @@ export function ReceiptList({
       {shown.length === 0 ? (
         <EmptyState noun="收據" />
       ) : (
-        <ul key={`${status}-${project}`} className="flex stagger-rise flex-col">
-          {shown.map((receipt) => (
-            <li
-              key={receipt.id}
-              className="flex min-h-14 items-center gap-4 border-b border-border py-3"
-            >
-              <span className="flex min-w-0 flex-1 flex-col">
-                <a
-                  href={`/receipts/files/${receipt.id}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="truncate underline-offset-4 hover:underline"
-                >
-                  {receipt.name}
-                </a>
-                <span className="truncate text-muted-foreground">
-                  {[
-                    receipt.project,
-                    receipt.depositAccount &&
-                      depositAccounts[receipt.depositAccount],
-                    receipt.uploader,
-                    day(receipt.createdAt),
-                  ]
-                    .filter(Boolean)
-                    .join("，")}
-                </span>
-              </span>
-              {receipt.status === "approved" && (
-                <Badge variant="muted">{receiptStatuses.approved}</Badge>
-              )}
-              <div className="flex shrink-0 gap-1">
-                <ReceiptActions receipt={receipt} projects={projects} />
-              </div>
-            </li>
-          ))}
-        </ul>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>名稱</TableHead>
+              <TableHead>計畫</TableHead>
+              <TableHead>帳戶</TableHead>
+              <TableHead>上傳者</TableHead>
+              <TableHead>日期</TableHead>
+              <TableHead>狀態</TableHead>
+              <TableHead>
+                <span className="sr-only">操作</span>
+              </TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody key={`${status}-${project}`} className="stagger-rise">
+            {shown.map((receipt) => (
+              <TableRow key={receipt.id}>
+                <TableCell className="max-w-80 truncate">
+                  <a
+                    href={`/receipts/files/${receipt.id}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="underline-offset-4 hover:underline"
+                  >
+                    {receipt.name}
+                  </a>
+                </TableCell>
+                <TableCell>{receipt.project}</TableCell>
+                <TableCell>
+                  {receipt.depositAccount &&
+                    depositAccounts[receipt.depositAccount]}
+                </TableCell>
+                <TableCell>{receipt.uploader}</TableCell>
+                <TableCell className="tabular-nums">
+                  {day(receipt.createdAt)}
+                </TableCell>
+                <TableCell>
+                  {receipt.status === "approved" ? (
+                    <Badge variant="muted">{receiptStatuses.approved}</Badge>
+                  ) : (
+                    receiptStatuses.pending
+                  )}
+                </TableCell>
+                <TableCell>
+                  <div className="flex justify-end gap-1">
+                    <ReceiptActions receipt={receipt} projects={projects} />
+                  </div>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
       )}
     </div>
   )
