@@ -519,14 +519,22 @@ const ORPHAN_MINUTES = 10
  * Every scheduler tick: asks again for what a restart or a failed call
  * left undone. A booking that never asked for its Teams meeting asks now,
  * and a cancelled booking whose Teams meeting is still up asks to take it
- * down again, up to CANCEL_TRIES times. Only bookings from today on: a
- * past meeting has already happened.
+ * down again, up to CANCEL_TRIES times. Only meetings not over yet: a
+ * past one has already happened.
  */
 export async function reconcileTeams() {
   if (!meetingPipelineConfigured()) return
   const today = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Taipei",
   }).format(new Date())
+  const now = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Taipei",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(new Date())
+  // Not over yet: a later day, or today before its end.
+  const ahead = sql`(${roomBookings.date} > ${today} or (${roomBookings.date} = ${today} and ${roomBookings.endTime} > ${now}))`
   const asked = sql`exists (select 1 from ${roomMeetingRequests} where ${roomMeetingRequests.bookingId} = ${roomBookings.id} and ${roomMeetingRequests.kind} = 'create')`
   const orphans = await db
     .select()
@@ -535,7 +543,7 @@ export async function reconcileTeams() {
       and(
         eq(roomBookings.status, "booked"),
         eq(roomBookings.online, true),
-        sql`${roomBookings.date} >= ${today}`,
+        ahead,
         lt(
           roomBookings.createdAt,
           sql`now() - make_interval(mins => ${ORPHAN_MINUTES})`
@@ -545,8 +553,7 @@ export async function reconcileTeams() {
     )
   for (const booking of orphans)
     await askIf("create", async (tx) => {
-      // Locked and checked again: two processes, or a late placeBooking,
-      // ask once.
+      // Locked and checked again, so two runs of this ask once.
       const [row] = await tx
         .select()
         .from(roomBookings)
@@ -571,8 +578,8 @@ export async function reconcileTeams() {
       and(
         eq(roomBookings.status, "cancelled"),
         eq(roomBookings.online, true),
-        sql`${roomBookings.date} >= ${today}`,
-        sql`exists (select 1 from ${roomMeetingRequests} where ${roomMeetingRequests.bookingId} = ${roomBookings.id} and ${roomMeetingRequests.kind} = 'create' and ${roomMeetingRequests.cancelId} is not null)`,
+        ahead,
+        sql`exists (select 1 from ${roomMeetingRequests} where ${roomMeetingRequests.bookingId} = ${roomBookings.id} and ${roomMeetingRequests.kind} = 'create' and ${roomMeetingRequests.cancelId} is not null and ${roomMeetingRequests.messageId} is not null)`,
         sql`not exists (select 1 from ${roomMeetingRequests} where ${roomMeetingRequests.bookingId} = ${roomBookings.id} and ${roomMeetingRequests.kind} = 'cancel' and ${roomMeetingRequests.status} <> 'failed')`
       )
     )
@@ -657,6 +664,18 @@ export async function sweepMeetingRequests() {
     )
       continue
     await db.transaction(async (tx) => {
+      // Claimed first, so two sweeps at once mail it once.
+      const [claimed] = await tx
+        .update(roomMeetingRequests)
+        .set({ notifiedAt: sql`now()` })
+        .where(
+          and(
+            eq(roomMeetingRequests.id, row.id),
+            isNull(roomMeetingRequests.notifiedAt)
+          )
+        )
+        .returning({ id: roomMeetingRequests.id })
+      if (!claimed) return
       // A failed creation for a booking since cancelled leaves nothing to do.
       if (row.kind === "cancel" || row.bookingStatus === "booked") {
         const reason = `${MEETING_FAILURES[row.errorCode ?? ""] ?? row.errorCode}（${row.errorMessage ?? ""}）`
@@ -692,10 +711,6 @@ export async function sweepMeetingRequests() {
           }),
         })
       }
-      await tx
-        .update(roomMeetingRequests)
-        .set({ notifiedAt: sql`now()` })
-        .where(eq(roomMeetingRequests.id, row.id))
     })
   }
 }

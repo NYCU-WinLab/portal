@@ -447,7 +447,7 @@ export async function runDailyRooms() {
         await bookOccurrence(series, date, date === to || date === from).catch(
           (error) => emitErrorLog(error, { "room_series.id": series.id, date })
         )
-  await sweepMeetingRequests()
+  // The tick sweeps the Teams requests on its own, every 10 minutes.
   await announceChange("room_daily_run").catch(() => {})
 }
 
