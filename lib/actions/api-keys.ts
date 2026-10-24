@@ -4,7 +4,7 @@ import { and, count, desc, eq, isNull, lt, or, sql } from "drizzle-orm"
 import { z } from "zod"
 
 import { isAdmin } from "@/lib/actions/authz"
-import { defineAction } from "@/lib/actions/define"
+import { type Actor, defineAction } from "@/lib/actions/define"
 import { apiAppKeys, type ApiApp } from "@/lib/api-apps"
 import { isLabMember, isLabMemberNow } from "@/lib/auth/member"
 import { db } from "@/lib/db"
@@ -14,7 +14,7 @@ import { apiKeys, user } from "@/lib/db/schema"
 // in the apps the key names. A key is "wak_" and 43 base64url characters
 // (32 random bytes); keys made as door tokens start "wdt_" and still work.
 // Only its SHA-256 is stored. It has no expiry: it works until its owner or
-// a portal admin revokes it, or the owner leaves the lab.
+// a portal or door admin revokes it, or the owner leaves the lab.
 
 const PREFIX = "wak_"
 const TOKEN = /^w(ak|dt)_[A-Za-z0-9_-]{43}$/
@@ -24,18 +24,22 @@ const MAX_PER_MEMBER = 10
 const MIN_GAP_SECONDS = 5
 const PER_HOUR = 30
 
+// Door admins kept the power to list and revoke anyone's door tokens.
+const keyAdmin = async (actor: Actor) =>
+  (await isAdmin(actor, "portal")) || (await isAdmin(actor, "door"))
+
 const hash = (token: string) => createHash("sha256").update(token).digest("hex")
 
 export const listApiKeys = defineAction({
   name: "list_api_keys",
   title: "API 金鑰",
   description:
-    "The signed-in member's active API keys: id, name, the apps each may use, the first characters of the key, when it was made and last used. Never the key itself. all=true lists every member's active keys with the owner's name, for portal admins only.",
+    "The signed-in member's active API keys: id, name, the apps each may use, the first characters of the key, when it was made and last used. Never the key itself. all=true lists every member's active keys with the owner's name, for portal and door admins only.",
   kind: "query",
   input: z.object({ all: z.boolean().default(false) }),
   run: async (actor, { all }) => {
-    if (all && !(await isAdmin(actor, "portal")))
-      throw new Error("只有 Portal 管理員能看所有人的金鑰")
+    if (all && !(await keyAdmin(actor)))
+      throw new Error("只有 Portal 或門禁管理員能看所有人的金鑰")
     const keys = await db
       .select({
         id: apiKeys.id,
@@ -107,11 +111,11 @@ export const revokeApiKey = defineAction({
   name: "revoke_api_key",
   title: "撤銷 API 金鑰",
   description:
-    "Revokes one API key by id so it can no longer be used. A member revokes their own; a portal admin can revoke anyone's. Fails when the key is not found or already revoked.",
+    "Revokes one API key by id so it can no longer be used. A member revokes their own; a portal or door admin can revoke anyone's, so a leaked door key can be stopped. Fails when the key is not found or already revoked.",
   kind: "mutation",
   input: z.object({ id: z.uuid() }),
   run: async (actor, { id }) => {
-    const admin = await isAdmin(actor, "portal")
+    const admin = await keyAdmin(actor)
     const [revoked] = await db
       .update(apiKeys)
       .set({ revokedAt: new Date(), revokedBy: actor.userId })

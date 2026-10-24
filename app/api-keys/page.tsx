@@ -4,7 +4,7 @@ import { PortalShell } from "@/components/portal-shell"
 import { listApiKeys } from "@/lib/actions/api-keys"
 import { isAdmin } from "@/lib/actions/authz"
 import { runAction } from "@/lib/actions/define"
-import { apiApps, type ApiApp, curlLine } from "@/lib/api-apps"
+import { apiApps, type ApiApp, curlLine, listLine } from "@/lib/api-apps"
 import { requireActor } from "@/lib/auth/session"
 
 import { CreateKey, RevokeKey } from "./key-forms"
@@ -61,7 +61,8 @@ function KeyList({ keys, owner }: { keys: Key[]; owner: boolean }) {
 
 export default async function ApiKeysPage() {
   const actor = await requireActor("/api-keys")
-  const admin = await isAdmin(actor, "portal")
+  const admin =
+    (await isAdmin(actor, "portal")) || (await isAdmin(actor, "door"))
   const [{ keys: mine }, everyone] = await Promise.all([
     runAction(listApiKeys, actor, {}),
     admin ? runAction(listApiKeys, actor, { all: true }) : null,
@@ -77,8 +78,7 @@ export default async function ApiKeysPage() {
             {curlLine("wak_…", "now_playing")}
           </p>
           <p className="font-mono break-all text-muted-foreground select-all">
-            curl -H &quot;Authorization: Bearer wak_…&quot;
-            https://portal.winlab.tw/api/actions
+            {listLine("wak_…")}
           </p>
         </section>
         <section className="flex flex-col gap-2">

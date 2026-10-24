@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
-import { apiApps, apiAppKeys, curlLine, type ApiApp } from "@/lib/api-apps"
+import { apiApps, apiAppKeys, listLine, type ApiApp } from "@/lib/api-apps"
 import { report } from "@/lib/report"
 
 import { createApiKeyAction, revokeApiKeyAction } from "./actions"
@@ -86,7 +86,7 @@ export function CreateKey() {
             拿到金鑰的人都能用你的名字使用選的 app，不要放進 git 或傳給別人。
           </p>
           <p className="font-mono break-all text-muted-foreground select-all">
-            {token && curlLine(token)}
+            {token && listLine(token)}
           </p>
         </DialogContent>
       </Dialog>

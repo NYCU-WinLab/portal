@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm"
 import {
   index,
   integer,
@@ -14,8 +15,11 @@ import { user } from "@/lib/db/auth-schema"
 // member, but only in the apps it names (lib/api-apps.ts). Only the SHA-256
 // of the key is kept; prefix is its first characters, to tell keys apart on
 // /api-keys. A revoked key stays, for the door log.
+// The table is still door_tokens, where door tokens lived: the new columns
+// only add to it, so a rollback reads the same keys and revocations. Its
+// rename to api_keys is a later, separate change.
 export const apiKeys = pgTable(
-  "api_keys",
+  "door_tokens",
   {
     id: uuid().defaultRandom().primaryKey(),
     userId: uuid()
@@ -24,7 +28,12 @@ export const apiKeys = pgTable(
     name: text().notNull(),
     tokenHash: text().notNull().unique(),
     prefix: text().notNull(),
-    apps: text().array().notNull(),
+    // Rows from before API keys, and keys an older release makes, are
+    // door keys: they only open the door.
+    apps: text()
+      .array()
+      .notNull()
+      .default(sql`'{door}'::text[]`),
     createdAt: timestamp({ withTimezone: true }).defaultNow().notNull(),
     lastUsedAt: timestamp({ withTimezone: true }),
     // The door's rate limit: openings claimed since windowStartedAt, reset

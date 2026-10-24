@@ -1,5 +1,5 @@
 {
-  "id": "61994ed0-6ca2-4813-a79b-28d226b26bac",
+  "id": "91c70eac-c11d-420c-8892-89a0e6997ea4",
   "prevId": "c9b484f7-7d5b-4aac-895d-98947999a180",
   "version": "7",
   "dialect": "postgresql",
@@ -3669,8 +3669,8 @@
       },
       "isRLSEnabled": false
     },
-    "public.api_keys": {
-      "name": "api_keys",
+    "public.door_tokens": {
+      "name": "door_tokens",
       "schema": "",
       "columns": {
         "id": {
@@ -3708,7 +3708,8 @@
           "name": "apps",
           "type": "text[]",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "default": "'{door}'::text[]"
         },
         "created_at": {
           "name": "created_at",
@@ -3756,8 +3757,8 @@
         }
       },
       "indexes": {
-        "api_keys_user_id_index": {
-          "name": "api_keys_user_id_index",
+        "door_tokens_user_id_index": {
+          "name": "door_tokens_user_id_index",
           "columns": [
             {
               "expression": "user_id",
@@ -3773,9 +3774,9 @@
         }
       },
       "foreignKeys": {
-        "api_keys_user_id_users_id_fk": {
-          "name": "api_keys_user_id_users_id_fk",
-          "tableFrom": "api_keys",
+        "door_tokens_user_id_users_id_fk": {
+          "name": "door_tokens_user_id_users_id_fk",
+          "tableFrom": "door_tokens",
           "tableTo": "users",
           "columnsFrom": [
             "user_id"
@@ -3786,9 +3787,9 @@
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "api_keys_revoked_by_users_id_fk": {
-          "name": "api_keys_revoked_by_users_id_fk",
-          "tableFrom": "api_keys",
+        "door_tokens_revoked_by_users_id_fk": {
+          "name": "door_tokens_revoked_by_users_id_fk",
+          "tableFrom": "door_tokens",
           "tableTo": "users",
           "columnsFrom": [
             "revoked_by"
@@ -3802,8 +3803,8 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
-        "api_keys_tokenHash_unique": {
-          "name": "api_keys_tokenHash_unique",
+        "door_tokens_tokenHash_unique": {
+          "name": "door_tokens_tokenHash_unique",
           "nullsNotDistinct": false,
           "columns": [
             "token_hash"
@@ -4169,10 +4170,10 @@
           "onDelete": "set null",
           "onUpdate": "no action"
         },
-        "door_events_token_id_api_keys_id_fk": {
-          "name": "door_events_token_id_api_keys_id_fk",
+        "door_events_token_id_door_tokens_id_fk": {
+          "name": "door_events_token_id_door_tokens_id_fk",
           "tableFrom": "door_events",
-          "tableTo": "api_keys",
+          "tableTo": "door_tokens",
           "columnsFrom": [
             "token_id"
           ],
@@ -4608,139 +4609,6 @@
           "value": "char_length(\"door_sounds\".\"label\") between 1 and 40"
         }
       },
-      "isRLSEnabled": false
-    },
-    "public.door_tokens": {
-      "name": "door_tokens",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "user_id": {
-          "name": "user_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "name": {
-          "name": "name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "token_hash": {
-          "name": "token_hash",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "prefix": {
-          "name": "prefix",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "last_used_at": {
-          "name": "last_used_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "window_started_at": {
-          "name": "window_started_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "window_count": {
-          "name": "window_count",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "revoked_at": {
-          "name": "revoked_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "revoked_by": {
-          "name": "revoked_by",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {
-        "door_tokens_user_id_index": {
-          "name": "door_tokens_user_id_index",
-          "columns": [
-            {
-              "expression": "user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "door_tokens_user_id_users_id_fk": {
-          "name": "door_tokens_user_id_users_id_fk",
-          "tableFrom": "door_tokens",
-          "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "door_tokens_revoked_by_users_id_fk": {
-          "name": "door_tokens_revoked_by_users_id_fk",
-          "tableFrom": "door_tokens",
-          "tableTo": "users",
-          "columnsFrom": [
-            "revoked_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "door_tokens_tokenHash_unique": {
-          "name": "door_tokens_tokenHash_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "token_hash"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {},
       "isRLSEnabled": false
     },
     "public.door_voice_clips": {

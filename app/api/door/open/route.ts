@@ -9,6 +9,12 @@ export async function POST(request: Request) {
   const holder = await authenticate(request)
   if (holder instanceof Response) return holder
   const response = await runWithKey(request, holder, "open_door", {})
+  // A relay that failed (400 from the action) stays a 502, as before.
+  if (response.status === 400)
+    return new Response(response.body, {
+      status: 502,
+      headers: response.headers,
+    })
   if (!response.ok) return response
   return Response.json(
     { opened: true },

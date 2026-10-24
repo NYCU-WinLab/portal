@@ -23,31 +23,6 @@ import { user } from "@/lib/db/auth-schema"
 // a press, the card holder's for a swipe ("卡片" when the card had none).
 // A card swipe's at is the reader's clock; ok is null for reader events that
 // are neither a grant nor a known denial.
-// The door tokens before they became API keys (api_keys, same ids). Kept
-// one release so a rollback finds its table; dropped in the next.
-export const doorTokens = pgTable(
-  "door_tokens",
-  {
-    id: uuid().defaultRandom().primaryKey(),
-    userId: uuid()
-      .notNull()
-      .references(() => user.id, { onDelete: "cascade" }),
-    name: text().notNull(),
-    tokenHash: text().notNull().unique(),
-    prefix: text().notNull(),
-    createdAt: timestamp({ withTimezone: true }).defaultNow().notNull(),
-    lastUsedAt: timestamp({ withTimezone: true }),
-    // The rate limit: openings claimed since windowStartedAt, reset an hour
-    // after it. Claimed before the relay is called, so a slow door cannot
-    // let extra calls through.
-    windowStartedAt: timestamp({ withTimezone: true }),
-    windowCount: integer().default(0).notNull(),
-    revokedAt: timestamp({ withTimezone: true }),
-    revokedBy: uuid().references(() => user.id, { onDelete: "set null" }),
-  },
-  (table) => [index().on(table.userId)]
-)
-
 export const doorEvents = pgTable(
   "door_events",
   {
