@@ -17,6 +17,12 @@ export async function announceChange(action: string) {
   await db.execute(sql`select pg_notify(${CHANNEL}, ${action})`)
 }
 
+/** Progress of a long job, as "progress:<topic>": only the pages that show
+ * that job refresh on it (ProgressRefresh), not every open page. */
+export async function announceProgress(topic: string) {
+  await announceChange(`progress:${topic}`)
+}
+
 const changes = new EventEmitter()
 changes.setMaxListeners(0)
 let listening: Promise<void> | null = null

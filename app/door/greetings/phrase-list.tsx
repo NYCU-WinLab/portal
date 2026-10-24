@@ -163,7 +163,15 @@ export function AddPhrase({ sample }: { sample: string }) {
   return <PhraseForm sample={sample} trigger={<Button>新增</Button>} />
 }
 
-function PhraseRow({ phrase, sample }: { phrase: DoorPhrase; sample: string }) {
+function PhraseRow({
+  phrase,
+  sample,
+  recording,
+}: {
+  phrase: DoorPhrase
+  sample: string
+  recording?: string
+}) {
   return (
     <li className="flex min-h-14 items-center gap-4 border-b border-border py-2">
       <span className="min-w-0 flex-1 truncate">
@@ -171,6 +179,7 @@ function PhraseRow({ phrase, sample }: { phrase: DoorPhrase; sample: string }) {
         {sample}
         {phrase.after || "。"}
       </span>
+      {recording && <Badge variant="muted">{recording}</Badge>}
       <Label className="flex shrink-0 items-center gap-2 text-muted-foreground">
         啟用
         <Switch
@@ -216,10 +225,13 @@ export function PhraseList({
   phrases,
   now,
   sample,
+  recording,
 }: {
   phrases: DoorPhrase[]
   now: string[]
   sample: string
+  /** Phrase id to how far its clips in CC's voice are. */
+  recording: Record<string, string>
 }) {
   if (phrases.length === 0) return <EmptyState noun="問候語" />
   const groups = new Map<string, DoorPhrase[]>()
@@ -258,7 +270,12 @@ export function PhraseList({
             />
             <ul className="flex flex-col">
               {group.map((phrase) => (
-                <PhraseRow key={phrase.id} phrase={phrase} sample={sample} />
+                <PhraseRow
+                  key={phrase.id}
+                  phrase={phrase}
+                  sample={sample}
+                  recording={recording[phrase.id]}
+                />
               ))}
             </ul>
           </section>
