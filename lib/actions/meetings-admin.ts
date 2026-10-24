@@ -11,7 +11,6 @@ import {
 } from "drizzle-orm"
 import { z } from "zod"
 
-import { requireAdmin } from "@/lib/actions/authz"
 import { defineAction } from "@/lib/actions/define"
 import { cancelLabMeeting, releaseWeek } from "@/lib/actions/meetings-mail"
 import {
@@ -46,6 +45,7 @@ const time = z
 
 export const generateSemester = defineAction({
   name: "generate_semester",
+  admin: "meetings",
   title: "產生學期排程",
   description:
     "Admins only. Sets up a semester: start is its first week of classes, and weeks how many weeks of classes it has; every week's label is counted from them (第 1 週 to 第 <weeks> 週, 寒假 or 暑假 before and after); running it again for the same semester moves that start. Also adds one meeting a week, weeks rows from start, 7 days apart, skipping dates that already have one. Dates listed in holidays become holiday weeks with that reason. Presenters are not assigned; use fill_presenters after.",
@@ -63,7 +63,6 @@ export const generateSemester = defineAction({
       .default([]),
   }),
   run: async (actor, { start, weeks, holidays }) => {
-    await requireAdmin(actor, "meetings")
     const dates = Array.from({ length: weeks }, (_, week) =>
       addDays(start, week * 7)
     )
@@ -99,6 +98,7 @@ export const generateSemester = defineAction({
 
 export const addLabMeeting = defineAction({
   name: "add_lab_meeting",
+  admin: "meetings",
   title: "新增一週",
   description: `Admins only. Adds one meeting on date; its week label comes from the semester (generate_semester). kind is regular (default), thesis, speaker or holiday; holiday says why there is no meeting.`,
   kind: "mutation",
@@ -109,7 +109,6 @@ export const addLabMeeting = defineAction({
     title: optionalText(300),
   }),
   run: async (actor, { date, kind, holiday, title }) => {
-    await requireAdmin(actor, "meetings")
     if (kind === "holiday" && !holiday) throw new Error("請填放假原因")
     return changeSchedule(async (tx) => {
       const [added] = await tx
@@ -130,6 +129,7 @@ export const addLabMeeting = defineAction({
 
 export const updateLabMeeting = defineAction({
   name: "update_lab_meeting",
+  admin: "meetings",
   title: "編輯會議",
   description:
     "Admins only. Changes any part of one week: moves it to newDate, changes its kind, holiday reason, presenterId (a member id, or null to open the week), paperId (from list_papers, regular weeks only), title (thesis and speaker weeks), slides and recording links, notes, location and startsAt (HH:MM). Leave a field out to keep it.",
@@ -149,7 +149,6 @@ export const updateLabMeeting = defineAction({
     startsAt: time.optional(),
   }),
   run: async (actor, { date, newDate, ...input }) => {
-    await requireAdmin(actor, "meetings")
     return changeSchedule(async (tx) => {
       const meeting = await meetingOn(tx, date)
       const next = { ...meeting }
@@ -191,13 +190,13 @@ export const updateLabMeeting = defineAction({
 
 export const deleteLabMeeting = defineAction({
   name: "delete_lab_meeting",
+  admin: "meetings",
   title: "刪除一週",
   description:
     "Admins only. Removes the meeting on date with its questioners. Other weeks do not move.",
   kind: "mutation",
   input: z.object({ date: isoDate }),
   run: async (actor, { date }) => {
-    await requireAdmin(actor, "meetings")
     return changeSchedule(async (tx) => {
       const meeting = await meetingOn(tx, date)
       // Read before the delete unlinks the booking.
@@ -224,13 +223,13 @@ const swapped = [
 
 export const swapLabMeetings = defineAction({
   name: "swap_lab_meetings",
+  admin: "meetings",
   title: "交換兩週",
   description:
     "Admins only. Swaps who presents, and what, between two weeks of the same semester; dates, place and time stay. Holiday and speaker weeks cannot be swapped.",
   kind: "mutation",
   input: z.object({ first: isoDate, second: isoDate }),
   run: async (actor, { first, second }) => {
-    await requireAdmin(actor, "meetings")
     if (first === second) throw new Error("請選兩個不同的週")
     if (semesterOf(first).start !== semesterOf(second).start)
       throw new Error("只能交換同一學期的兩週")
@@ -251,13 +250,13 @@ export const swapLabMeetings = defineAction({
 
 export const fillPresenters = defineAction({
   name: "fill_presenters",
+  admin: "meetings",
   title: "自動排報告人",
   description:
     "Admins only. Fills every regular week from today on that has no presenter yet with presenters from the presenter list (list_presenters), in turn, starting after the last member already scheduled. Weeks someone already holds are left alone.",
   kind: "mutation",
   input: z.object({}),
-  run: async (actor) => {
-    await requireAdmin(actor, "meetings")
+  run: async () => {
     return changeSchedule(async (tx) => {
       const turn = (await presenterRoster(tx))
         .filter((row) => row.inRotation)
@@ -302,6 +301,7 @@ export const fillPresenters = defineAction({
 
 export const setQuestioners = defineAction({
   name: "set_questioners",
+  admin: "meetings",
   title: "指定提問人",
   description: `Admins only. Sets who asks questions on one week, up to ${QUESTIONERS_PER_WEEK} member ids. They become fixed picks the automatic assignment never moves; seats left empty are filled automatically. An empty list hands the whole week back to the automatic assignment.`,
   kind: "mutation",
@@ -312,7 +312,6 @@ export const setQuestioners = defineAction({
       .max(QUESTIONERS_PER_WEEK, `每週最多 ${QUESTIONERS_PER_WEEK} 位`),
   }),
   run: async (actor, { date, userIds }) => {
-    await requireAdmin(actor, "meetings")
     return changeSchedule(async (tx) => {
       const meeting = await meetingOn(tx, date)
       if (date < taipeiToday()) throw new Error(`${date} 已經過了`)

@@ -1,5 +1,6 @@
 import { requireMcpAuth } from "@better-auth/mcp"
 
+import { adminAppsOf } from "@/lib/actions/authz"
 import { auth, mcpResource } from "@/lib/auth"
 import { isLabMember } from "@/lib/auth/member"
 import { mcpHandler } from "@/lib/mcp/server"
@@ -40,7 +41,12 @@ export const POST = requireMcpAuth(
           .split(" ")
           .filter(Boolean),
         expiresAt: claims.exp,
-        extra: { userId: claims.sub },
+        extra: {
+          userId: claims.sub,
+          adminApps: [
+            ...(await adminAppsOf({ userId: claims.sub, via: "mcp" })),
+          ],
+        },
       },
     })
   },

@@ -1,7 +1,6 @@
 import { asc, eq, notInArray, sql } from "drizzle-orm"
 import { z } from "zod"
 
-import { requireAdmin } from "@/lib/actions/authz"
 import { defineAction } from "@/lib/actions/define"
 import { db } from "@/lib/db"
 import {
@@ -116,13 +115,13 @@ const values = (input: z.infer<typeof fields>, userId: string) => ({
 
 export const listDoorPhrases = defineAction({
   name: "list_door_phrases",
+  admin: "door",
   title: "門口問候語",
   description:
     'The door\'s pool of spoken greetings (door admins only): each phrase says before + member name + after (e.g. "晚安，" name "這麼晚來，很認真喔。") from starts_at to ends_at (HH:MM, Asia/Taipei, past midnight when ends_at <= starts_at) on the listed weekdays (1 Monday to 7 Sunday, the day the range starts). Phrases may share a time; at each opening the door picks one of the enabled phrases in force at random, and says "Hi <name>" when none is. first_visit phrases are said only on a member\'s first opening of the day (from 06:00) and win over the others then. now lists the ids of the phrases in force right now.',
   kind: "query",
   input: z.object({}),
-  run: async (actor) => {
-    await requireAdmin(actor, "door")
+  run: async () => {
     const rows = await db
       .select()
       .from(doorPhrases)
@@ -143,6 +142,7 @@ export const listDoorPhrases = defineAction({
 
 export const createDoorPhrase = defineAction({
   name: "create_door_phrase",
+  admin: "door",
   refreshesDoorPanel: true,
   title: "新增門口問候語",
   description:
@@ -150,7 +150,6 @@ export const createDoorPhrase = defineAction({
   kind: "mutation",
   input: fields,
   run: async (actor, input) => {
-    await requireAdmin(actor, "door")
     const row = await db.transaction((tx) =>
       save(tx, { ...values(input, actor.userId), createdBy: actor.userId })
     )
@@ -160,6 +159,7 @@ export const createDoorPhrase = defineAction({
 
 export const updateDoorPhrase = defineAction({
   name: "update_door_phrase",
+  admin: "door",
   refreshesDoorPanel: true,
   title: "修改門口問候語",
   description:
@@ -167,7 +167,6 @@ export const updateDoorPhrase = defineAction({
   kind: "mutation",
   input: fields.extend({ id: z.uuid("找不到這條問候語") }),
   run: async (actor, { id, ...input }) => {
-    await requireAdmin(actor, "door")
     const row = await db.transaction((tx) =>
       save(tx, values(input, actor.userId), id)
     )
@@ -177,6 +176,7 @@ export const updateDoorPhrase = defineAction({
 
 export const deleteDoorPhrase = defineAction({
   name: "delete_door_phrase",
+  admin: "door",
   refreshesDoorPanel: true,
   title: "刪除門口問候語",
   description:
@@ -184,7 +184,6 @@ export const deleteDoorPhrase = defineAction({
   kind: "mutation",
   input: z.object({ id: z.uuid("找不到這條問候語") }),
   run: async (actor, { id }) => {
-    await requireAdmin(actor, "door")
     const [row] = await db
       .delete(doorPhrases)
       .where(eq(doorPhrases.id, id))
@@ -196,13 +195,13 @@ export const deleteDoorPhrase = defineAction({
 
 export const listDoorVoiceClips = defineAction({
   name: "list_door_voice_clips",
+  admin: "door",
   title: "門口語音",
   description:
     'The clips in CC\'s cloned voice that the door speaks greetings with, one per text ("晚安，", "詠翔，", "詠翔。"), and missing: the texts the door needs that have no clip yet (the voice job on furnace makes them every 10 minutes). Door admins only.',
   kind: "query",
   input: z.object({}),
-  run: async (actor) => {
-    await requireAdmin(actor, "door")
+  run: async () => {
     const [rows, { missing }] = await Promise.all([
       db
         .select({
@@ -220,13 +219,13 @@ export const listDoorVoiceClips = defineAction({
 
 export const getDoorVoiceClip = defineAction({
   name: "get_door_voice_clip",
+  admin: "door",
   title: "試聽門口語音",
   description:
     "One voice clip as base64 with its content type, to listen to it. Door admins only.",
   kind: "query",
   input: z.object({ id: z.uuid("找不到這段語音") }),
   run: async (actor, { id }) => {
-    await requireAdmin(actor, "door")
     const clip = await panelVoiceClip(id)
     if (!clip) throw new Error("找不到這段語音")
     return { contentType: clip.type, base64: clip.bytes.toString("base64") }
@@ -235,6 +234,7 @@ export const getDoorVoiceClip = defineAction({
 
 export const deleteDoorVoiceClip = defineAction({
   name: "delete_door_voice_clip",
+  admin: "door",
   refreshesDoorPanel: true,
   title: "重錄門口語音",
   description:
@@ -242,7 +242,6 @@ export const deleteDoorVoiceClip = defineAction({
   kind: "mutation",
   input: z.object({ id: z.uuid("找不到這段語音") }),
   run: async (actor, { id }) => {
-    await requireAdmin(actor, "door")
     const [row] = await db
       .delete(doorVoiceClips)
       .where(eq(doorVoiceClips.id, id))

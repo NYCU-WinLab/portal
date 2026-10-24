@@ -1,7 +1,6 @@
 import { and, asc, desc, eq, isNotNull, sql } from "drizzle-orm"
 import { z } from "zod"
 
-import { requireAdmin } from "@/lib/actions/authz"
 import { defineAction } from "@/lib/actions/define"
 import { queueMail } from "@/lib/actions/mail"
 import { mailBody } from "@/lib/mail-body"
@@ -53,6 +52,7 @@ export type Receipt = {
 
 export const listReceipts = defineAction({
   name: "list_receipts",
+  admin: "receipts",
   title: "收據",
   description:
     "Reimbursement receipts, for receipts admins only: pending (審核中) first, then approved (完成), newest first within each, with name, funding project, deposit account (post = 郵局, esun = 玉山), uploader and file size. Also returns every project used so far. status and project filter the list.",
@@ -62,7 +62,6 @@ export const listReceipts = defineAction({
     project: z.string().trim().min(1).optional(),
   }),
   run: async (actor, filter) => {
-    await requireAdmin(actor, "receipts")
     const [rows, projects] = await Promise.all([
       db
         .select(fields)
@@ -93,13 +92,13 @@ export const listReceipts = defineAction({
 
 export const getReceiptFile = defineAction({
   name: "get_receipt_file",
+  admin: "receipts",
   title: "下載收據",
   description:
     "One receipt's PDF as base64 with a filename made from its name, for receipts admins only.",
   kind: "query",
   input: z.object({ id }),
   run: async (actor, { id }) => {
-    await requireAdmin(actor, "receipts")
     const [row] = await db
       .select({ name: receipts.name, data: receipts.data })
       .from(receipts)
@@ -115,6 +114,7 @@ export const getReceiptFile = defineAction({
 
 export const uploadReceipt = defineAction({
   name: "upload_receipt",
+  admin: "receipts",
   title: "上傳收據",
   description: `Uploads one receipt, for receipts admins only: a PDF or JPEG as base64 (a JPEG becomes a one-page PDF; convert PNGs to JPEG first), up to ${RECEIPT_FILE_LIMIT / 1024 / 1024} MB. It starts as pending (審核中) and accounting is mailed a notice. depositAccount: post = 郵局, esun = 玉山; project is the funding project, reuse one from list_receipts. Ask the member for name, project and account when not given; never invent them.`,
   kind: "mutation",
@@ -126,7 +126,6 @@ export const uploadReceipt = defineAction({
     base64: z.base64("檔案要是 base64"),
   }),
   run: async (actor, input) => {
-    await requireAdmin(actor, "receipts")
     const raw = Buffer.from(input.base64, "base64")
     if (raw.length > RECEIPT_FILE_LIMIT)
       throw new Error(
@@ -180,6 +179,7 @@ export const uploadReceipt = defineAction({
 
 export const updateReceipt = defineAction({
   name: "update_receipt",
+  admin: "receipts",
   title: "修改收據",
   description:
     "Changes a receipt's name, funding project, deposit account (post = 郵局, esun = 玉山) or status (pending = 審核中, approved = 完成), for receipts admins only; fields left out stay as they are. The file itself cannot change: delete and upload again.",
@@ -192,7 +192,6 @@ export const updateReceipt = defineAction({
     status: status.optional(),
   }),
   run: async (actor, { id, ...changes }) => {
-    await requireAdmin(actor, "receipts")
     const [updated] = await db
       .update(receipts)
       .set({ ...changes, updatedAt: sql`now()` })
@@ -205,13 +204,13 @@ export const updateReceipt = defineAction({
 
 export const deleteReceipt = defineAction({
   name: "delete_receipt",
+  admin: "receipts",
   title: "刪除收據",
   description:
     "Deletes a receipt and its file, for receipts admins only. The notice already mailed to accounting stays sent.",
   kind: "mutation",
   input: z.object({ id }),
   run: async (actor, { id }) => {
-    await requireAdmin(actor, "receipts")
     const [removed] = await db
       .delete(receipts)
       .where(eq(receipts.id, id))

@@ -1,7 +1,6 @@
 import { asc, eq, sql } from "drizzle-orm"
 import { z } from "zod"
 
-import { requireAdmin } from "@/lib/actions/authz"
 import { defineAction } from "@/lib/actions/define"
 import { db } from "@/lib/db"
 import { ipUserChanges, ipUserEntries, ipUserSettings } from "@/lib/db/schema"
@@ -16,13 +15,13 @@ const host = (inetValue: string) => inetValue.split("/")[0]
 
 export const listIpUsers = defineAction({
   name: "list_ip_users",
+  admin: "portal",
   title: "IP 使用者",
   description:
     "The lab subnet's address book, for portal admins: the subnet, gateway and DNS servers, and every address with its user, category (personal, shared, uncertain, experiment, empty, abnormal, unclassified), notes and revision.",
   kind: "query",
   input: z.object({}),
-  run: async (actor) => {
-    await requireAdmin(actor, "portal")
+  run: async () => {
     const [settings] = await db.select().from(ipUserSettings)
     const entries = await db
       .select()
@@ -52,13 +51,13 @@ export const listIpUsers = defineAction({
 
 export const saveIpUser = defineAction({
   name: "save_ip_user",
+  admin: "portal",
   title: "儲存 IP 使用者",
   description:
     "Portal admins only: adds an address (id and expected_revision null) or changes one (its id and the revision read from list_ip_users). The address must be inside the subnet and not its network address; gateway and broadcast rows keep their address.",
   kind: "mutation",
   input: ipUserInput,
   run: async (actor, input) => {
-    await requireAdmin(actor, "portal")
     return db.transaction(async (tx) => {
       const [settings] = await tx
         .select({
@@ -133,13 +132,13 @@ export const saveIpUser = defineAction({
 
 export const deleteIpUser = defineAction({
   name: "delete_ip_user",
+  admin: "portal",
   title: "刪除 IP 使用者",
   description:
     "Portal admins only: deletes one address row by id and the revision read from list_ip_users; gateway and broadcast rows cannot be deleted.",
   kind: "mutation",
   input: deleteIpUserInput,
   run: async (actor, input) => {
-    await requireAdmin(actor, "portal")
     return db.transaction(async (tx) => {
       const [settings] = await tx
         .select({

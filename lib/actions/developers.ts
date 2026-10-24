@@ -509,13 +509,13 @@ export const requestDeveloperScopes = defineAction({
 
 export const listDeveloperScopeRequests = defineAction({
   name: "list_developer_scope_requests",
+  admin: "portal",
   title: "待審資料權限",
   description:
     "Pending scope requests from every application, oldest first, for portal admins: application, owner, scopes and purpose.",
   kind: "query",
   input: z.object({}),
-  run: async (actor) => {
-    await requireAdmin(actor, "portal")
+  run: async () => {
     return {
       requests: await db
         .select({
@@ -541,6 +541,7 @@ export const listDeveloperScopeRequests = defineAction({
 
 export const reviewDeveloperScopes = defineAction({
   name: "review_developer_scopes",
+  admin: "portal",
   title: "審核資料權限",
   description: "A portal admin approves or rejects a pending scope request.",
   kind: "mutation",
@@ -552,7 +553,6 @@ export const reviewDeveloperScopes = defineAction({
     note: z.string().trim().min(1).max(2000),
   }),
   run: async (actor, input) => {
-    await requireAdmin(actor, "portal")
     return db.transaction(async (tx) => {
       const [request] = await tx
         .select()

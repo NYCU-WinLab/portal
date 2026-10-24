@@ -403,13 +403,13 @@ export const copyBentoOrder = defineAction({
 
 export const createBentoOrder = defineAction({
   name: "create_bento_order",
+  admin: "bento",
   title: "開單",
   description:
     "Opens a lunch order to one active restaurant (bento admins only). date defaults to today in Taipei; a day may have several orders.",
   kind: "mutation",
   input: z.object({ restaurantId: id, date: isoDate.optional() }),
   run: async (actor, { restaurantId, date }) => {
-    await requireAdmin(actor, "bento")
     const [restaurant] = await db
       .select({ active: bentoRestaurants.active })
       .from(bentoRestaurants)
@@ -463,13 +463,13 @@ export const reopenBentoOrder = defineAction({
 
 export const deleteBentoOrder = defineAction({
   name: "delete_bento_order",
+  admin: "bento",
   title: "刪除訂單",
   description:
     "Deletes an order with every line on it (bento admins only). It cannot be undone; confirm with the member first.",
   kind: "mutation",
   input: z.object({ orderId: id }),
   run: async (actor, { orderId }) => {
-    await requireAdmin(actor, "bento")
     const removed = await db
       .delete(bentoOrders)
       .where(eq(bentoOrders.id, orderId))

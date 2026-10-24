@@ -1,7 +1,7 @@
 import { and, count, desc, eq, gte, sql } from "drizzle-orm"
 import { z } from "zod"
 
-import { isAdmin, requireAdmin } from "@/lib/actions/authz"
+import { isAdmin } from "@/lib/actions/authz"
 import { defineAction, type Actor } from "@/lib/actions/define"
 import { db } from "@/lib/db"
 import { groupManagers, groupMembershipAudit, user } from "@/lib/db/schema"
@@ -287,13 +287,13 @@ export const listMailGroupManagers = defineAction({
 
 export const setMailGroupManager = defineAction({
   name: "set_mail_group_manager",
+  admin: "portal",
   title: "指派群組信管理者",
   description:
     "Portal admins only: makes a member (userId from list_members) a manager of one mailing list (manager true) or takes it away (false). Managers change the list's MEMBER rows, nothing else.",
   kind: "mutation",
   input: z.object({ groupId, userId: z.uuid(), manager: z.boolean() }),
   run: async (actor, input) => {
-    await requireAdmin(actor, "portal")
     const id = parseGroupId(input.groupId)
     if (!id) throw new Error("群組 id 格式不對")
     if (input.manager) {

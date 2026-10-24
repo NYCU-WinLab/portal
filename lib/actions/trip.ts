@@ -2,7 +2,7 @@ import { and, asc, count, desc, eq, sql, sum } from "drizzle-orm"
 import { zipSync } from "fflate"
 import { z } from "zod"
 
-import { isAdmin, requireAdmin } from "@/lib/actions/authz"
+import { isAdmin } from "@/lib/actions/authz"
 import { type Actor, defineAction } from "@/lib/actions/define"
 import { db } from "@/lib/db"
 import { signatures, tripFiles, trips, user } from "@/lib/db/schema"
@@ -200,13 +200,13 @@ export const getTripFile = defineAction({
 
 export const exportTripFiles = defineAction({
   name: "export_trip_files",
+  admin: "trip",
   title: "打包下載",
   description:
     "A zip of a trip's files as base64, one folder per member (trip admins only); userId limits it to one member's files.",
   kind: "query",
   input: z.object({ tripId: id, userId: id.optional() }),
   run: async (actor, { tripId, userId }) => {
-    await requireAdmin(actor, "trip")
     const trip = await findTrip(tripId)
     const rows = await db
       .select({
@@ -343,13 +343,13 @@ const tripFields = {
 
 export const createTrip = defineAction({
   name: "create_trip",
+  admin: "trip",
   title: "新增出差",
   description:
     "Opens a trip for uploads (trip admins only): a name such as 2026 ICRA 橫濱 and an optional description (dates, subsidy cap, notes).",
   kind: "mutation",
   input: z.object(tripFields),
   run: async (actor, input) => {
-    await requireAdmin(actor, "trip")
     const [created] = await db
       .insert(trips)
       .values({ ...input, createdBy: actor.userId })
@@ -360,6 +360,7 @@ export const createTrip = defineAction({
 
 export const updateTrip = defineAction({
   name: "update_trip",
+  admin: "trip",
   title: "修改出差",
   description:
     "Renames a trip, changes its description, or closes it (status closed: members can no longer upload, edit or delete) and reopens it (trip admins only). Leave out what stays the same.",
@@ -371,7 +372,6 @@ export const updateTrip = defineAction({
     status: z.enum(["open", "closed"]).optional(),
   }),
   run: async (actor, { tripId, status, ...changes }) => {
-    await requireAdmin(actor, "trip")
     const [updated] = await db
       .update(trips)
       .set({
@@ -389,13 +389,13 @@ export const updateTrip = defineAction({
 
 export const deleteTrip = defineAction({
   name: "delete_trip",
+  admin: "trip",
   title: "刪除出差",
   description:
     "Deletes a trip with every file in it (trip admins only). It cannot be undone; confirm with the member first.",
   kind: "mutation",
   input: z.object({ tripId: id }),
   run: async (actor, { tripId }) => {
-    await requireAdmin(actor, "trip")
     const removed = await db
       .delete(trips)
       .where(eq(trips.id, tripId))

@@ -1,7 +1,6 @@
 import { eq } from "drizzle-orm"
 import { z } from "zod"
 
-import { requireAdmin } from "@/lib/actions/authz"
 import { defineAction } from "@/lib/actions/define"
 import { AVATAR_MAX_BYTES, avatarImages } from "@/lib/avatar"
 import { db } from "@/lib/db"
@@ -54,13 +53,13 @@ export const removeMyAvatar = defineAction({
 
 export const removeMemberAvatar = defineAction({
   name: "remove_member_avatar",
+  admin: "portal",
   title: "移除成員頭像",
   description:
     "Portal admins only: removes one member's avatar (user_id from list_members).",
   kind: "mutation",
   input: z.object({ user_id: member }),
   run: async (actor, input) => {
-    await requireAdmin(actor, "portal")
     const removed = await db
       .delete(memberAvatars)
       .where(eq(memberAvatars.userId, input.user_id))

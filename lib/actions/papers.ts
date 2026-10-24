@@ -1,7 +1,6 @@
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm"
 import { z } from "zod"
 
-import { requireAdmin } from "@/lib/actions/authz"
 import { defineAction } from "@/lib/actions/define"
 import { optionalText, optionalUrl } from "@/lib/actions/meetings"
 import { db } from "@/lib/db"
@@ -104,12 +103,12 @@ const isUniqueViolation = (error: unknown) =>
 
 export const addPaperTag = defineAction({
   name: "add_paper_tag",
+  admin: "meetings",
   title: "新增論文標籤",
   description: "Admins only. Adds a tag papers can be filed under.",
   kind: "mutation",
   input: z.object({ name: tagName }),
   run: async (actor, { name }) => {
-    await requireAdmin(actor, "meetings")
     try {
       const [added] = await db
         .insert(paperTags)
@@ -125,12 +124,12 @@ export const addPaperTag = defineAction({
 
 export const renamePaperTag = defineAction({
   name: "rename_paper_tag",
+  admin: "meetings",
   title: "重新命名論文標籤",
   description: "Admins only. Renames a tag; papers keep it.",
   kind: "mutation",
   input: z.object({ id: z.uuid(), name: tagName }),
   run: async (actor, { id, name }) => {
-    await requireAdmin(actor, "meetings")
     try {
       const renamed = await db
         .update(paperTags)
@@ -148,13 +147,13 @@ export const renamePaperTag = defineAction({
 
 export const deletePaperTag = defineAction({
   name: "delete_paper_tag",
+  admin: "meetings",
   title: "刪除論文標籤",
   description:
     "Admins only. Removes a tag and takes it off every paper; the papers stay.",
   kind: "mutation",
   input: z.object({ id: z.uuid() }),
   run: async (actor, { id }) => {
-    await requireAdmin(actor, "meetings")
     const removed = await db
       .delete(paperTags)
       .where(eq(paperTags.id, id))
@@ -192,13 +191,13 @@ async function setTags(
 
 export const addPaper = defineAction({
   name: "add_paper",
+  admin: "meetings",
   title: "新增論文",
   description:
     "Admins only. Adds a paper presenters may choose: title, optional link, venue (e.g. NSDI'24) and tagIds from list_paper_tags.",
   kind: "mutation",
   input: z.object(paperFields),
   run: async (actor, { tagIds, ...input }) => {
-    await requireAdmin(actor, "meetings")
     return db.transaction(async (tx) => {
       const [added] = await tx
         .insert(papers)
@@ -212,13 +211,13 @@ export const addPaper = defineAction({
 
 export const updatePaper = defineAction({
   name: "update_paper",
+  admin: "meetings",
   title: "編輯論文",
   description:
     "Admins only. Changes a paper's title, link, venue or tags (tagIds replaces them); weeks presenting it show the change.",
   kind: "mutation",
   input: z.object({ id: z.uuid(), ...paperFields }),
   run: async (actor, { id, tagIds, ...input }) => {
-    await requireAdmin(actor, "meetings")
     return db.transaction(async (tx) => {
       const updated = await tx
         .update(papers)
@@ -234,13 +233,13 @@ export const updatePaper = defineAction({
 
 export const deletePaper = defineAction({
   name: "delete_paper",
+  admin: "meetings",
   title: "刪除論文",
   description:
     "Admins only. Removes a paper from the list. Fails while any week presents it.",
   kind: "mutation",
   input: z.object({ id: z.uuid() }),
   run: async (actor, { id }) => {
-    await requireAdmin(actor, "meetings")
     const [used] = await db
       .select({ date: meetings.date })
       .from(meetings)
