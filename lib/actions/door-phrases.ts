@@ -12,6 +12,7 @@ import { z } from "zod"
 
 import { isAdmin, requireAdmin } from "@/lib/actions/authz"
 import { type Actor, defineAction } from "@/lib/actions/define"
+import { readSchedule } from "@/lib/actions/meetings-shared"
 import { db } from "@/lib/db"
 import {
   doorCards,
@@ -24,12 +25,14 @@ import {
   clock,
   DEFAULT_BEFORE,
   panelName,
+  reminderText,
   spokenName,
   taipeiWeekMinute,
   voiceLink,
   voiceParts,
   weekRanges,
 } from "@/lib/door-greeting"
+import { taipeiToday } from "@/lib/leave-dates"
 
 // The door's spoken greeting by the time of day: each member's own phrases,
 // the lab's defaults that door admins keep, and the voice clips the door
@@ -346,6 +349,20 @@ export async function panelPhrases() {
   return { defaults, members }
 }
 
+/** The reminder the door says before the next lab meeting (not a
+ * holiday), or null when none is scheduled. */
+export async function meetingReminder() {
+  const today = taipeiToday()
+  const next = (await readSchedule({ fromDate: today })).find(
+    (row) => row.date >= today && row.kind !== "holiday"
+  )
+  if (!next) return null
+  return reminderText(
+    next.presenter ? panelName(next.presenter.name) : null,
+    next.location ?? ""
+  )
+}
+
 /** Every text the door may speak as one clip: each name with the default
  * "Hi，", the defaults' parts and the member's own phrases' parts, the name
  * ending in "。" and, when some rule says more after it, in "，". paused
@@ -390,6 +407,8 @@ export async function voiceTexts({ paused = false } = {}) {
   }
   for (const member of members) add(panelName(member.name), member.id)
   for (const card of cards) add(panelName(card.name), card.holderId)
+  const reminder = await meetingReminder()
+  if (reminder) texts.add(reminder)
   return [...texts].sort()
 }
 
@@ -423,10 +442,11 @@ export async function pruneVoiceClips() {
  * makes them: the rules' own parts first, since a new rule waits on those,
  * then the names. */
 export async function missingVoiceTexts() {
-  const [needed, have, rules] = await Promise.all([
+  const [needed, have, rules, reminder] = await Promise.all([
     voiceTexts(),
     db.select({ text: doorVoiceClips.text }).from(doorVoiceClips),
     panelPhrases(),
+    meetingReminder(),
   ])
   const done = new Set(have.map((row) => row.text))
   const own = new Set(
@@ -437,9 +457,11 @@ export async function missingVoiceTexts() {
   const missing = needed.filter((t) => !done.has(t))
   return {
     needed: needed.length,
+    // The meeting reminder first: it is due at a set time.
     missing: [
-      ...missing.filter((t) => own.has(t)),
-      ...missing.filter((t) => !own.has(t)),
+      ...missing.filter((t) => t === reminder),
+      ...missing.filter((t) => t !== reminder && own.has(t)),
+      ...missing.filter((t) => t !== reminder && !own.has(t)),
     ],
   }
 }
