@@ -31,9 +31,11 @@ export const add = async (input: unknown) => call(addDoorCard, input)
 export const update = async (input: unknown) => call(updateDoorCard, input)
 export const remove = async (cardId: string) => call(deleteDoorCard, { cardId })
 export const compare = async () =>
-  call<{ suspect: boolean; missing: string[]; extra: unknown[] }>(
-    compareDoorCards,
-    {}
-  )
+  call<{
+    suspect: boolean
+    missing: string[]
+    deleting: string[]
+    extra: unknown[]
+  }>(compareDoorCards, {})
 export const importCards = async () =>
   call<{ added: number }>(importDoorCards, {})

@@ -29,6 +29,7 @@ type Card = {
 const states: Record<string, string> = {
   missing: "卡機沒有",
   unknown: "未確認",
+  deleting: "刪除未確認",
 }
 
 const text = (data: FormData, key: string) => String(data.get(key) ?? "").trim()
@@ -127,6 +128,10 @@ export function CompareButton() {
           const { result, error } = await compare()
           if (error || !result) toast.error(error ?? "失敗了")
           else if (result.suspect) toast.error("卡機的卡表疑似損毀")
+          else if (result.deleting.length > 0)
+            toast.error(
+              `${result.deleting.length} 張要刪的卡還在卡機上，請再刪一次`
+            )
           else if (result.missing.length + result.extra.length === 0)
             toast.success("名單與卡機一致")
           else
@@ -238,7 +243,7 @@ function CardRow({ card, members }: { card: Card; members: Member[] }) {
         {card.cardId}
       </span>
       <div className="flex shrink-0 gap-1">
-        {card.syncState !== "synced" && (
+        {(card.syncState === "missing" || card.syncState === "unknown") && (
           <ConfirmDialog
             trigger={
               <Button variant="ghost" size="icon" aria-label="重新加入卡機">
@@ -260,15 +265,17 @@ function CardRow({ card, members }: { card: Card; members: Member[] }) {
             }
           />
         )}
-        <CardForm
-          card={card}
-          members={members}
-          trigger={
-            <Button variant="ghost" size="icon" aria-label="修改">
-              <PencilIcon />
-            </Button>
-          }
-        />
+        {card.syncState !== "deleting" && (
+          <CardForm
+            card={card}
+            members={members}
+            trigger={
+              <Button variant="ghost" size="icon" aria-label="修改">
+                <PencilIcon />
+              </Button>
+            }
+          />
+        )}
         <ConfirmDialog
           trigger={
             <Button variant="ghost" size="icon" aria-label="刪除">

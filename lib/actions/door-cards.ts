@@ -28,8 +28,10 @@ import { emitErrorLog, traced } from "@/lib/otel"
 // Card management: the reader at the door keeps its own card table, and
 // these actions change it through hams-bridge first and write door_cards
 // only after, so the list never claims a card the reader does not hold.
-// When the bridge cannot confirm a write, the row is marked unknown and the
-// admin is told to compare.
+// One lock covers every reader call and the row writes after it, so two
+// admins (or the daily check) never interleave. A failure the bridge does
+// not prove harmless leaves the row marked: unknown after an add or a
+// rename, deleting after a delete, which the next comparison settles.
 
 const cardId = z.string().regex(/^[0-9]{10}$/, "卡號是 10 位數字")
 
@@ -49,20 +51,24 @@ const holderName = z
 const SUSPECT_COUNT = 200
 
 const MESSAGES: Record<string, string> = {
+  not_configured: "卡機服務沒有設定",
   unauthorized: "卡機服務的金鑰不對",
   validation: "卡號或名字不合卡機的格式",
-  exists: "卡機已經有這張卡，請按「與卡機比對」後匯入",
+  exists: "卡機已經有這張卡，請按「與卡機比對」",
   not_found: "卡機上沒有這張卡",
   controller_unreachable: "連不上卡機",
   controller_busy: "卡機忙碌中，20 秒後再試",
   table_suspect: "卡機的卡表疑似損毀，要用原廠 HAMS 重新上傳",
   verify_failed: "卡機沒有套用這次變更",
-  verify_inconclusive: "卡機沒有回報結果",
+  verify_inconclusive: "卡機讀不出卡表，沒有寫入，20 秒後再試",
   rename_lost_card:
-    "改名時卡機刪了舊卡卻沒加回，這張卡現在刷不進門，請重新新增",
+    "改名時卡機刪了舊卡卻沒加回，這張卡現在刷不進門，請重新加入",
   unknown: "卡機服務出錯",
 }
-const UNSURE = "卡機沒有回報結果，請按「與卡機比對」確認"
+const UNSURE = "卡機沒有確認結果，請按「與卡機比對」"
+const UNSURE_DELETE =
+  "卡機沒有確認刪除，這張卡可能還刷得進門，請按「與卡機比對」"
+const AHEAD = "卡機已經改了，名單沒存成，請按「與卡機比對」"
 
 const message = (error: unknown) =>
   error instanceof HamsError
@@ -71,15 +77,67 @@ const message = (error: unknown) =>
       ? error.message
       : "失敗了"
 
-/** Whether a failed write may still have reached the reader. */
-function mayHaveLanded(error: unknown, write: "add" | "rename" | "delete") {
+/** Whether the bridge proved that a failed write changed nothing on the
+ * reader. Anything else (busy, unreachable, a lost answer) may have
+ * landed. */
+function untouched(error: unknown, write: "add" | "rename" | "delete") {
   if (!(error instanceof HamsError)) return false
-  if (error.code === "controller_unreachable") return error.unconfirmed
-  if (error.code === "verify_inconclusive")
-    // An add whose duplicate check failed wrote nothing.
-    return !(write === "add" && error.unconfirmed)
-  if (error.code === "not_found") return write === "delete" && error.unconfirmed
-  return false
+  if (
+    ["not_configured", "unauthorized", "validation", "table_suspect"].includes(
+      error.code
+    )
+  )
+    return true
+  if (write === "add" && error.code === "exists") return true
+  // An add whose duplicate check failed wrote nothing.
+  return (
+    write === "add" && error.code === "verify_inconclusive" && error.unconfirmed
+  )
+}
+
+/** The bridge proved the card is not on the reader. */
+const absent = (error: unknown) =>
+  error instanceof HamsError &&
+  ((error.code === "not_found" && !error.unconfirmed) ||
+    error.code === "rename_lost_card")
+
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0]
+
+/** Runs fn holding the card lock, then writes the attempt down. fn returns
+ * the error to throw (after its row writes commit) or the detail to log.
+ * When the database fails after the reader changed, says so. */
+async function locked(
+  action: "add" | "update" | "delete" | "import" | "compare",
+  userId: string | null,
+  card: string | null,
+  fn: (
+    tx: Tx,
+    touched: () => void
+  ) => Promise<
+    | { error: unknown; say: string; detail?: Record<string, unknown> }
+    | { detail: Record<string, unknown> }
+  >
+) {
+  let reader = false
+  let outcome: Awaited<ReturnType<typeof fn>>
+  try {
+    outcome = await db.transaction(async (tx) => {
+      await tx.execute(
+        sql`select pg_advisory_xact_lock(hashtext('door_cards'))`
+      )
+      return fn(tx, () => (reader = true))
+    })
+  } catch (error) {
+    if (!reader) throw error
+    await record(action, userId, card, "db_failed").catch(() => {})
+    throw new Error(AHEAD)
+  }
+  if ("error" in outcome) {
+    await record(action, userId, card, outcome.error, outcome.detail)
+    throw new Error(outcome.say)
+  }
+  await record(action, userId, card, null, outcome.detail)
+  return outcome.detail
 }
 
 /** Writes the attempt down. error: null when it worked, a string for a
@@ -106,27 +164,24 @@ async function record(
   })
 }
 
-async function memberName(id: string) {
-  const [member] = await db
-    .select({ name: user.name })
-    .from(user)
-    .where(eq(user.id, id))
-  if (!member) throw new Error("找不到這位成員")
-  return member.name
-}
-
 /** Who a card goes to: a member (named on the reader by their name unless
  * a name is given) or a guest, named by the admin. */
 async function holderOf(input: {
   holderId?: string | null
   holderName?: string
 }) {
-  const name =
-    input.holderName?.trim() ||
-    (input.holderId ? await memberName(input.holderId) : "")
+  let name = input.holderName?.trim()
+  if (input.holderId) {
+    const [member] = await db
+      .select({ name: user.name })
+      .from(user)
+      .where(eq(user.id, input.holderId))
+    if (!member) throw new Error("找不到這位成員")
+    name ||= member.name
+  }
   return {
     holderId: input.holderId ?? null,
-    holderName: holderName.parse(name),
+    holderName: holderName.parse(name ?? ""),
   }
 }
 
@@ -141,49 +196,51 @@ export const addDoorCard = defineAction({
   admin: "door",
   title: "新增門禁卡",
   description:
-    "Adds a card to the door reader, so it opens the lab door, and to the card list. Door admins only. holderId links it to a member (find ids with list_members), whose name goes on the reader unless holderName is given; a guest card needs holderName. A new card's number shows in list_door_cards under strangers once someone swipes it at the door. Re-adding a card the reader lost restores it.",
+    "Adds a card to the door reader, so it opens the lab door, and to the card list. Door admins only. holderId links it to a member (find ids with list_members), whose name goes on the reader unless holderName is given; a guest card needs holderName. A new card's number shows in list_door_cards under strangers once someone swipes it at the door. Re-adding a card the reader lost (sync_state missing or unknown) restores it and keeps its holder and note unless given.",
   kind: "mutation",
   input: z.object({ cardId, ...holderInput }),
-  run: async (actor, input) => {
-    const holder = await holderOf(input)
-    const [existing] = await db
-      .select({ syncState: doorCards.syncState })
-      .from(doorCards)
-      .where(eq(doorCards.cardId, input.cardId))
-    if (existing?.syncState === "synced")
-      throw new Error("這張卡已經在名單上，要換人請用修改")
-    const save = (syncState: string) => {
-      const values = {
-        ...holder,
-        note: input.note || null,
-        syncState,
-        lastSeenAt: syncState === "synced" ? new Date() : null,
-        updatedAt: new Date(),
+  run: async (actor, input) =>
+    locked("add", actor.userId, input.cardId, async (tx, touched) => {
+      const [existing] = await tx
+        .select()
+        .from(doorCards)
+        .where(eq(doorCards.cardId, input.cardId))
+      if (existing?.syncState === "synced")
+        throw new Error("這張卡已經在名單上，要換人請用修改")
+      if (existing?.syncState === "deleting")
+        throw new Error("這張卡還在刪除中，請先按「與卡機比對」")
+      const holder = await holderOf({
+        holderId:
+          input.holderId === undefined ? existing?.holderId : input.holderId,
+        holderName: input.holderName ?? existing?.holderName,
+      })
+      const save = (syncState: string) => {
+        const values = {
+          ...holder,
+          note:
+            input.note === undefined
+              ? (existing?.note ?? null)
+              : input.note || null,
+          syncState,
+          lastSeenAt: syncState === "synced" ? new Date() : null,
+          updatedAt: new Date(),
+        }
+        return tx
+          .insert(doorCards)
+          .values({ cardId: input.cardId, ...values })
+          .onConflictDoUpdate({ target: doorCards.cardId, set: values })
       }
-      return db
-        .insert(doorCards)
-        .values({ cardId: input.cardId, ...values })
-        .onConflictDoUpdate({ target: doorCards.cardId, set: values })
-    }
-    try {
-      await addReaderCard(input.cardId, holder.holderName)
-    } catch (error) {
-      if (mayHaveLanded(error, "add")) await save("unknown")
-      await record("add", actor.userId, input.cardId, error)
-      if (error instanceof HamsError && error.code === "verify_inconclusive")
-        throw new Error(
-          mayHaveLanded(error, "add")
-            ? UNSURE
-            : "卡機讀不出卡表，沒有寫入，20 秒後再試"
-        )
-      throw new Error(mayHaveLanded(error, "add") ? UNSURE : message(error))
-    }
-    await save("synced")
-    await record("add", actor.userId, input.cardId, null, {
-      restored: Boolean(existing),
-    })
-    return { cardId: input.cardId, holderName: holder.holderName }
-  },
+      try {
+        touched()
+        await addReaderCard(input.cardId, holder.holderName)
+      } catch (error) {
+        if (untouched(error, "add")) return { error, say: message(error) }
+        await save("unknown")
+        return { error, say: UNSURE }
+      }
+      await save("synced")
+      return { detail: { restored: Boolean(existing) } }
+    }),
 })
 
 export const updateDoorCard = defineAction({
@@ -194,48 +251,55 @@ export const updateDoorCard = defineAction({
     "Changes who holds a card, its name on the reader or its note. Door admins only. Give the holder the same way as add_door_card: holderId for a member (their name unless holderName is given), holderName alone for a guest. Only a new name touches the reader; it renames by deleting and re-adding the card.",
   kind: "mutation",
   input: z.object({ cardId, ...holderInput }),
-  run: async (actor, input) => {
-    const [card] = await db
-      .select()
-      .from(doorCards)
-      .where(eq(doorCards.cardId, input.cardId))
-    if (!card) throw new Error("名單上沒有這張卡")
-    const holder = await holderOf(input)
-    const renamed = holder.holderName !== card.holderName
-    if (renamed) {
-      try {
-        await renameReaderCard(input.cardId, holder.holderName)
-      } catch (error) {
-        const lost =
-          error instanceof HamsError && error.code === "rename_lost_card"
-        const unsure = mayHaveLanded(error, "rename")
-        if (lost || unsure)
-          await db
-            .update(doorCards)
-            .set({ syncState: lost ? "missing" : "unknown" })
-            .where(eq(doorCards.cardId, input.cardId))
-        await record("update", actor.userId, input.cardId, error)
-        throw new Error(unsure ? UNSURE : message(error))
+  run: async (actor, input) =>
+    locked("update", actor.userId, input.cardId, async (tx, touched) => {
+      const [card] = await tx
+        .select()
+        .from(doorCards)
+        .where(eq(doorCards.cardId, input.cardId))
+      if (!card) throw new Error("名單上沒有這張卡")
+      if (card.syncState === "deleting")
+        throw new Error("這張卡還在刪除中，請先按「與卡機比對」")
+      const holder = await holderOf(input)
+      const renamed = holder.holderName !== card.holderName
+      const handedOver =
+        holder.holderId !== card.holderId ||
+        (holder.holderId === null && renamed)
+      // The holder is saved whatever the reader did, so re-adding a lost
+      // card puts it back under the new name.
+      const save = (syncState?: string) =>
+        tx
+          .update(doorCards)
+          .set({
+            ...holder,
+            note: input.note === undefined ? card.note : input.note || null,
+            ...(syncState
+              ? {
+                  syncState,
+                  ...(syncState === "synced" ? { lastSeenAt: new Date() } : {}),
+                }
+              : {}),
+            // Swipes before this belong to the previous holder.
+            ...(handedOver ? { updatedAt: new Date() } : {}),
+          })
+          .where(eq(doorCards.cardId, input.cardId))
+      if (renamed) {
+        try {
+          touched()
+          await renameReaderCard(input.cardId, holder.holderName)
+        } catch (error) {
+          if (absent(error)) {
+            await save("missing")
+            return { error, say: message(error) }
+          }
+          if (untouched(error, "rename")) return { error, say: message(error) }
+          await save("unknown")
+          return { error, say: UNSURE }
+        }
       }
-    }
-    const handedOver =
-      holder.holderId !== card.holderId || (holder.holderId === null && renamed)
-    await db
-      .update(doorCards)
-      .set({
-        ...holder,
-        note: input.note === undefined ? card.note : input.note || null,
-        ...(renamed ? { syncState: "synced", lastSeenAt: new Date() } : {}),
-        // Swipes before this belong to the previous holder.
-        ...(handedOver ? { updatedAt: new Date() } : {}),
-      })
-      .where(eq(doorCards.cardId, input.cardId))
-    await record("update", actor.userId, input.cardId, null, {
-      renamed,
-      handed_over: handedOver,
-    })
-    return { cardId: input.cardId, holderName: holder.holderName }
-  },
+      await save(renamed ? "synced" : undefined)
+      return { detail: { renamed, handed_over: handedOver } }
+    }),
 })
 
 export const deleteDoorCard = defineAction({
@@ -243,84 +307,101 @@ export const deleteDoorCard = defineAction({
   admin: "door",
   title: "刪除門禁卡",
   description:
-    "Removes a card from the door reader, so it no longer opens the lab door, and from the card list. Door admins only. A card the reader already lacks is just dropped from the list.",
+    "Removes a card from the door reader, so it no longer opens the lab door, and from the card list. Door admins only. A card the reader already lacks is just dropped from the list. When the reader does not confirm, the card stays listed as deleting until a comparison finds it gone; delete it again to retry.",
   kind: "mutation",
   input: z.object({ cardId }),
-  run: async (actor, { cardId: card }) => {
-    let gone = false
-    try {
-      await deleteReaderCard(card)
-    } catch (error) {
-      gone =
-        error instanceof HamsError &&
-        error.code === "not_found" &&
-        !error.unconfirmed
-      if (!gone) {
-        const unsure = mayHaveLanded(error, "delete")
-        if (unsure)
-          await db
+  run: async (actor, { cardId: card }) =>
+    locked("delete", actor.userId, card, async (tx, touched) => {
+      let gone = false
+      try {
+        touched()
+        await deleteReaderCard(card)
+      } catch (error) {
+        gone = absent(error)
+        if (!gone) {
+          if (untouched(error, "delete")) return { error, say: message(error) }
+          await tx
             .update(doorCards)
-            .set({ syncState: "unknown" })
+            .set({ syncState: "deleting" })
             .where(eq(doorCards.cardId, card))
-        await record("delete", actor.userId, card, error)
-        throw new Error(unsure ? UNSURE : message(error))
+          return { error, say: UNSURE_DELETE }
+        }
       }
-    }
-    await db.delete(doorCards).where(eq(doorCards.cardId, card))
-    await record("delete", actor.userId, card, null, { already_gone: gone })
-    return { deleted: card }
-  },
+      await tx.delete(doorCards).where(eq(doorCards.cardId, card))
+      return { detail: { already_gone: gone } }
+    }),
 })
 
-/** Compares the list with the reader and marks each card synced or
- * missing. Run by a door admin or, with userId null, by the daily check. */
+/** Compares the list with the reader: marks each card synced or missing,
+ * and drops the ones being deleted that the reader no longer has. Run by a
+ * door admin or, with userId null, by the daily check. */
 export async function compareCards(userId: string | null) {
   return traced("door cards compare", {}, async () => {
-    let reader: Awaited<ReturnType<typeof readerCards>>
+    let result: {
+      readerCount: number
+      suspect: boolean
+      synced: number
+      missing: string[]
+      deleting: string[]
+      extra: { cardId: string; name: string }[]
+    }
     try {
-      reader = await readerCards()
+      result = await db.transaction(async (tx) => {
+        await tx.execute(
+          sql`select pg_advisory_xact_lock(hashtext('door_cards'))`
+        )
+        const reader = await readerCards()
+        const rows = await tx
+          .select({ cardId: doorCards.cardId, syncState: doorCards.syncState })
+          .from(doorCards)
+        const onReader = new Set(reader.cards.map((card) => card.card_id))
+        const listed = new Set(rows.map((row) => row.cardId))
+        const kept = rows.filter((row) => row.syncState !== "deleting")
+        const synced = kept.filter((row) => onReader.has(row.cardId))
+        const missing = kept.filter((row) => !onReader.has(row.cardId))
+        const deleting = rows.filter((row) => row.syncState === "deleting")
+        const deleted = deleting.filter((row) => !onReader.has(row.cardId))
+        const extra = reader.cards.filter((card) => !listed.has(card.card_id))
+        const suspect = reader.count > SUSPECT_COUNT
+        const ids = (list: { cardId: string }[]) => list.map((r) => r.cardId)
+        // A damaged table says nothing about which cards are there.
+        if (!suspect) {
+          if (synced.length > 0)
+            await tx
+              .update(doorCards)
+              .set({ syncState: "synced", lastSeenAt: new Date() })
+              .where(inArray(doorCards.cardId, ids(synced)))
+          if (missing.length > 0)
+            await tx
+              .update(doorCards)
+              .set({ syncState: "missing" })
+              .where(inArray(doorCards.cardId, ids(missing)))
+          if (deleted.length > 0)
+            await tx
+              .delete(doorCards)
+              .where(inArray(doorCards.cardId, ids(deleted)))
+        }
+        return {
+          readerCount: reader.count,
+          suspect,
+          synced: synced.length,
+          missing: ids(missing),
+          deleting: ids(
+            suspect ? deleting : deleting.filter((r) => onReader.has(r.cardId))
+          ),
+          extra: extra.map((card) => ({
+            cardId: card.card_id,
+            name: card.name,
+          })),
+        }
+      })
     } catch (error) {
       await record("compare", userId, null, error)
       throw new Error(message(error))
     }
-    const rows = await db.select({ cardId: doorCards.cardId }).from(doorCards)
-    const onReader = new Set(reader.cards.map((card) => card.card_id))
-    const listed = new Set(rows.map((row) => row.cardId))
-    const synced = rows.filter((row) => onReader.has(row.cardId))
-    const missing = rows.filter((row) => !onReader.has(row.cardId))
-    const extra = reader.cards.filter((card) => !listed.has(card.card_id))
-    const suspect = reader.count > SUSPECT_COUNT
-    // A damaged table says nothing about which cards are there.
-    if (!suspect) {
-      if (synced.length > 0)
-        await db
-          .update(doorCards)
-          .set({ syncState: "synced", lastSeenAt: new Date() })
-          .where(
-            inArray(
-              doorCards.cardId,
-              synced.map((row) => row.cardId)
-            )
-          )
-      if (missing.length > 0)
-        await db
-          .update(doorCards)
-          .set({ syncState: "missing" })
-          .where(
-            inArray(
-              doorCards.cardId,
-              missing.map((row) => row.cardId)
-            )
-          )
-    }
-    const result = {
-      readerCount: reader.count,
-      suspect,
-      synced: synced.length,
-      missing: missing.map((row) => row.cardId),
-      extra: extra.map((card) => ({ cardId: card.card_id, name: card.name })),
-    }
-    const drifted = suspect || missing.length > 0 || extra.length > 0
+    const drifted =
+      result.suspect ||
+      result.missing.length + result.deleting.length + result.extra.length > 0
     await record("compare", userId, null, drifted ? "drift" : null, result)
     await announceChange("compare_door_cards").catch(() => {})
     return result
@@ -346,38 +427,36 @@ export const importDoorCards = defineAction({
     "Adds to the card list every card the door reader holds that the list lacks, named as on the reader and linked to no member; link them with update_door_card. Writes nothing to the reader. Door admins only.",
   kind: "mutation",
   input: z.object({}),
-  run: async (actor) => {
-    let reader: Awaited<ReturnType<typeof readerCards>>
-    try {
-      reader = await readerCards()
-    } catch (error) {
-      await record("import", actor.userId, null, error)
-      throw new Error(message(error))
-    }
-    if (reader.count > SUSPECT_COUNT) throw new Error(MESSAGES.table_suspect)
-    const cards = reader.cards.filter((card) =>
-      /^[0-9]{10}$/.test(card.card_id)
-    )
-    const added =
-      cards.length === 0
-        ? []
-        : await db
-            .insert(doorCards)
-            .values(
-              cards.map((card) => ({
-                cardId: card.card_id,
-                holderName: card.name || "卡片",
-                syncState: "synced",
-                lastSeenAt: new Date(),
-              }))
-            )
-            .onConflictDoNothing({ target: doorCards.cardId })
-            .returning({ cardId: doorCards.cardId })
-    await record("import", actor.userId, null, null, {
-      added: added.map((row) => row.cardId),
-    })
-    return { added: added.length }
-  },
+  run: async (actor) =>
+    locked("import", actor.userId, null, async (tx) => {
+      let reader: Awaited<ReturnType<typeof readerCards>>
+      try {
+        reader = await readerCards()
+      } catch (error) {
+        return { error, say: message(error) }
+      }
+      if (reader.count > SUSPECT_COUNT)
+        return { error: "table_suspect", say: MESSAGES.table_suspect }
+      const cards = reader.cards.filter((card) =>
+        /^[0-9]{10}$/.test(card.card_id)
+      )
+      const added =
+        cards.length === 0
+          ? []
+          : await tx
+              .insert(doorCards)
+              .values(
+                cards.map((card) => ({
+                  cardId: card.card_id,
+                  holderName: card.name || "卡片",
+                  syncState: "synced",
+                  lastSeenAt: new Date(),
+                }))
+              )
+              .onConflictDoNothing({ target: doorCards.cardId })
+              .returning({ cardId: doorCards.cardId })
+      return { detail: { added: added.map((row) => row.cardId) } }
+    }).then((detail) => ({ added: (detail.added as string[]).length })),
 })
 
 export const listDoorCardChanges = defineAction({

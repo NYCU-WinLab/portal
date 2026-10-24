@@ -11,6 +11,7 @@
 //   errors                -> { error, code, unconfirmed?, observed? }
 
 export type HamsCode =
+  | "not_configured"
   | "unauthorized"
   | "validation"
   | "exists"
@@ -62,7 +63,7 @@ async function call<T>(
 ): Promise<T> {
   const base = process.env.HAMS_API_URL
   const secret = process.env.HAMS_API_SECRET
-  if (!base || !secret) throw new Error("卡機服務沒有設定")
+  if (!base || !secret) throw new HamsError("not_configured", 0)
   const response = await fetch(`${base.replace(/\/$/, "")}${path}`, {
     method,
     headers: {
@@ -81,6 +82,12 @@ async function call<T>(
     code?: unknown
     unconfirmed?: unknown
   } | null
+  // A success whose answer was cut off proves nothing about a write.
+  if (response.ok && (payload === null || typeof payload !== "object"))
+    throw new HamsError(
+      method === "GET" ? "unknown" : "verify_inconclusive",
+      response.status
+    )
   if (!response.ok) {
     const code =
       typeof payload?.code === "string" && CODES.has(payload.code)
@@ -94,11 +101,17 @@ async function call<T>(
 /** The reader's card table. count is what the reader claims, which can
  * differ from the cards it could list. */
 export async function readerCards() {
-  const list = await call<{ count?: number; cards?: ReaderCard[] }>(
-    "/cards",
-    "GET"
+  const list = await call<{ count?: unknown; cards?: unknown }>("/cards", "GET")
+  if (
+    typeof list.count !== "number" ||
+    !Array.isArray(list.cards) ||
+    !list.cards.every(
+      (card) =>
+        typeof card?.card_id === "string" && typeof card?.name === "string"
+    )
   )
-  return { count: list.count ?? 0, cards: list.cards ?? [] }
+    throw new HamsError("unknown", 200)
+  return { count: list.count, cards: list.cards as ReaderCard[] }
 }
 
 export const addReaderCard = (cardId: string, name: string) =>
