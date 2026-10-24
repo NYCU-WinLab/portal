@@ -49,7 +49,8 @@ DOWNLOAD_TIMEOUT_S = 120
 ANNOUNCE_MAX_BYTES = 8 * 1024 * 1024
 ANNOUNCE_GAP_S = 0.3  # silence on each side of a door clip, so the song does not cut straight into it
 
-# What every source is decoded to: the format a HomePod takes over RAOP.
+# What every source is decoded to: the format a HomePod takes over RAOP, samples
+# big-endian (pyatv byteswaps its own sources; a Mixer hands frames over as they are).
 RATE, CHANNELS, WIDTH = 44100, 2, 2
 FRAME = CHANNELS * WIDTH
 
@@ -178,7 +179,7 @@ async def decode(data):
     """Any audio file's bytes as raw PCM in the stream format."""
     process = await asyncio.create_subprocess_exec(
         "ffmpeg", "-v", "error", "-i", "pipe:0",
-        "-f", "s16le", "-ac", str(CHANNELS), "-ar", str(RATE), "pipe:1",
+        "-f", "s16be", "-ac", str(CHANNELS), "-ar", str(RATE), "pipe:1",
         stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
     )
     out, err = await asyncio.wait_for(process.communicate(data), 30)
@@ -211,7 +212,7 @@ class Mixer(AudioSource):
         if self.source:
             self.ffmpeg = await asyncio.create_subprocess_exec(
                 "ffmpeg", "-v", "error", *self.source,
-                "-vn", "-f", "s16le", "-ac", str(CHANNELS), "-ar", str(RATE), "pipe:1",
+                "-vn", "-f", "s16be", "-ac", str(CHANNELS), "-ar", str(RATE), "pipe:1",
                 stdout=asyncio.subprocess.PIPE,
             )
 
