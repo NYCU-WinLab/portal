@@ -74,7 +74,7 @@ export const serviceGroups: { title: string; apps: Service[] }[] = [
         label: "Music",
         name: "點歌",
         emoji: "🎵",
-        href: "https://music.winlab.tw",
+        href: "/music",
       },
       {
         key: "oai",

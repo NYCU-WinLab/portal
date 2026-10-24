@@ -204,6 +204,21 @@ import {
   listStandingMeetings,
   setStandingMeetingActive,
 } from "@/lib/actions/rooms-series"
+import {
+  addPlaylist,
+  addSong,
+  listActivity,
+  listPlayed,
+  listQueue,
+  nowPlaying,
+  playNext,
+  removeSong,
+  searchMusic,
+  setAutoplay,
+  setPaused,
+  setVolume,
+  skipSong,
+} from "@/lib/actions/music"
 import { listLabMembers } from "@/lib/actions/members"
 import { listLabMeetingStats } from "@/lib/actions/stats"
 import { whoami } from "@/lib/actions/users"
@@ -380,4 +395,17 @@ export const actions: Action[] = [
   listDoorVoiceClips,
   getDoorVoiceClip,
   deleteDoorVoiceClip,
+  nowPlaying,
+  listQueue,
+  listActivity,
+  listPlayed,
+  searchMusic,
+  addSong,
+  addPlaylist,
+  playNext,
+  skipSong,
+  removeSong,
+  setPaused,
+  setVolume,
+  setAutoplay,
 ]

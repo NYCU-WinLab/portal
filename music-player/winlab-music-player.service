@@ -1,0 +1,21 @@
+[Unit]
+Description=WinLab Music player (queue to the lab HomePod over AirPlay)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=music
+EnvironmentFile=/etc/winlab-music-player.env
+Environment=PATH=/opt/winlab-music-player/bin:/opt/winlab-music-player/venv/bin:/usr/bin:/bin
+Environment=CACHE_DIR=/var/cache/winlab-music
+CacheDirectory=winlab-music
+ExecStart=/opt/winlab-music-player/venv/bin/python /opt/winlab-music-player/player.py
+Restart=always
+RestartSec=5
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target
