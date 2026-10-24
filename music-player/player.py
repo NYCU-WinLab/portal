@@ -1,28 +1,36 @@
 """Plays the WinLab Music queue on the lab HomePod.
 
 Runs on a machine on the speaker's network (spawner, over its WinLab Wi-Fi).
-It long-polls MUSIC_URL/api/music/player (MUSIC_URL is the portal) for what
-members asked for, fetches the audio with yt-dlp, and streams it over AirPlay (RAOP) with pyatv. It reports
-what it did back to the same route.
+It follows MUSIC_URL/api/music/player (MUSIC_URL is the portal, server-sent
+events) for what members asked for, fetches the audio with yt-dlp, and streams
+it over AirPlay (RAOP) with pyatv. It reports what it did back to the same route.
 
-When another sender takes the HomePod (the door greeting, someone's phone),
-our stream drops. The player waits until the HomePod is idle again and
-resumes where it was; if that takes longer than TAKEN_AFTER_S, it reports
-"taken" and the queue pauses.
+The door (idm-display on the same host) posts its greeting to ANNOUNCE_LISTEN.
+The clip goes into the stream that is already playing: the song pauses, the
+clip plays at its own volume, and the song carries on from the same frame. With
+nothing playing, the clip gets a stream of its own.
+
+When another sender takes the HomePod (someone's phone), our stream drops. The
+player waits until the HomePod is idle again and resumes where it was; if that
+takes longer than TAKEN_AFTER_S, it reports "taken" and the queue pauses.
 """
 
 import asyncio
+import json
 import logging
 import os
 import shutil
-import subprocess
 import time
+from collections import deque
 from pathlib import Path
 
 import aiohttp
 import pyatv
+import pyatv.protocols.raop as raop
+from aiohttp import web
 from pyatv.const import DeviceState
 from pyatv.interface import MediaMetadata
+from pyatv.protocols.raop.audio_source import AudioSource
 
 MUSIC_URL = os.environ["MUSIC_URL"].rstrip("/")
 PLAYER_TOKEN = os.environ["PLAYER_TOKEN"]
@@ -31,12 +39,19 @@ HOMEPOD_NAME = os.environ.get("HOMEPOD_NAME", "車庫")
 CACHE_DIR = Path(os.environ.get("CACHE_DIR", "/var/cache/winlab-music"))
 CACHE_MAX_BYTES = int(os.environ.get("CACHE_MAX_MB", "2048")) * 1024 * 1024
 YT_DLP = os.environ.get("YT_DLP", "yt-dlp")
+ANNOUNCE_LISTEN = os.environ.get("ANNOUNCE_LISTEN", "127.0.0.1:8791")
 
 # The HomePod starts sound about this long after we start sending.
 BUFFER_S = 2.0
 REPORT_EVERY_S = 10
 TAKEN_AFTER_S = 90
 DOWNLOAD_TIMEOUT_S = 120
+ANNOUNCE_MAX_BYTES = 8 * 1024 * 1024
+ANNOUNCE_GAP_S = 0.3  # silence on each side of a door clip, so the song does not cut straight into it
+
+# What every source is decoded to: the format a HomePod takes over RAOP.
+RATE, CHANNELS, WIDTH = 44100, 2, 2
+FRAME = CHANNELS * WIDTH
 
 log = logging.getLogger("music-player")
 
@@ -46,15 +61,23 @@ class Api:
         self.session = session
         self.headers = {"authorization": f"Bearer {PLAYER_TOKEN}"}
 
-    async def state(self, version):
+    async def states(self):
+        """Each player state the portal sends, the current one first."""
         async with self.session.get(
             f"{MUSIC_URL}/api/music/player",
-            params={"version": str(version)},
-            headers=self.headers,
-            timeout=aiohttp.ClientTimeout(total=40),
+            headers={**self.headers, "accept": "text/event-stream"},
+            # The portal pings every 25 seconds; a minute of silence is a dead link.
+            timeout=aiohttp.ClientTimeout(total=None, sock_read=60),
         ) as response:
             response.raise_for_status()
-            return await response.json()
+            data = []
+            async for raw in response.content:
+                line = raw.decode().rstrip("\r\n")
+                if line.startswith("data:"):
+                    data.append(line[5:].lstrip())
+                elif not line and data:
+                    yield json.loads("\n".join(data))
+                    data = []
 
     async def report(self, item_id, event, position=None, error=None):
         body = {"itemId": item_id, "event": event}
@@ -136,6 +159,170 @@ def trim_cache():
             path.unlink(missing_ok=True)
 
 
+class Clip:
+    """A door clip, decoded, and when the room has heard it."""
+
+    def __init__(self, pcm, volume):
+        gap = bytes(int(ANNOUNCE_GAP_S * RATE) * FRAME)
+        self.pcm = gap + pcm + gap
+        self.pos = 0
+        self.volume = volume
+        self.heard = asyncio.get_running_loop().create_future()
+
+    def fail(self, error):
+        if not self.heard.done():
+            self.heard.set_exception(error)
+
+
+async def decode(data):
+    """Any audio file's bytes as raw PCM in the stream format."""
+    process = await asyncio.create_subprocess_exec(
+        "ffmpeg", "-v", "error", "-i", "pipe:0",
+        "-f", "s16le", "-ac", str(CHANNELS), "-ar", str(RATE), "pipe:1",
+        stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+    )
+    out, err = await asyncio.wait_for(process.communicate(data), 30)
+    if process.returncode != 0 or not out:
+        raise RuntimeError(err.decode(errors="replace").strip()[-300:] or "decode failed")
+    return out[: len(out) // FRAME * FRAME]
+
+
+class Mixer(AudioSource):
+    """The one source a stream plays: door clips first, the song in between.
+
+    pyatv pulls frames as fast as the HomePod plays them, so while a clip is
+    being pulled, the song's ffmpeg simply waits on its pipe. The HomePod plays
+    about BUFFER_S behind what we hand out; volume changes wait that long too,
+    so they land with the sound they belong to."""
+
+    def __init__(self, homepod, source=None, volume=None):
+        self.homepod = homepod
+        self.source = source  # ffmpeg input arguments of the song, None for clips alone
+        self.ffmpeg = None
+        self.song_frames = 0
+        self.song_over = source is None
+        self.clips = deque()
+        self.clip = None
+        self.volume = volume  # what the song plays at; clips return to it
+        self.finished = False
+        self.tasks = set()
+
+    async def start(self):
+        if self.source:
+            self.ffmpeg = await asyncio.create_subprocess_exec(
+                "ffmpeg", "-v", "error", *self.source,
+                "-vn", "-f", "s16le", "-ac", str(CHANNELS), "-ar", str(RATE), "pipe:1",
+                stdout=asyncio.subprocess.PIPE,
+            )
+
+    def add(self, clip):
+        """Queues a clip; False once the stream has run out and cannot take it."""
+        if self.finished:
+            return False
+        self.clips.append(clip)
+        return True
+
+    def later(self, coroutine):
+        task = asyncio.get_running_loop().create_task(coroutine)
+        self.tasks.add(task)
+        task.add_done_callback(self.tasks.discard)
+
+    async def heard(self, clip, volume):
+        await asyncio.sleep(BUFFER_S)
+        if volume is not None:
+            await self.set_volume(volume)
+        if not clip.heard.done():
+            clip.heard.set_result(None)
+
+    async def set_volume(self, level):
+        try:
+            await self.homepod.volume(level)
+        except Exception as e:  # noqa: BLE001  the clip still plays, only louder or softer
+            log.warning("volume %s: %s", level, e)
+
+    async def readframes(self, nframes):
+        size = nframes * FRAME
+        if self.clip is None and self.clips:
+            self.clip = self.clips.popleft()
+            if self.clip.volume is not None:
+                self.later(self.delayed_volume(self.clip.volume))
+        if self.clip is not None:
+            clip = self.clip
+            data = clip.pcm[clip.pos : clip.pos + size]
+            clip.pos += len(data)
+            if clip.pos >= len(clip.pcm):
+                self.clip = None
+                # The next clip, if any, sets its own volume; the song gets its own back.
+                self.later(self.heard(clip, None if self.clips else self.volume))
+            return data + bytes(size - len(data))
+        if not self.song_over:
+            data = b""
+            try:
+                data = await self.ffmpeg.stdout.readexactly(size)
+            except asyncio.IncompleteReadError as e:
+                data = e.partial[: len(e.partial) // FRAME * FRAME]
+                self.song_over = True
+            self.song_frames += len(data) // FRAME
+            if data:
+                return data
+        self.finished = True
+        return AudioSource.NO_FRAMES
+
+    async def delayed_volume(self, level):
+        await asyncio.sleep(BUFFER_S)
+        await self.set_volume(level)
+
+    def song_position(self, offset):
+        return offset + max(0.0, self.song_frames / RATE - BUFFER_S)
+
+    async def close(self):
+        self.finished = True
+        error = RuntimeError("stream ended before the clip played")
+        if self.clip:
+            self.clip.fail(error)
+        for clip in self.clips:
+            clip.fail(error)
+        self.clips.clear()
+        if self.ffmpeg and self.ffmpeg.returncode is None:
+            self.ffmpeg.kill()
+            await self.ffmpeg.wait()
+
+    async def get_metadata(self):
+        return MediaMetadata()
+
+    @property
+    def sample_rate(self):
+        return RATE
+
+    @property
+    def channels(self):
+        return CHANNELS
+
+    @property
+    def sample_size(self):
+        return WIDTH
+
+    @property
+    def duration(self):
+        return 0
+
+
+_open_source = raop.open_source
+
+
+async def open_source(source, sample_rate, channels, sample_size):
+    # stream_file only knows files and URLs; a Mixer is already a source.
+    if isinstance(source, Mixer):
+        if (sample_rate, channels, sample_size) != (RATE, CHANNELS, WIDTH):
+            raise RuntimeError(f"HomePod wants {sample_rate} Hz x{channels} {sample_size * 8} bit")
+        await source.start()
+        return source
+    return await _open_source(source, sample_rate, channels, sample_size)
+
+
+raop.open_source = open_source
+
+
 class HomePod:
     """One pyatv connection, made again whenever it drops."""
 
@@ -184,27 +371,25 @@ class Player:
         self.changed = asyncio.Event()
         self.task = None  # the running play() task
         self.playing = None  # item id of the running task
-        self.started = 0.0  # monotonic time the song's position was `offset`
-        self.offset = 0.0
+        self.offset = 0.0  # where the song started in the running stream
+        self.mixer = None  # the running stream's source, song or clips alone
+        self.airplay = asyncio.Lock()  # one stream to the HomePod at a time
         self.state = "idle"
 
     def position(self):
-        if self.state != "playing":
+        if self.state != "playing" or self.mixer is None:
             return self.offset
-        return self.offset + max(0.0, time.monotonic() - self.started - BUFFER_S)
+        return self.mixer.song_position(self.offset)
 
-    async def poll(self):
-        version = -1
+    async def follow(self):
         while True:
             try:
-                state = await self.api.state(version)
-                if state["version"] != version or self.want is None:
-                    version = state["version"]
+                async for state in self.api.states():
                     self.want = state
                     self.changed.set()
             except Exception as e:  # noqa: BLE001
-                log.warning("poll: %s", e)
-                await asyncio.sleep(5)
+                log.warning("follow: %s", e)
+            await asyncio.sleep(3)
 
     async def heartbeat(self):
         while True:
@@ -228,7 +413,7 @@ class Player:
         self.task = None
 
     async def run(self):
-        asyncio.create_task(self.poll())
+        asyncio.create_task(self.follow())
         asyncio.create_task(self.heartbeat())
         prefetching = None
         while True:
@@ -244,11 +429,16 @@ class Player:
                 await self.api.report(current and current["itemId"], "idle", self.offset if current else None)
                 self.playing = None
                 continue
-            try:
-                await self.homepod.volume(want["volume"])
-            except Exception as e:  # noqa: BLE001
-                log.warning("volume: %s", e)
-                self.homepod.drop()
+            if self.mixer and self.mixer.clip is not None:
+                self.mixer.volume = want["volume"]  # set when the door clip ends
+            else:
+                try:
+                    await self.homepod.volume(want["volume"])
+                    if self.mixer:
+                        self.mixer.volume = want["volume"]
+                except Exception as e:  # noqa: BLE001
+                    log.warning("volume: %s", e)
+                    self.homepod.drop()
             if self.playing != current["itemId"] or not self.task or self.task.done():
                 await self.stop()
                 self.playing = current["itemId"]
@@ -303,41 +493,95 @@ class Player:
     async def stream(self, item, source, offset, volume):
         """Streams ffmpeg's input source, which starts at offset; (True, end)
         when it ran out, (False, position) when another sender cut us off."""
-        # pyatv reads a plain file object, so ffmpeg runs as a plain process.
-        ffmpeg = subprocess.Popen(
-            ["ffmpeg", "-v", "error", *source,
-             "-vn", "-ac", "2", "-ar", "44100", "-f", "mp3", "-b:a", "256k", "-"],
-            stdout=subprocess.PIPE,
-        )
-        try:
-            atv = await self.homepod.connect()
+        async with self.airplay:
+            mixer = Mixer(self.homepod, source, volume)
+            self.mixer, self.offset = mixer, offset
             try:
-                await self.homepod.volume(volume)
-            except Exception as e:  # noqa: BLE001
-                log.warning("volume: %s", e)
-            self.started, self.offset, self.state = time.monotonic(), offset, "playing"
-            await self.api.report(item["itemId"], "playing", offset)
-            metadata = MediaMetadata(title=item["title"], artist=item["artist"])
-            try:
-                await atv.stream.stream_file(ffmpeg.stdout, metadata=metadata)
-            except asyncio.CancelledError:
-                raise
-            except Exception as e:  # noqa: BLE001
+                atv = await self.homepod.connect()
+                try:
+                    await self.homepod.volume(volume)
+                except Exception as e:  # noqa: BLE001
+                    log.warning("volume: %s", e)
+                self.state = "playing"
+                await self.api.report(item["itemId"], "playing", offset)
+                metadata = MediaMetadata(title=item["title"], artist=item["artist"])
+                try:
+                    await atv.stream.stream_file(mixer, metadata=metadata)
+                except asyncio.CancelledError:
+                    raise
+                except Exception as e:  # noqa: BLE001
+                    position = self.position()
+                    log.info("stream cut at %.0f s: %s", position, e)
+                    self.homepod.drop()
+                    return False, position
                 position = self.position()
-                log.info("stream cut at %.0f s: %s", position, e)
-                self.homepod.drop()
-                return False, position
-            position = self.position()
-            total = item.get("durationS")
-            if total and position < total - 8:
-                log.info("stream ended early at %.0f of %s s", position, total)
-                self.homepod.drop()
-                return False, position
-            return True, position
-        finally:
-            ffmpeg.kill()
-            ffmpeg.stdout.close()
-            ffmpeg.wait()
+                total = item.get("durationS")
+                if total and position < total - 8:
+                    log.info("stream ended early at %.0f of %s s", position, total)
+                    self.homepod.drop()
+                    return False, position
+                return True, position
+            finally:
+                self.offset = self.position()
+                self.mixer = None
+                await mixer.close()
+
+    async def announce(self, pcm, volume):
+        """Plays a door clip; "mixed" into the running stream, or "alone" in
+        one of its own. Returns once the room has heard it."""
+        clip = Clip(pcm, volume)
+        while True:
+            if self.mixer and self.mixer.add(clip):
+                await clip.heard
+                return "mixed"
+            if not self.airplay.locked():
+                break
+            # A stream is starting or finishing; it takes the clip or frees the HomePod.
+            await asyncio.sleep(0.1)
+        async with self.airplay:
+            mixer = Mixer(self.homepod)
+            mixer.add(clip)
+            self.mixer = mixer
+            try:
+                atv = await self.homepod.connect()
+                mixer.volume = float(atv.audio.volume)
+                try:
+                    await atv.stream.stream_file(mixer, metadata=MediaMetadata(title="門口", artist="WinLab"))
+                except Exception:
+                    self.homepod.drop()
+                    raise
+                # The stream returns when the last frame is sent; the room hears it BUFFER_S later.
+                await clip.heard
+                return "alone"
+            finally:
+                self.mixer = None
+                await mixer.close()
+
+
+def announce_app(player):
+    async def handle(request):
+        t0 = time.monotonic()
+        try:
+            volume = float(request.query["volume"]) if "volume" in request.query else None
+        except ValueError:
+            return web.json_response({"ok": False, "error": "bad volume"}, status=400)
+        data = await request.read()
+        if not data:
+            return web.json_response({"ok": False, "error": "no audio"}, status=400)
+        try:
+            pcm = await decode(data)
+            how = await asyncio.wait_for(player.announce(pcm, volume), len(pcm) / (RATE * FRAME) + 60)
+        except Exception as e:  # noqa: BLE001
+            error = str(e) or type(e).__name__
+            log.warning("announce: %s", error)
+            return web.json_response({"ok": False, "error": error}, status=502)
+        ms = int((time.monotonic() - t0) * 1000)
+        log.info("announce %s, %d ms", how, ms)
+        return web.json_response({"ok": True, "how": how, "ms": ms})
+
+    app = web.Application(client_max_size=ANNOUNCE_MAX_BYTES)
+    app.router.add_post("/announce", handle)
+    return app
 
 
 async def main():
@@ -348,7 +592,12 @@ async def main():
     if not shutil.which("ffmpeg"):
         raise SystemExit("ffmpeg not found")
     async with aiohttp.ClientSession() as session:
-        await Player(Api(session)).run()
+        player = Player(Api(session))
+        runner = web.AppRunner(announce_app(player))
+        await runner.setup()
+        host, port = ANNOUNCE_LISTEN.rsplit(":", 1)
+        await web.TCPSite(runner, host, int(port)).start()
+        await player.run()
 
 
 if __name__ == "__main__":

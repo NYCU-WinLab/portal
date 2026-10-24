@@ -10,10 +10,6 @@ import { db } from "@/lib/db"
 import { musicPlayer, musicQueueItems, musicTracks } from "@/lib/db/schema"
 import { traced } from "@/lib/otel"
 
-export async function playerVersion() {
-  return (await playerRow())?.version ?? 0
-}
-
 /** What the player should do now: the song and where to start, paused,
  * volume, and the next songs to fetch ahead. */
 export async function playerState() {
