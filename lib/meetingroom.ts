@@ -143,19 +143,60 @@ async function post(path: string, body: Record<string, string>) {
   if (!response.ok) {
     // Its own page shows this body as the reason; keep it.
     const reason = (await response.text().catch(() => "")).trim().slice(0, 300)
-    throw new Error(
+    throw new Refused(
       `系上借用系統拒絕了（${response.status}${reason ? `：${reason}` : ""}）`
     )
   }
   return response
 }
 
+/** The system answered no: nothing was reserved. */
+class Refused extends Error {}
+
+/**
+ * After a reserve that got no clear answer (a timeout, a body that is not
+ * the id): the lab's reservation for exactly that room and span, if the
+ * system made one, released again so nothing stays held that the portal
+ * has no record of. The room was free when picked, so such a reservation
+ * can only be this one.
+ */
+async function releaseIfHeld(reservation: Reservation) {
+  const day = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Taipei",
+  }).format(new Date(reservation.start))
+  const rows = await getJson<
+    { id: string; start: string; end: string; subscriber: string }[]
+  >(`reservation/get/${encodeURIComponent(reservation.room)}/${day}`)
+  const held = rows.find(
+    (row) =>
+      row.subscriber === labAccount() &&
+      Number(row.start) === Date.parse(reservation.start) &&
+      Number(row.end) === Date.parse(reservation.end)
+  )
+  if (held) await release(String(held.id), reservation)
+  return Boolean(held)
+}
+
 /** Books a room; returns the system's reservation id. */
 export async function reserve(reservation: Reservation) {
-  const response = await post("reservation/add", reservation)
-  const { id } = (await response.json()) as { id?: string | number }
-  if (id === undefined || id === null || id === "")
-    throw new Error("系上借用系統沒有回傳預約編號")
+  let id: string | number | undefined | null
+  try {
+    const response = await post("reservation/add", reservation)
+    id = ((await response.json()) as { id?: string | number }).id
+  } catch (error) {
+    if (error instanceof Refused) throw error
+    id = undefined
+  }
+  if (id === undefined || id === null || id === "") {
+    // A slow system may still be writing it down.
+    await new Promise((resolve) => setTimeout(resolve, 3000))
+    const released = await releaseIfHeld(reservation).catch(() => null)
+    throw new Error(
+      released === null
+        ? "系上借用系統沒有回應，也查不到有沒有借到，請到系上借用系統確認"
+        : "系上借用系統沒有回應，這次沒有借到教室，請再試一次"
+    )
+  }
   return String(id)
 }
 

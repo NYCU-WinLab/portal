@@ -481,6 +481,25 @@ export async function placeBooking(input: NewBooking) {
   return booking
 }
 
+/**
+ * Runs fn holding a lock on one member's bookings for one day, so a hand
+ * booking and the standing meeting catch-up cannot both book the same slot
+ * for them. Held through the reserve and the insert; it costs one pool
+ * connection while fn runs.
+ */
+export async function withBookingLock<T>(
+  userId: string,
+  date: string,
+  fn: () => Promise<T>
+) {
+  return db.transaction(async (tx) => {
+    await tx.execute(
+      sql`select pg_advisory_xact_lock(hashtext('room_bookings'), hashtext(${`${userId} ${date}`}))`
+    )
+    return fn()
+  })
+}
+
 export async function organizerOf(userId: string) {
   const [me] = await db
     .select({ id: user.id, name: user.name, email: user.email })
@@ -574,21 +593,24 @@ export const bookMeeting = defineAction({
           input.allow_paid
         )
     const prefix = topicPrefix(group, attendees)
-    const booking = await placeBooking({
-      date: input.date,
-      startTime: input.start_time,
-      endTime: input.end_time,
-      room: room?.room ?? null,
-      title: composeTopic(prefix, input.title),
-      attendees,
-      organizer: await organizerOf(actor.userId),
-      // Every portal meeting gets a recording to look back at.
-      online: true,
-      meetingPrefix: prefix,
-      groupName: group,
-      agenda: input.agenda || null,
-      ...epic,
-    })
+    const organizer = await organizerOf(actor.userId)
+    const booking = await withBookingLock(actor.userId, input.date, () =>
+      placeBooking({
+        date: input.date,
+        startTime: input.start_time,
+        endTime: input.end_time,
+        room: room?.room ?? null,
+        title: composeTopic(prefix, input.title),
+        attendees,
+        organizer,
+        // Every portal meeting gets a recording to look back at.
+        online: true,
+        meetingPrefix: prefix,
+        groupName: group,
+        agenda: input.agenda || null,
+        ...epic,
+      })
+    )
     return {
       id: booking.id,
       room: booking.room,

@@ -3,7 +3,7 @@
 // time picks whatever is free by then. A daily run in the server process
 // does it; a new series books its first week at once, which the daily run
 // (looking only 7 days out) would never reach.
-import { and, asc, eq, gt, gte, inArray, lt, lte } from "drizzle-orm"
+import { and, asc, eq, gt, gte, inArray, isNull, lt, lte } from "drizzle-orm"
 import { z } from "zod"
 
 import { announceChange } from "@/lib/actions/changes"
@@ -15,6 +15,7 @@ import {
   resolveAttendees,
   roomFor,
   seriesBookings,
+  withBookingLock,
 } from "@/lib/actions/rooms"
 import {
   reconcileTeams,
@@ -150,10 +151,15 @@ async function strayLabHold(
 /**
  * Books one occurrence: the room the page would pick (a paid one when no
  * free room is open, as the old portal did), else tells the creator when
- * notify. Skips an occurrence that has a booking, kept or cancelled.
- * Returns the failure, or null.
+ * notify. Skips an occurrence that has a booking, kept or cancelled, or
+ * that the creator booked by hand. Returns "booked", "skipped", or the
+ * failure.
  */
-async function bookOccurrence(series: Series, date: string, notify = true) {
+async function bookOccurrence(
+  series: Series,
+  date: string,
+  notify = true
+): Promise<"booked" | "skipped" | string> {
   // Read again just before booking, whatever the caller saw: a cancelled
   // row settles the day as much as a kept one.
   const [held] = await db
@@ -162,61 +168,72 @@ async function bookOccurrence(series: Series, date: string, notify = true) {
     .where(
       and(eq(roomBookings.seriesId, series.id), eq(roomBookings.date, date))
     )
-  if (held) return null
+  if (held) return "skipped"
   const endTime = addMinutes(series.startTime, series.durationMinutes)!
-  // The creator may have booked the week by hand, as the failure mail asks;
-  // that booking carries no series, and a second one would hold two rooms.
-  const [byHand] = await db
-    .select({ id: roomBookings.id })
-    .from(roomBookings)
-    .where(
-      and(
-        eq(roomBookings.requestedBy, series.createdBy),
-        eq(roomBookings.date, date),
-        eq(roomBookings.status, "booked"),
-        lt(roomBookings.startTime, endTime),
-        gt(roomBookings.endTime, series.startTime)
-      )
-    )
-  if (byHand) return null
   const [owner] = await db
     .select({ id: user.id, name: user.name, email: user.email })
     .from(user)
     .where(eq(user.id, series.createdBy))
   try {
-    if (!bookingConfigured()) throw new Error("Portal 還沒設定系上借用帳號")
-    const slots = (await availability([date], true))[0].slots
-    const stray = await strayLabHold(slots, date, series.startTime, endTime)
-    if (stray)
-      throw new Error(
-        `系上已有實驗室帳號借的 ${stray}，portal 沒有這筆紀錄，可能是之前的預約沒收到回應；請確認後自己借或取消`
-      )
-    const room = roomFor(slots, series.startTime, endTime, true)
-    let attendees = series.attendees
-    if (series.includeAdvisor) {
-      const [advisor] = await db
-        .select({ name: user.name, email: user.email })
-        .from(user)
-        .where(eq(user.username, ADVISOR_USERNAME))
-      if (advisor) attendees = mergeAttendees(attendees, [advisor])
-    }
-    await placeBooking({
-      date,
-      startTime: series.startTime,
-      endTime,
-      room: room.room,
-      title: series.title,
-      attendees,
-      organizer: owner,
-      online: series.online,
-      meetingPrefix: series.meetingPrefix,
-      groupName: series.groupName,
-      agenda: series.agenda,
-      issueRefs: series.issueRefs,
-      deliverables: series.deliverables,
-      seriesId: series.id,
+    // The creator's hand bookings for the day take the same lock, so the
+    // check below and the booking cannot interleave with one.
+    return await withBookingLock(series.createdBy, date, async () => {
+      // The creator may have booked the week by hand, as the failure mail
+      // asks: the same span, no series. A second booking would hold two
+      // rooms. Another meeting of theirs at that time is not the week.
+      const [byHand] = await db
+        .select({ id: roomBookings.id })
+        .from(roomBookings)
+        .where(
+          and(
+            eq(roomBookings.requestedBy, series.createdBy),
+            eq(roomBookings.date, date),
+            eq(roomBookings.status, "booked"),
+            isNull(roomBookings.seriesId),
+            eq(roomBookings.startTime, series.startTime),
+            eq(roomBookings.endTime, endTime)
+          )
+        )
+      if (byHand) return "skipped" as const
+      if (!bookingConfigured()) throw new Error("Portal 還沒設定系上借用帳號")
+      const slots = (await availability([date], true))[0].slots
+      // A room the lab's account holds with no portal booking (an old hold
+      // nobody released) is not free, so another room is picked; it is
+      // only logged.
+      const stray = await strayLabHold(slots, date, series.startTime, endTime)
+      if (stray)
+        emitErrorLog(new Error("lab hold without a portal booking"), {
+          "room_series.id": series.id,
+          room: stray,
+          date,
+        })
+      const room = roomFor(slots, series.startTime, endTime, true)
+      let attendees = series.attendees
+      if (series.includeAdvisor) {
+        const [advisor] = await db
+          .select({ name: user.name, email: user.email })
+          .from(user)
+          .where(eq(user.username, ADVISOR_USERNAME))
+        if (advisor) attendees = mergeAttendees(attendees, [advisor])
+      }
+      await placeBooking({
+        date,
+        startTime: series.startTime,
+        endTime,
+        room: room.room,
+        title: series.title,
+        attendees,
+        organizer: owner,
+        online: series.online,
+        meetingPrefix: series.meetingPrefix,
+        groupName: series.groupName,
+        agenda: series.agenda,
+        issueRefs: series.issueRefs,
+        deliverables: series.deliverables,
+        seriesId: series.id,
+      })
+      return "booked" as const
     })
-    return null
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error)
     emitErrorLog(error, { "room_series.id": series.id })
@@ -345,9 +362,9 @@ export async function createStandingMeeting(
     input.start_date ?? addDays(today, 1),
     addDays(today, LEAD_DAYS)
   )) {
-    const error = await bookOccurrence(series, date)
-    if (error) errors.push(error)
-    else booked++
+    const result = await bookOccurrence(series, date)
+    if (result === "booked") booked++
+    else if (result !== "skipped") errors.push(result)
   }
   return { id: series.id, booked, errors }
 }
