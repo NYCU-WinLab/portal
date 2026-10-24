@@ -135,6 +135,11 @@ async function save(
     return row
   }
   if (values.userId) {
+    // One member's creates take turns, so two at once cannot both pass the
+    // cap.
+    await tx.execute(
+      sql`select pg_advisory_xact_lock(hashtext('door_phrases'), hashtext(${values.userId}))`
+    )
     const [{ count }] = await tx
       .select({ count: sql<number>`count(*)::int` })
       .from(doorPhrases)
