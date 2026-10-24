@@ -56,6 +56,13 @@ export const serviceGroups: { title: string; apps: Service[] }[] = [
         href: "/leave",
       },
       {
+        key: "members",
+        label: "Members",
+        name: "成員",
+        emoji: "📇",
+        href: "/members",
+      },
+      {
         key: "meetings",
         label: "Meetings",
         name: "會議",
