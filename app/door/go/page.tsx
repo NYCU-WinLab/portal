@@ -1,10 +1,8 @@
-import { DoorPage } from "../door-page"
+import { redirect } from "next/navigation"
 
-export const dynamic = "force-dynamic"
-
-// What the home-screen icon launches (the manifest's start_url): one tap on
-// the icon is one open. A link someone follows goes to /door, which waits
-// for a press.
+// Old home-screen icons still launch /door/go. It no longer opens anything:
+// Android can open a /door/go link from a chat app inside the installed app,
+// so the door opens only on a press (#49).
 export default function DoorGo() {
-  return <DoorPage autoOpen />
+  redirect("/door")
 }

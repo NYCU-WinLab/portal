@@ -4,7 +4,7 @@
   "short_name": "Door",
   "description": "一鍵開實驗室的門。",
   "lang": "zh-TW",
-  "start_url": "/door/go",
+  "start_url": "/door",
   "scope": "/door",
   "display": "standalone",
   "orientation": "portrait",

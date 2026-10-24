@@ -17,26 +17,12 @@ const OPENED_MS = 2000
 const OPENING = ["🔒", "🔓"]
 const FRAME_MS = 500
 
-// The launch opens the door once per document, however often the button
-// mounts again (going back to /door/go inside the app is not a launch).
-let launchHandled = false
-
-// Only the installed home-screen app opens on its own. In a browser tab,
-// /door/go is a link anyone can send or redirect to, so it waits for a press
-// like /door.
-const isHomeScreenApp = () =>
-  window.matchMedia("(display-mode: standalone)").matches ||
-  (navigator as { standalone?: boolean }).standalone === true
-
 export function DoorButton({
   configured,
   online,
-  autoOpen,
 }: {
   configured: boolean
   online: boolean
-  /** /door/go: open on launch and whenever the app comes back to the front. */
-  autoOpen: boolean
 }) {
   const [phase, setPhase] = useState<Phase>("idle")
   const [reachable, setReachable] = useState(online)
@@ -76,35 +62,6 @@ export function DoorButton({
       idle.current = true
     }, OPENED_MS)
   }, [])
-
-  // A home-screen launch is a fresh navigation. A reload, a back/forward
-  // restore or a prerender is the browser re-running the page on its own,
-  // and a door must never open because of that; an unknown type counts as no.
-  useEffect(() => {
-    if (!autoOpen || !configured || launchHandled || !isHomeScreenApp()) return
-    const [entry] = performance.getEntriesByType(
-      "navigation"
-    ) as PerformanceNavigationTiming[]
-    if (entry?.type !== "navigate") return
-    const timer = setTimeout(() => {
-      if (launchHandled) return
-      launchHandled = true
-      void open()
-    }, 0)
-    return () => clearTimeout(timer)
-  }, [autoOpen, configured, open])
-
-  // Tapping the icon of an app iOS still holds in memory mounts nothing; the
-  // page just comes back to the front. That is the same request, so it opens
-  // too, once at a time.
-  useEffect(() => {
-    if (!autoOpen || !configured || !isHomeScreenApp()) return
-    const onVisible = () => {
-      if (document.visibilityState === "visible") void open()
-    }
-    document.addEventListener("visibilitychange", onVisible)
-    return () => document.removeEventListener("visibilitychange", onVisible)
-  }, [autoOpen, configured, open])
 
   const status = !configured
     ? "門禁沒有設定"

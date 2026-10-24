@@ -1,7 +1,7 @@
 import type { Metadata } from "next"
 
-// Added to a home screen, /door becomes the Door app: its icon launches
-// /door/go, which opens the door on launch.
+// Added to a home screen, /door becomes the Door app. Its icon opens /door,
+// which waits for a press like the web page.
 export const metadata: Metadata = {
   manifest: "/door/manifest.webmanifest",
   appleWebApp: { capable: true, title: "Door", statusBarStyle: "black" },
