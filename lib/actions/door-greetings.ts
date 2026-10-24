@@ -18,7 +18,13 @@ import {
   leaves,
   user,
 } from "@/lib/db/schema"
-import { panelName, soundLink, suffixProblem } from "@/lib/door-greeting"
+import {
+  panelName,
+  REMIND_MINUTES,
+  reminderText,
+  soundLink,
+  suffixProblem,
+} from "@/lib/door-greeting"
 import { taipeiToday } from "@/lib/leave-dates"
 
 async function upsert(
@@ -240,5 +246,12 @@ export async function panelMeeting() {
     presenter: next.presenter ? panelName(next.presenter.name) : null,
     questioners: next.questioners.map((q) => panelName(q.name)),
     absent: away.map((row) => panelName(row.name)),
+    // What to say REMIND_MINUTES before it; the clip for this text is in
+    // the voice links once the voice job has made it.
+    reminder: reminderText(
+      next.presenter ? panelName(next.presenter.name) : null,
+      next.location ?? ""
+    ),
+    remind_minutes: REMIND_MINUTES,
   }
 }

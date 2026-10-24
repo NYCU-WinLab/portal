@@ -139,6 +139,19 @@ export function givenName(label: string) {
   return chars.slice(compound ? 2 : 1).join("")
 }
 
+/** How long before the lab meeting the door reminds the lab. */
+export const REMIND_MINUTES = 10
+
+/** The door's reminder before the lab meeting, said in one clip in CC's
+ * voice once the voice job has made it: "10 分鐘後開會，報告人是詠翔，地點
+ * EC411". presenter is a panel label. */
+export function reminderText(presenter: string | null, location: string) {
+  let text = `${REMIND_MINUTES} 分鐘後開會`
+  if (presenter) text += `，報告人是${givenName(presenter)}`
+  if (location.trim()) text += `，地點${location.trim()}`
+  return text
+}
+
 /** What the door says for a member: given name, then the letters and Han
  * characters of their suffix ("水哥"; "＝)" says nothing). */
 export const spokenName = (label: string, suffix: string | null) =>
