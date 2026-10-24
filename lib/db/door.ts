@@ -5,6 +5,7 @@ import {
   customType,
   index,
   integer,
+  jsonb,
   pgTable,
   primaryKey,
   smallint,
@@ -84,7 +85,10 @@ export const doorEvents = pgTable(
 )
 
 // The cards the reader lets in, as the portal knows them; the reader keeps
-// its own copy, and the two are compared (sync_state). holder_name is what
+// its own copy, and the two are compared (sync_state: synced, missing when
+// the reader lacks it, unknown when a write went unconfirmed). updated_at
+// moves only when the card changes hands: a swipe is credited to the holder
+// only from then on. holder_name is what
 // the reader stores (Big5, at most 8 characters), holder_id the member it
 // belongs to, when it is one.
 export const doorCards = pgTable(
@@ -102,6 +106,31 @@ export const doorCards = pgTable(
   (table) => [
     index().on(table.holderId),
     check("door_cards_card_id", sql`${table.cardId} ~ '^[0-9]{10}$'`),
+  ]
+)
+
+// Every change to the reader's card table and every comparison with it,
+// by a door admin or by the daily check (user_id null). ok false with the
+// bridge's code in error; detail holds what the attempt saw (counts, the
+// card numbers that differed).
+export const doorCardChanges = pgTable(
+  "door_card_changes",
+  {
+    id: uuid().defaultRandom().primaryKey(),
+    at: timestamp({ withTimezone: true }).defaultNow().notNull(),
+    action: text().notNull(),
+    cardId: text(),
+    userId: uuid().references(() => user.id, { onDelete: "set null" }),
+    ok: boolean().notNull(),
+    error: text(),
+    detail: jsonb().$type<Record<string, unknown>>(),
+  },
+  (table) => [
+    index().on(table.at),
+    check(
+      "door_card_changes_action",
+      sql`${table.action} in ('add', 'update', 'delete', 'import', 'compare')`
+    ),
   ]
 )
 

@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, sql } from "drizzle-orm"
+import { and, desc, eq, inArray, sql } from "drizzle-orm"
 import { z } from "zod"
 
 import { announceChange } from "@/lib/actions/changes"
@@ -118,32 +118,6 @@ export const listDoorEvents = defineAction({
       .orderBy(desc(doorEvents.at), desc(doorEvents.id))
       .limit(limit)
     return { events: rows as DoorEvent[] }
-  },
-})
-
-export const listDoorCards = defineAction({
-  name: "list_door_cards",
-  admin: "door",
-  title: "門禁卡",
-  description:
-    "The cards the door reader lets in, for door admins only: the 10-digit card number, the holder name stored on the reader, the member it belongs to (null for a guest card), a note, and whether it matched the reader at the last comparison (sync_state).",
-  kind: "query",
-  input: z.object({}),
-  run: async () => {
-    const cards = await db
-      .select({
-        cardId: doorCards.cardId,
-        holderName: doorCards.holderName,
-        holderId: doorCards.holderId,
-        member: user.name,
-        note: doorCards.note,
-        syncState: doorCards.syncState,
-        lastSeenAt: doorCards.lastSeenAt,
-      })
-      .from(doorCards)
-      .leftJoin(user, eq(user.id, doorCards.holderId))
-      .orderBy(asc(doorCards.holderName), asc(doorCards.cardId))
-    return { cards }
   },
 })
 

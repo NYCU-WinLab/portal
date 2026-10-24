@@ -23,6 +23,12 @@ export const doorNav = [
     admin: "door" as const,
   },
   {
+    label: "門禁卡",
+    href: "/door/cards",
+    tip: "誰的卡刷得進門",
+    admin: "door" as const,
+  },
+  {
     label: "紀錄",
     href: "/door/log",
     tip: "誰開了門",

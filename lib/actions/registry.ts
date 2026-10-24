@@ -46,12 +46,16 @@ import {
 } from "@/lib/actions/approve"
 import type { Action } from "@/lib/actions/define"
 import { listHomePins, setHomePin } from "@/lib/actions/home"
+import { getDoorStatus, listDoorEvents, openDoor } from "@/lib/actions/door"
 import {
-  getDoorStatus,
+  addDoorCard,
+  compareDoorCards,
+  deleteDoorCard,
+  importDoorCards,
+  listDoorCardChanges,
   listDoorCards,
-  listDoorEvents,
-  openDoor,
-} from "@/lib/actions/door"
+  updateDoorCard,
+} from "@/lib/actions/door-cards"
 import {
   getMyDoorGreeting,
   setDoorSpeakName,
@@ -221,6 +225,12 @@ export const actions: Action[] = [
   openDoor,
   listDoorEvents,
   listDoorCards,
+  addDoorCard,
+  updateDoorCard,
+  deleteDoorCard,
+  compareDoorCards,
+  importDoorCards,
+  listDoorCardChanges,
   getMyDoorGreeting,
   setDoorSuffix,
   setDoorSpeakName,
