@@ -214,9 +214,16 @@ export async function recordCardSwipes(
       const rows = events.map((event) => {
         const at = new Date(event.device_time)
         // Today's holder is no proof of who held the card before it was
-        // assigned, so older swipes stay anonymous.
+        // assigned, so older swipes stay anonymous. The swipe happened by
+        // the earlier of the reader's clock (which can run minutes fast)
+        // and the bridge's (late when it catches up).
         const holder = byCard.get(event.card_id)
-        const known = holder && at >= holder.updatedAt ? holder : undefined
+        const swiped = Math.min(
+          at.getTime(),
+          new Date(event.received_at).getTime()
+        )
+        const known =
+          holder && swiped >= holder.updatedAt.getTime() ? holder : undefined
         const granted = GRANTED.has(event.event_code)
         const denial = DENIED[event.event_code]
         return {

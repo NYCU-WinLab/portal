@@ -33,6 +33,8 @@ export const remove = async (cardId: string) => call(deleteDoorCard, { cardId })
 export const compare = async () =>
   call<{
     suspect: boolean
+    partial: boolean
+    listed: number
     missing: string[]
     deleting: string[]
     extra: unknown[]
