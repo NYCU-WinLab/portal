@@ -267,6 +267,13 @@
       "when": 1792824610218,
       "tag": "0037_perpetual_the_call",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1792826334201,
+      "tag": "0038_personal_door_phrases",
+      "breakpoints": true
     }
   ]
 }

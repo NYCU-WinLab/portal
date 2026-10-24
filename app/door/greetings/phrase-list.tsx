@@ -6,7 +6,6 @@ import * as React from "react"
 import { ConfirmDialog } from "@/components/confirm-dialog"
 import { EmptyState } from "@/components/empty-state"
 import { FormDialog, FormField } from "@/components/form-dialog"
-import { SectionHeader } from "@/components/page-header"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -41,11 +40,14 @@ const slotKey = (p: Slot) =>
 function PhraseForm({
   phrase,
   slot,
+  lab,
   sample,
   trigger,
 }: {
   phrase?: DoorPhrase
   slot?: Slot
+  /** A lab default rather than the member's own phrase. */
+  lab: boolean
   sample: string
   trigger: React.ReactElement
 }) {
@@ -64,6 +66,7 @@ function PhraseForm({
       days,
       enabled: phrase?.enabled ?? true,
       first_visit: first,
+      default: lab,
     }
     await report(
       phrase ? update({ ...input, id: phrase.id }) : create(input),
@@ -82,7 +85,7 @@ function PhraseForm({
           setAfter(phrase?.after ?? "")
         }
       }}
-      title={phrase ? "修改問候語" : "新增問候語"}
+      title={`${phrase ? "修改" : "新增"}${lab ? "預設" : ""}問候語`}
       submitLabel={phrase ? "儲存" : "新增"}
       onSubmit={submit}
     >
@@ -159,19 +162,41 @@ function PhraseForm({
   )
 }
 
-export function AddPhrase({ sample }: { sample: string }) {
-  return <PhraseForm sample={sample} trigger={<Button>新增</Button>} />
+export function AddPhrase({
+  lab = false,
+  sample,
+  trigger = <Button>新增</Button>,
+}: {
+  lab?: boolean
+  sample: string
+  trigger?: React.ReactElement
+}) {
+  return <PhraseForm lab={lab} sample={sample} trigger={trigger} />
 }
 
 function PhraseRow({
   phrase,
   sample,
   recording,
+  editable,
 }: {
   phrase: DoorPhrase
   sample: string
   recording?: string
+  editable: boolean
 }) {
+  if (!editable)
+    return (
+      <li className="flex min-h-14 items-center gap-4 border-b border-border py-2">
+        <span className="min-w-0 flex-1 truncate">
+          {phrase.before}
+          {sample}
+          {phrase.after || "。"}
+        </span>
+        {recording && <Badge variant="muted">{recording}</Badge>}
+        {!phrase.enabled && <Badge variant="muted">停用</Badge>}
+      </li>
+    )
   return (
     <li className="flex min-h-14 items-center gap-4 border-b border-border py-2">
       <span className="min-w-0 flex-1 truncate">
@@ -195,6 +220,7 @@ function PhraseRow({
       <div className="flex shrink-0 gap-1">
         <PhraseForm
           phrase={phrase}
+          lab={phrase.default}
           sample={sample}
           trigger={
             <Button variant="ghost" size="icon" aria-label="修改">
@@ -211,27 +237,32 @@ function PhraseRow({
           title="刪除這條問候語？"
           confirmLabel="刪除"
           variant="destructive"
-          onConfirm={() => report(remove(phrase.id), "已刪除")}
+          onConfirm={() => report(remove(phrase.id, phrase.default), "已刪除")}
         />
       </div>
     </li>
   )
 }
 
-// The pool, one group per time slot: phrases with the same time and days,
-// and the first-visit ones on their own, first. The door picks one phrase
-// of the slot in force at random; a group in force carries a badge.
+// One set of phrases, the member's own or the lab's defaults, one group per
+// time slot: phrases with the same time and days, and the first-visit ones
+// on their own, first. The door picks one phrase of the slot in force at
+// random; a group in force carries a badge.
 export function PhraseList({
   phrases,
   now,
   sample,
   recording,
+  lab,
+  editable,
 }: {
   phrases: DoorPhrase[]
   now: string[]
   sample: string
   /** Phrase id to how far its clips in CC's voice are. */
   recording: Record<string, string>
+  lab: boolean
+  editable: boolean
 }) {
   if (phrases.length === 0) return <EmptyState noun="問候語" />
   const groups = new Map<string, DoorPhrase[]>()
@@ -242,22 +273,23 @@ export function PhraseList({
     ])
   const ordered = [...groups.entries()].sort(([a], [b]) => a.localeCompare(b))
   return (
-    <div className="flex stagger-rise flex-col gap-10">
+    <div className="flex stagger-rise flex-col gap-8">
       {ordered.map(([key, group]) => {
         const slot = group[0]
         const time = `${slot.starts_at} 到 ${slot.ends_at}，${dayLabel(slot.days)}`
         const title = slot.first_visit ? `今天第一次進門，${time}` : time
         return (
           <section key={key} className="flex flex-col gap-2">
-            <SectionHeader
-              title={title}
-              actions={
-                <div className="flex items-center gap-2">
-                  {group.some((p) => now.includes(p.id)) && (
-                    <Badge variant="muted">現在</Badge>
-                  )}
+            <div className="flex min-h-9 items-center justify-between gap-4">
+              <h3 className="min-w-0 text-muted-foreground">{title}</h3>
+              <div className="flex shrink-0 items-center gap-2">
+                {group.some((p) => now.includes(p.id)) && (
+                  <Badge variant="muted">現在</Badge>
+                )}
+                {editable && (
                   <PhraseForm
                     slot={slot}
+                    lab={lab}
                     sample={sample}
                     trigger={
                       <Button variant="ghost" size="icon" aria-label="加一句">
@@ -265,9 +297,9 @@ export function PhraseList({
                       </Button>
                     }
                   />
-                </div>
-              }
-            />
+                )}
+              </div>
+            </div>
             <ul className="flex flex-col">
               {group.map((phrase) => (
                 <PhraseRow
@@ -275,6 +307,7 @@ export function PhraseList({
                   phrase={phrase}
                   sample={sample}
                   recording={recording[phrase.id]}
+                  editable={editable}
                 />
               ))}
             </ul>

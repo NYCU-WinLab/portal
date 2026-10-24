@@ -25,4 +25,5 @@ async function call(action: Action, input: unknown) {
 
 export const create = async (input: unknown) => call(createDoorPhrase, input)
 export const update = async (input: unknown) => call(updateDoorPhrase, input)
-export const remove = async (id: string) => call(deleteDoorPhrase, { id })
+export const remove = async (id: string, lab: boolean) =>
+  call(deleteDoorPhrase, { id, default: lab })

@@ -2,7 +2,11 @@ import { eq, inArray, isNotNull, or, sql } from "drizzle-orm"
 import { z } from "zod"
 
 import { defineAction } from "@/lib/actions/define"
-import { panelPhrases, panelVoice } from "@/lib/actions/door-phrases"
+import {
+  type PanelRule,
+  panelPhrases,
+  panelVoice,
+} from "@/lib/actions/door-phrases"
 import { panelPlaylists } from "@/lib/actions/door-sounds"
 import { readSchedule } from "@/lib/actions/meetings-shared"
 import { db } from "@/lib/db"
@@ -105,30 +109,32 @@ export const setDoorSpeakName = defineAction({
  * door picks one of at random. pool links every listed sound, default
  * lists the ones for everyone else. color stays empty; per-member colors
  * were dropped in the move. quiet lists the names the door greets without
- * saying "Hi <name>". phrases is the
- * spoken greeting schedule the door picks from at open time, and voice
+ * saying "Hi <name>". phrases is the lab's default spoken greeting
+ * schedule the door picks from at open time, member_phrases each member's
+ * own by name, which win over the defaults while one is in force; voice
  * links the clips in CC's voice by text.
  */
 export async function panelGreetings() {
-  const [suffixRows, { playlists, defaults, versions }, phrases, voice] =
-    await Promise.all([
-      db
-        .select({
-          userId: doorGreetings.userId,
-          suffix: doorGreetings.suffix,
-          speakName: doorGreetings.speakName,
-        })
-        .from(doorGreetings)
-        .where(
-          or(
-            isNotNull(doorGreetings.suffix),
-            eq(doorGreetings.speakName, false)
-          )
-        ),
-      panelPlaylists(),
-      panelPhrases(),
-      panelVoice(),
-    ])
+  const [
+    suffixRows,
+    { playlists, defaults, versions },
+    { defaults: phrases, members: ownPhrases },
+    voice,
+  ] = await Promise.all([
+    db
+      .select({
+        userId: doorGreetings.userId,
+        suffix: doorGreetings.suffix,
+        speakName: doorGreetings.speakName,
+      })
+      .from(doorGreetings)
+      .where(
+        or(isNotNull(doorGreetings.suffix), eq(doorGreetings.speakName, false))
+      ),
+    panelPlaylists(),
+    panelPhrases(),
+    panelVoice(),
+  ])
   const suffixes = new Map(
     suffixRows.flatMap((row) =>
       row.suffix ? [[row.userId, row.suffix] as const] : []
@@ -138,7 +144,12 @@ export async function panelGreetings() {
     suffixRows.filter((row) => !row.speakName).map((row) => row.userId)
   )
   const ids = [
-    ...new Set([...suffixes.keys(), ...silent, ...playlists.keys()]),
+    ...new Set([
+      ...suffixes.keys(),
+      ...silent,
+      ...playlists.keys(),
+      ...ownPhrases.keys(),
+    ]),
   ].sort()
   const [members, cards] = ids.length
     ? await Promise.all([
@@ -157,6 +168,7 @@ export async function panelGreetings() {
   const quiet = new Set<string>()
   const owners = new Map<string, string>()
   const playlist: Record<string, string[]> = {}
+  const memberPhrases: Record<string, PanelRule[]> = {}
   const pool: Record<string, { url: string; version: string }> = {}
   const link = (soundId: string) =>
     (pool[soundId] ??= {
@@ -172,6 +184,7 @@ export async function panelGreetings() {
     ].map(panelName)
     const own = suffixes.get(userId)
     const list = playlists.get(userId) ?? []
+    const rules = ownPhrases.get(userId)
     for (const label of labels) {
       // The first member to claim a name keeps it.
       if (!label) continue
@@ -184,6 +197,7 @@ export async function panelGreetings() {
         playlist[label] = list
         list.forEach(link)
       }
+      if (rules && !(label in memberPhrases)) memberPhrases[label] = rules
     }
   }
   for (const soundId of defaults) link(soundId)
@@ -195,6 +209,7 @@ export async function panelGreetings() {
     default: defaults,
     quiet: [...quiet].sort(),
     phrases,
+    member_phrases: memberPhrases,
     voice,
   }
 }

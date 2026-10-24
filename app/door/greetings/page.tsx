@@ -7,10 +7,10 @@ import {
 import Link from "next/link"
 
 import { ProgressRefresh } from "@/components/live-refresh"
-import { PageHeader } from "@/components/page-header"
+import { PageHeader, SectionHeader } from "@/components/page-header"
+import { Button } from "@/components/ui/button"
 import { PortalShell } from "@/components/portal-shell"
 import { NumberTicker } from "@/components/ui/number-ticker"
-import { requireAdminPage } from "@/lib/actions/authz"
 import { runAction } from "@/lib/actions/define"
 import { listDoorPhrases, listDoorVoiceClips } from "@/lib/actions/door-phrases"
 import { whoami } from "@/lib/actions/users"
@@ -24,16 +24,18 @@ export const dynamic = "force-dynamic"
 
 export default async function DoorGreetingsPage() {
   const actor = await requireActor("/door/greetings")
-  await requireAdminPage(actor, "door")
-  const [{ phrases, now }, me, { missing, job }] = await Promise.all([
+  const [{ mine, defaults, now, can_edit_defaults }, me] = await Promise.all([
     runAction(listDoorPhrases, actor, {}),
     runAction(whoami, actor, {}),
-    runAction(listDoorVoiceClips, actor, {}),
   ])
+  // The recording status reads the voice clips, which only door admins see.
+  const { missing, job } = can_edit_defaults
+    ? await runAction(listDoorVoiceClips, actor, {})
+    : { missing: [], job: { text: null, step: 0, steps: 0, online: false } }
   // A phrase is still being recorded while its own words have no clip.
   const waiting = new Set(missing)
   const recording = Object.fromEntries(
-    phrases.flatMap((phrase) => {
+    [...mine, ...defaults].flatMap((phrase) => {
       const parts = voiceParts("", phrase.before, phrase.after)
       if (job.text && parts.includes(job.text))
         return [[phrase.id, `錄製中 ${job.step}/${job.steps}`]]
@@ -43,14 +45,17 @@ export default async function DoorGreetingsPage() {
     })
   )
   const sample = givenName(panelName(me.name ?? "")) || "名字"
-  const [only] = now.length === 1 ? phrases.filter((p) => p.id === now[0]) : []
+  const [only] =
+    now.length === 1
+      ? [...mine, ...defaults].filter((p) => p.id === now[0])
+      : []
   return (
     <PortalShell page={doorPage} nav={doorNav}>
       <ProgressRefresh topic="door_voice" />
       <div className="flex flex-col gap-12">
         <PageHeader title="問候語" actions={<AddPhrase sample={sample} />} />
         <Focus>
-          <FocusLabel>現在有人開門，門口會說</FocusLabel>
+          <FocusLabel>現在你開門，門口會說</FocusLabel>
           <FocusTitle>
             {now.length === 0 ? (
               <>
@@ -89,12 +94,39 @@ export default async function DoorGreetingsPage() {
             ，錄好前門口先用一般語音。
           </p>
         )}
-        <PhraseList
-          phrases={phrases}
-          now={now}
-          sample={sample}
-          recording={recording}
-        />
+        <section className="flex flex-col gap-4">
+          <SectionHeader title="我的" />
+          <PhraseList
+            phrases={mine}
+            now={now}
+            sample={sample}
+            lab={false}
+            recording={recording}
+            editable
+          />
+        </section>
+        <section className="flex flex-col gap-4">
+          <SectionHeader
+            title="預設，我的沒排到的時段說"
+            actions={
+              can_edit_defaults && (
+                <AddPhrase
+                  lab
+                  sample={sample}
+                  trigger={<Button variant="outline">新增預設</Button>}
+                />
+              )
+            }
+          />
+          <PhraseList
+            phrases={defaults}
+            now={now}
+            sample={sample}
+            lab
+            recording={recording}
+            editable={can_edit_defaults}
+          />
+        </section>
       </div>
     </PortalShell>
   )
