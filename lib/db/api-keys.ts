@@ -15,11 +15,11 @@ import { user } from "@/lib/db/auth-schema"
 // member, but only in the apps it names (lib/api-apps.ts). Only the SHA-256
 // of the key is kept; prefix is its first characters, to tell keys apart on
 // /api-keys. A revoked key stays, for the door log.
-// The table is still door_tokens, where door tokens lived: the new columns
-// only add to it, so a rollback reads the same keys and revocations. Its
-// rename to api_keys is a later, separate change.
+// Door tokens lived in door_tokens; the table is api_keys since 0043, and
+// a view under the old name keeps the previous release working for one
+// release.
 export const apiKeys = pgTable(
-  "door_tokens",
+  "api_keys",
   {
     id: uuid().defaultRandom().primaryKey(),
     userId: uuid()
