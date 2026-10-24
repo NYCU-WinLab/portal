@@ -64,9 +64,15 @@ export const auth = betterAuth({
       },
     },
   },
-  // A session ended elsewhere (Keycloak logout, a member who left) stops
-  // working within a minute, not five.
-  session: { cookieCache: { enabled: true, maxAge: 60 } },
+  session: {
+    // Signed in for 30 days (Loki, 2026-10-24), renewed once a day of use.
+    // Not tied to Keycloak's 30-minute idle timeout: a Keycloak logout and
+    // a member who left still end it (back-channel logout, member sweep).
+    expiresIn: 30 * 24 * 60 * 60,
+    updateAge: 24 * 60 * 60,
+    // A session ended elsewhere stops working within a minute, not five.
+    cookieCache: { enabled: true, maxAge: 60 },
+  },
   plugins: [
     genericOAuth({
       config: [
