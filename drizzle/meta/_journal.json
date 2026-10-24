@@ -316,6 +316,13 @@
       "when": 1792851191484,
       "tag": "0044_booking_leases",
       "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1792851649566,
+      "tag": "0045_drop_door_tokens_view",
+      "breakpoints": true
     }
   ]
 }
