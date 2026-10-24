@@ -1,0 +1,1 @@
+ALTER TABLE "door_tokens" ADD COLUMN "recent_openings" timestamp with time zone[] DEFAULT '{}'::timestamptz[] NOT NULL;

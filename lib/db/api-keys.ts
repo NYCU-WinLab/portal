@@ -36,10 +36,17 @@ export const apiKeys = pgTable(
       .default(sql`'{door}'::text[]`),
     createdAt: timestamp({ withTimezone: true }).defaultNow().notNull(),
     lastUsedAt: timestamp({ withTimezone: true }),
-    // The door's rate limit: openings claimed since windowStartedAt, reset
-    // an hour after it. Claimed before the relay is called, so a slow door
-    // cannot let extra calls through. lastOpenedAt spaces openings apart.
+    // The door's rate limit: when each opening of the last hour was
+    // claimed, a sliding window. Claimed before the relay is called, so a
+    // slow door cannot let extra calls through. lastOpenedAt spaces
+    // openings apart.
     lastOpenedAt: timestamp({ withTimezone: true }),
+    recentOpenings: timestamp({ withTimezone: true })
+      .array()
+      .notNull()
+      .default(sql`'{}'::timestamptz[]`),
+    // The fixed window before recentOpenings; no longer written, kept so a
+    // rollback still reads them. Dropped with the table rename (issue 144).
     windowStartedAt: timestamp({ withTimezone: true }),
     windowCount: integer().default(0).notNull(),
     revokedAt: timestamp({ withTimezone: true }),
