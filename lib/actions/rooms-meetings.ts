@@ -24,6 +24,8 @@ export const joinUrl = (bookingId: string) =>
   `${process.env.BETTER_AUTH_URL}/rooms/join/${bookingId}`
 
 type Booking = typeof roomBookings.$inferSelect
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0]
+type Ask = { booking: Booking; variables: Record<string, string> }
 
 /**
  * Asks the pipeline for a booking's Teams meeting, or to cancel it. The
@@ -36,17 +38,35 @@ async function ask(
   kind: "create" | "update" | "cancel",
   variables: Record<string, string>
 ) {
+  return askIf(kind, async () => ({ booking, variables }))
+}
+
+/**
+ * ask, when decide (run in the transaction that records the request)
+ * still wants it; null from decide asks nothing.
+ */
+async function askIf(
+  kind: "create" | "update" | "cancel",
+  decide: (tx: Tx) => Promise<Ask | null>
+) {
   const requestId = `room-booking-${randomBytes(6).toString("hex")}`
   const callbackToken = randomBytes(32).toString("hex")
-  await db.insert(roomMeetingRequests).values({
-    requestId,
-    bookingId: booking.id,
-    kind,
-    callbackTokenHash: sha256(callbackToken),
-    ...(kind === "cancel"
-      ? {}
-      : { subject: booking.title, agenda: booking.agenda }),
+  const asked = await db.transaction(async (tx) => {
+    const wanted = await decide(tx)
+    if (!wanted) return null
+    await tx.insert(roomMeetingRequests).values({
+      requestId,
+      bookingId: wanted.booking.id,
+      kind,
+      callbackTokenHash: sha256(callbackToken),
+      ...(kind === "cancel"
+        ? {}
+        : { subject: wanted.booking.title, agenda: wanted.booking.agenda }),
+    })
+    return wanted
   })
+  if (!asked) return null
+  const { booking, variables } = asked
   try {
     const pipelineId = await triggerMeetingPipeline({
       REQUEST_ID: requestId,
@@ -106,14 +126,15 @@ const cancelVariables = (
 })
 
 /**
- * Where the booking's Teams meeting stands against its current title and
- * agenda: "busy" while a create or update is still out or no meeting exists
- * yet, "current" when the last one asked for them (a failed update is not
- * asked again; the daily run mails it), else "stale" with the create
- * request whose meeting to update.
+ * Where the booking's Teams meeting stands against its current title:
+ * "busy" while a create or update is still out or no meeting exists yet,
+ * "current" when the last one asked for that title (a failed update is
+ * not asked again; the daily run mails it), else "stale" with the create
+ * request whose meeting to rename. Only the title counts: an update posts
+ * in the channel, and an agenda alone is not worth that.
  */
-export async function teamsTopicState(booking: Booking) {
-  const asked = await db
+async function teamsTopicState(tx: Tx, booking: Booking) {
+  const asked = await tx
     .select()
     .from(roomMeetingRequests)
     .where(
@@ -128,11 +149,7 @@ export async function teamsTopicState(booking: Booking) {
   )
   if (!meeting || asked.some((row) => row.status === "pending"))
     return { state: "busy" as const }
-  const last = asked[0]!
-  // A create from before subjects were recorded counts as current.
-  if (last.subject === null) return { state: "current" as const }
-  return last.subject === booking.title &&
-    (last.agenda ?? null) === (booking.agenda ?? null)
+  return asked[0]!.subject === booking.title
     ? { state: "current" as const }
     : {
         state: "stale" as const,
@@ -145,24 +162,36 @@ export async function teamsTopicState(booking: Booking) {
 }
 
 /**
- * Renames the booking's Teams meeting to its current title and agenda,
- * keeping the meeting and its link. Returns why the ask failed, or null.
+ * Renames a booking's Teams meeting to its current title and agenda,
+ * keeping the meeting and its link, when Teams shows another title. The
+ * booking row is locked while deciding, so two callers ask once. Returns
+ * why the ask failed, or null.
  */
-export async function updateTeamsMeeting(
-  booking: Booking,
-  meeting: { requestId: string; cancelId: string; messageId: string }
-) {
-  if (!booking.online || !meetingPipelineConfigured()) return null
-  const start = taipeiOffsetIso(booking.date, booking.startTime)
-  return ask(booking, "update", {
-    BOOKING_REQUEST_ID: meeting.requestId,
-    // The same 04000000… GlobalObjectId a cancellation sends.
-    EVENT_ID: meeting.cancelId,
-    MESSAGE_ID: meeting.messageId,
-    START_TIME: start,
-    END_TIME: taipeiOffsetIso(booking.date, booking.endTime),
-    ORIGINAL_START_TIME: start,
-    ...(booking.agenda ? { AGENDA: booking.agenda } : {}),
+export async function renameTeamsMeeting(bookingId: string) {
+  if (!meetingPipelineConfigured()) return null
+  return askIf("update", async (tx) => {
+    const [booking] = await tx
+      .select()
+      .from(roomBookings)
+      .where(eq(roomBookings.id, bookingId))
+      .for("update")
+    if (!booking || booking.status !== "booked" || !booking.online) return null
+    const topic = await teamsTopicState(tx, booking)
+    if (topic.state !== "stale") return null
+    const start = taipeiOffsetIso(booking.date, booking.startTime)
+    return {
+      booking,
+      variables: {
+        BOOKING_REQUEST_ID: topic.meeting.requestId,
+        // The same 04000000… GlobalObjectId a cancellation sends.
+        EVENT_ID: topic.meeting.cancelId,
+        MESSAGE_ID: topic.meeting.messageId,
+        START_TIME: start,
+        END_TIME: taipeiOffsetIso(booking.date, booking.endTime),
+        ORIGINAL_START_TIME: start,
+        ...(booking.agenda ? { AGENDA: booking.agenda } : {}),
+      },
+    }
   })
 }
 

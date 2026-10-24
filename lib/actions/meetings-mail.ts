@@ -3,8 +3,8 @@
 // while the week has no title, and the week gets its Teams meeting through
 // the rooms pipeline as soon as the title is in. On Friday from 12:00
 // announce@winlab.tw gets the week, with the Teams meeting's calendar invite
-// (made then when the title never came). A later change of paper, presenter
-// or questioners renames that Teams meeting, keeping its link.
+// (made then when the title never came). A later change of paper or
+// presenter renames that Teams meeting, keeping its link.
 import { and, asc, eq, inArray, sql } from "drizzle-orm"
 
 import { queueMail } from "@/lib/actions/mail"
@@ -19,11 +19,7 @@ import {
   placeBooking,
   type Booking,
 } from "@/lib/actions/rooms"
-import {
-  joinUrl,
-  teamsTopicState,
-  updateTeamsMeeting,
-} from "@/lib/actions/rooms-meetings"
+import { joinUrl, renameTeamsMeeting } from "@/lib/actions/rooms-meetings"
 import { db } from "@/lib/db"
 import {
   admins,
@@ -408,9 +404,9 @@ async function announce(
 
 /**
  * Keeps the week's Teams meeting named after what is presented: a new
- * paper, presenter or questioners rename the booking, and its Teams
- * meeting and GitLab record follow through an update that keeps the link.
- * A time or place change is not this: it releases the week instead.
+ * paper, presenter or questioners update the booking, and a new title also
+ * renames its Teams meeting and GitLab record through an update that keeps
+ * the link. A time or place change is not this: it releases the week.
  */
 async function syncTeamsTopic(meeting: ScheduledMeeting) {
   if (meeting.kind === "holiday") return
@@ -418,7 +414,6 @@ async function syncTeamsTopic(meeting: ScheduledMeeting) {
   if (!held) return
   const title = composeTopic(LAB_GROUP, recordingTopic(meeting))
   const agenda = recordAgenda(meeting)
-  let booking = held
   if (held.title !== title || held.agenda !== agenda) {
     const [renamed] = await db
       .transaction(async (tx) => {
@@ -436,10 +431,8 @@ async function syncTeamsTopic(meeting: ScheduledMeeting) {
         throw error
       })
     if (!renamed) return
-    booking = renamed
   }
-  const topic = await teamsTopicState(booking)
-  if (topic.state === "stale") await updateTeamsMeeting(booking, topic.meeting)
+  await renameTeamsMeeting(held.id)
 }
 
 /** A Teams booking a schedule change let go, and whether the lab heard of it. */
