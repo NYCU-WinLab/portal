@@ -73,7 +73,8 @@ export async function runWithKey(
   input: unknown
 ) {
   const action = actions.find((a) => a.name === name)
-  const who = { action: name, key: holder.keyId }
+  // The name comes from the URL: capped, so a span never carries a long one.
+  const who = { action: name.slice(0, 64), key: holder.keyId }
   if (!action || action.mcpExcludedBecause)
     return refuse(404, `no action ${name}`, who)
   const app = appOfAction.get(name)

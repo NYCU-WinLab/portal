@@ -45,8 +45,8 @@ export const apiKeys = pgTable(
       .array()
       .notNull()
       .default(sql`'{}'::timestamptz[]`),
-    // The fixed window before recentOpenings; no longer written, kept so a
-    // rollback still reads them. Dropped with the table rename (issue 144).
+    // The fixed window before recentOpenings; no longer read, still written
+    // so a rollback keeps the hour's count. Dropped with the table rename (issue 144).
     windowStartedAt: timestamp({ withTimezone: true }),
     windowCount: integer().default(0).notNull(),
     revokedAt: timestamp({ withTimezone: true }),
