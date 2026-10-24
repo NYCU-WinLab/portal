@@ -276,12 +276,17 @@ export async function cancelTeamsMeeting(booking: Booking) {
 }
 
 /**
- * Whether the week's lab meeting has a cancelled booking whose Teams
- * meeting is still being taken down; a new booking for that week waits,
- * or two Teams meetings would start and record. Gives up waiting once the
- * take-down has failed CANCEL_TRIES times: the organizer was mailed.
+ * Whether the week's lab meeting has a cancelled booking (from today on)
+ * whose Teams meeting may still be up: one still being made, or one made
+ * and not yet taken down with tries left. A new booking for that week
+ * waits, or two Teams meetings would start and record. Stops waiting once
+ * the take-down has failed CANCEL_TRIES times or the creation failed with
+ * no meeting to take down (the organizer was mailed either way).
  */
 export async function takedownPending(meetingId: string) {
+  const today = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Taipei",
+  }).format(new Date())
   const cancelled = await db
     .select({ id: roomBookings.id })
     .from(roomBookings)
@@ -289,10 +294,22 @@ export async function takedownPending(meetingId: string) {
       and(
         eq(roomBookings.meetingId, meetingId),
         eq(roomBookings.status, "cancelled"),
-        eq(roomBookings.online, true)
+        eq(roomBookings.online, true),
+        sql`${roomBookings.date} >= ${today}`
       )
     )
   for (const { id } of cancelled) {
+    const making = await db
+      .select({ id: roomMeetingRequests.id })
+      .from(roomMeetingRequests)
+      .where(
+        and(
+          eq(roomMeetingRequests.bookingId, id),
+          eq(roomMeetingRequests.kind, "create"),
+          eq(roomMeetingRequests.status, "pending")
+        )
+      )
+    if (making.length) return true
     const made = await madeMeeting(db, id)
     if (!made.meeting) continue
     const rows = await db
@@ -631,9 +648,11 @@ export async function sweepMeetingRequests() {
     )
   for (const row of failed) {
     // reconcileTeams will try that take-down again: mail only the last.
+    // One with no meeting ids to send cannot be retried and is mailed now.
     if (
       row.kind === "cancel" &&
       row.date >= today &&
+      (await madeMeeting(db, row.bookingId)).meeting &&
       (await cancelsOf(db, row.bookingId)).failed < CANCEL_TRIES
     )
       continue
