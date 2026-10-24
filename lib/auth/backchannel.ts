@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm"
+import { and, eq, lt } from "drizzle-orm"
 import { createRemoteJWKSet, jwtVerify } from "jose"
 
 import { db } from "@/lib/db"
@@ -40,6 +40,7 @@ export async function backchannelLogout(token: string) {
   // A logout token must not look like an ID token.
   if ("nonce" in payload) throw new BadLogoutToken("logout token has a nonce")
   if (!payload.sub) throw new BadLogoutToken("logout token names no subject")
+  if (!payload.iat) throw new BadLogoutToken("logout token has no iat")
   const [link] = await db
     .select({ userId: account.userId })
     .from(account)
@@ -50,9 +51,17 @@ export async function backchannelLogout(token: string) {
       )
     )
   if (!link) return 0
+  // Only sessions from before the logout: a token delivered again, or
+  // replayed, must not end a session made by signing in after it.
   const ended = await db
     .delete(session)
-    .where(eq(session.userId, link.userId))
+    .where(
+      and(
+        eq(session.userId, link.userId),
+        // iat counts whole seconds: the whole second of the logout counts.
+        lt(session.createdAt, new Date(((payload.iat ?? 0) + 1) * 1000))
+      )
+    )
     .returning({ id: session.id })
   return ended.length
 }
