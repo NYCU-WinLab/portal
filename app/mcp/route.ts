@@ -33,6 +33,12 @@ export const POST = requireMcpAuth(
     } catch {
       return refuse(503, "cannot reach Keycloak to check membership")
     }
+    let adminApps: string[]
+    try {
+      adminApps = [...(await adminAppsOf({ userId: claims.sub, via: "mcp" }))]
+    } catch {
+      return refuse(503, "cannot read the member's admin roles")
+    }
     return mcpHandler.fetch(request, {
       authInfo: {
         token: "",
@@ -43,9 +49,7 @@ export const POST = requireMcpAuth(
         expiresAt: claims.exp,
         extra: {
           userId: claims.sub,
-          adminApps: [
-            ...(await adminAppsOf({ userId: claims.sub, via: "mcp" })),
-          ],
+          adminApps,
         },
       },
     })
