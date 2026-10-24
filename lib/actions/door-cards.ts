@@ -147,6 +147,8 @@ async function locked(
             ? error.message
             : "db_failed"
       await record(action, userId, card, refusal).catch(() => {})
+      // Nor does the caller see that message.
+      if (refusal === "db_failed") throw new Error("資料庫出錯，請再試一次")
       throw error
     }
     await record(action, userId, card, "db_failed").catch(() => {})
@@ -281,9 +283,16 @@ export const updateDoorCard = defineAction({
       if (card.syncState === "deleting")
         throw new Error("這張卡還沒確認刪掉，請再刪一次")
       // Without holderId the card keeps its member.
+      // A guest card keeps its name when only the note changes.
+      const holderId =
+        input.holderId === undefined ? card.holderId : input.holderId
       const holder = await holderOf(tx, {
-        holderId: input.holderId === undefined ? card.holderId : input.holderId,
-        holderName: input.holderName,
+        holderId,
+        holderName:
+          input.holderName ??
+          (holderId === null && card.holderId === null
+            ? card.holderName
+            : undefined),
       })
       const renamed = holder.holderName !== card.holderName
       const handedOver =
