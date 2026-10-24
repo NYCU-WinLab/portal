@@ -109,6 +109,7 @@ export const serviceGroups: { title: string; apps: Service[] }[] = [
         name: "記帳",
         emoji: "💰",
         href: "/reimburse",
+        admin: "reimburse",
       },
       {
         key: "trip",

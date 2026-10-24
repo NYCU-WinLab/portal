@@ -1,6 +1,7 @@
 import { EmptyState } from "@/components/empty-state"
 import { PageHeader, SectionHeader } from "@/components/page-header"
 import { PortalShell } from "@/components/portal-shell"
+import { requireAdminPage } from "@/lib/actions/authz"
 import { runAction } from "@/lib/actions/define"
 import { getReimburseStats } from "@/lib/actions/reimburse"
 import { requireActor } from "@/lib/auth/session"
@@ -13,6 +14,7 @@ export const dynamic = "force-dynamic"
 
 export default async function ReimburseStatsPage() {
   const actor = await requireActor("/reimburse/stats")
+  await requireAdminPage(actor, "reimburse")
   const { months, applicants } = await runAction(getReimburseStats, actor, {})
 
   return (

@@ -2,7 +2,7 @@ import { Focus, FocusLabel, FocusTitle } from "@/components/focus"
 import { PageHeader } from "@/components/page-header"
 import { PortalShell } from "@/components/portal-shell"
 import { listMembers } from "@/lib/actions/admins"
-import { isAdmin } from "@/lib/actions/authz"
+import { requireAdminPage } from "@/lib/actions/authz"
 import { runAction } from "@/lib/actions/define"
 import {
   getReimburseBalance,
@@ -21,12 +21,12 @@ export const dynamic = "force-dynamic"
 
 export default async function ReimbursePage() {
   const actor = await requireActor("/reimburse")
-  const [{ entries }, balance, admin] = await Promise.all([
+  await requireAdminPage(actor, "reimburse")
+  const [{ entries }, balance, members] = await Promise.all([
     runAction(listReimburseEntries, actor, {}),
     runAction(getReimburseBalance, actor, {}),
-    isAdmin(actor, "reimburse"),
+    runAction(listMembers, actor, {}),
   ])
-  const members = admin ? await runAction(listMembers, actor, {}) : []
   const today = taipeiToday()
 
   return (
@@ -34,7 +34,7 @@ export default async function ReimbursePage() {
       <div className="flex flex-col gap-12">
         <PageHeader
           title="帳本"
-          actions={admin && <AddEntries members={members} today={today} />}
+          actions={<AddEntries members={members} today={today} />}
         />
         <Focus>
           <FocusLabel>餘額</FocusLabel>
@@ -48,12 +48,7 @@ export default async function ReimbursePage() {
             {ntd(Math.abs(balance.balance))}
           </FocusTitle>
         </Focus>
-        <Ledger
-          entries={entries}
-          admin={admin}
-          members={members}
-          today={today}
-        />
+        <Ledger entries={entries} members={members} today={today} />
       </div>
     </PortalShell>
   )

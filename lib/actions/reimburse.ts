@@ -1,6 +1,7 @@
 import { desc, eq, sql } from "drizzle-orm"
 import { z } from "zod"
 
+import { isAdmin } from "@/lib/actions/authz"
 import { defineAction } from "@/lib/actions/define"
 import { db } from "@/lib/db"
 import { reimburseEgress, reimburseIngress, user } from "@/lib/db/schema"
@@ -66,9 +67,10 @@ export type LedgerEntry =
 
 export const listReimburseEntries = defineAction({
   name: "list_reimburse_entries",
+  admin: "reimburse",
   title: "帳本",
   description:
-    "The lab ledger, newest first. Egress is money paid back to a member (applicant, item, amount, invoice date, transfer date or null while still owed, bank fee); ingress is money coming in (date, amount, note). Amounts are whole NT$. Every member sees every entry. Filter with kind (egress, ingress or all) and pending=true for egress not yet transferred.",
+    "The lab ledger, newest first. Egress is money paid back to a member (applicant, item, amount, invoice date, transfer date or null while still owed, bank fee); ingress is money coming in (date, amount, note). Amounts are whole NT$. Reimburse admins only. Filter with kind (egress, ingress or all) and pending=true for egress not yet transferred.",
   kind: "query",
   input: z.object({
     kind: z.enum(["all", "egress", "ingress"]).default("all"),
@@ -95,9 +97,10 @@ export const listReimburseEntries = defineAction({
 
 export const getReimburseBalance = defineAction({
   name: "get_reimburse_balance",
+  admin: "reimburse",
   title: "餘額",
   description:
-    "The lab fund's balance in whole NT$: money in minus money paid out (amounts plus bank fees), with totals and how much is still owed (egress with no transfer date). The owed amount is already subtracted from the balance.",
+    "The lab fund's balance in whole NT$: money in minus money paid out (amounts plus bank fees), with totals and how much is still owed (egress with no transfer date). The owed amount is already subtracted from the balance. Reimburse admins only.",
   kind: "query",
   input: z.object({}),
   run: async () => {
@@ -149,11 +152,15 @@ export const getReimburseStats = defineAction({
   name: "get_reimburse_stats",
   title: "記帳統計",
   description:
-    "The ledger summed up: money in and out (amounts plus fees) per month, and per applicant how many entries, the total paid back and what is still owed. Every member sees it, as they see the ledger.",
+    "The ledger summed up: money in and out (amounts plus fees) per month, and per applicant how many entries, the total paid back and what is still owed. Reimburse admins see everything; any other member gets only their own applicant row and no months.",
   kind: "query",
   input: z.object({}),
-  run: async () => {
-    const [egress, ingress] = await Promise.all([loadEgress(), loadIngress()])
+  run: async (actor) => {
+    const [egress, ingress, admin] = await Promise.all([
+      loadEgress(),
+      loadIngress(),
+      isAdmin(actor, "reimburse"),
+    ])
     const months = new Map<string, { month: string; in: number; out: number }>()
     const month = (date: string) => {
       const key = date.slice(0, 7)
@@ -187,6 +194,14 @@ export const getReimburseStats = defineAction({
       if (row.transferDate === null) applicant.owed += row.amount
       applicants.set(key, applicant)
     }
+    // A member sees only what the lab paid them back, on their profile.
+    if (!admin)
+      return {
+        months: [],
+        applicants: [...applicants.values()].filter(
+          (row) => row.applicantId === actor.userId
+        ),
+      }
     return {
       months: [...months.values()].sort((a, b) =>
         a.month.localeCompare(b.month)
