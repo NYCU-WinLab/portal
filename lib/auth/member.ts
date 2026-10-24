@@ -1,8 +1,9 @@
-import { and, eq } from "drizzle-orm"
+import { and, eq, gt } from "drizzle-orm"
 
 import { db } from "@/lib/db"
 import { account, oauthRefreshToken, session } from "@/lib/db/schema"
 import { findKeycloakUser } from "@/lib/keycloak"
+import { emitErrorLog } from "@/lib/otel"
 
 // MCP access tokens are JWTs checked against the JWKS alone, and refresh
 // tokens keep renewing them, so leaving the lab would not end MCP access.
@@ -14,6 +15,8 @@ import { findKeycloakUser } from "@/lib/keycloak"
 const CHECK_EVERY_MS = 5 * 60 * 1000
 // While Keycloak is unreachable, a member seen recently keeps access.
 const TRUST_WHILE_DOWN_MS = 60 * 60 * 1000
+// More gone in one sweep than this, and the sweep ends nobody's sessions.
+const MAX_GONE_PER_SWEEP = 3
 
 const seen = new Map<string, { member: boolean; at: number }>()
 
@@ -23,7 +26,12 @@ async function lookup(userId: string) {
     .from(account)
     .where(and(eq(account.userId, userId), eq(account.providerId, "keycloak")))
   const keycloakUser = link ? await findKeycloakUser(link.sub) : null
-  return keycloakUser?.enabled === true
+  if (!keycloakUser) return false
+  // Anything but a plain yes or no is no answer: never a reason to end
+  // someone's sessions.
+  if (typeof keycloakUser.enabled !== "boolean")
+    throw new Error("Keycloak answered without enabled")
+  return keycloakUser.enabled
 }
 
 export async function isLabMember(userId: string): Promise<boolean> {
@@ -50,6 +58,48 @@ export async function isLabMemberNow(userId: string): Promise<boolean> {
   const member = await lookup(userId)
   await remember(userId, member)
   return member
+}
+
+/**
+ * Every few minutes: asks Keycloak about each member who has a live web
+ * session, so someone removed or disabled there loses their sessions and
+ * refresh tokens without waiting for their next /mcp call. Keycloak being
+ * unreachable changes nothing; the next sweep asks again.
+ */
+export async function sweepMembers() {
+  const live = await db
+    .selectDistinct({ userId: session.userId })
+    .from(session)
+    .where(gt(session.expiresAt, new Date()))
+  const gone: string[] = []
+  for (const { userId } of live)
+    if (!(await lookup(userId).catch(() => true))) gone.push(userId)
+  // Many members leaving at once is more likely Keycloak answering wrong
+  // than people leaving: end nobody's sessions, and say so.
+  if (gone.length > MAX_GONE_PER_SWEEP) {
+    emitErrorLog(new Error("member sweep stopped: too many gone at once"), {
+      "members.gone": gone.length,
+      "members.live": live.length,
+    })
+    return 0
+  }
+  for (const userId of gone) await remember(userId, false)
+  return gone.length
+}
+
+/** Starts the sweep; called once per server process. */
+export function startMemberSweep() {
+  // A slow Keycloak can make one run outlast the interval: skip, never stack.
+  let running = false
+  const run = () => {
+    if (running) return
+    running = true
+    void sweepMembers()
+      .catch(() => {})
+      .finally(() => (running = false))
+  }
+  setInterval(run, CHECK_EVERY_MS).unref()
+  run()
 }
 
 async function remember(userId: string, member: boolean) {
