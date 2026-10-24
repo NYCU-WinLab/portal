@@ -287,6 +287,7 @@ export const setDoorPlaylist = defineAction({
 
 export const setDoorSoundDefault = defineAction({
   name: "set_door_sound_default",
+  admin: "door",
   refreshesDoorPanel: true,
   title: "設定預設門口音效",
   description:
@@ -294,7 +295,6 @@ export const setDoorSoundDefault = defineAction({
   kind: "mutation",
   input: z.object({ id, is_default: z.boolean() }),
   run: async (actor, input) => {
-    if (!(await isAdmin(actor, "door"))) throw new Error("需要 Door 管理員權限")
     const updated = await db
       .update(doorSounds)
       .set({ isDefault: input.is_default })

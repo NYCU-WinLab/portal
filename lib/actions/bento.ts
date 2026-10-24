@@ -430,8 +430,7 @@ export const createBentoOrder = defineAction({
 
 const setStatus =
   (status: "open" | "closed") =>
-  async (actor: Actor, { orderId }: { orderId: string }) => {
-    await requireAdmin(actor, "bento")
+  async (_actor: Actor, { orderId }: { orderId: string }) => {
     const [updated] = await db
       .update(bentoOrders)
       .set({ status, closedAt: status === "closed" ? new Date() : null })
@@ -443,6 +442,7 @@ const setStatus =
 
 export const closeBentoOrder = defineAction({
   name: "close_bento_order",
+  admin: "bento",
   title: "關單",
   description:
     "Closes an order once it is sent to the restaurant (bento admins only): no more lines can be added, removed or copied.",
@@ -453,6 +453,7 @@ export const closeBentoOrder = defineAction({
 
 export const reopenBentoOrder = defineAction({
   name: "reopen_bento_order",
+  admin: "bento",
   title: "重開訂單",
   description:
     "Opens a closed order again so members can change their lines (bento admins only).",
