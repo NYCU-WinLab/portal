@@ -119,8 +119,11 @@ export const listStandingMeetings = defineAction({
 
 /**
  * A room the lab's account holds for the whole span that no portal booking
- * accounts for, or null. A reserve the department accepted but never
- * answered leaves exactly that; booking again would hold a second room.
+ * accounts for, or null; exact when the hold starts and ends with the span
+ * (the slots around it are not the lab's in that room). A reserve the
+ * department accepted but never answered leaves exactly that, and booking
+ * again would hold a second room. A wider hold is something else, such as
+ * an old hold nobody released.
  */
 async function strayLabHold(
   slots: Slot[],
@@ -145,7 +148,13 @@ async function strayLabHold(
         gt(roomBookings.endTime, start)
       )
     )
-  return held.find((room) => !ours.some((row) => row.room === room)) ?? null
+  const room = held.find((r) => !ours.some((row) => row.room === r))
+  if (!room) return null
+  const before = slots.find((slot) => slot.end === start)
+  const after = slots.find((slot) => slot.start === end)
+  const exact =
+    !before?.labRooms.includes(room) && !after?.labRooms.includes(room)
+  return { room, exact }
 }
 
 /**
@@ -197,14 +206,19 @@ async function bookOccurrence(
       if (byHand) return "skipped" as const
       if (!bookingConfigured()) throw new Error("Portal 還沒設定系上借用帳號")
       const slots = (await availability([date], true))[0].slots
-      // A room the lab's account holds with no portal booking (an old hold
-      // nobody released) is not free, so another room is picked; it is
-      // only logged.
+      // A hold of exactly this span with no portal booking may be this
+      // week's own reserve that never answered: ask the creator. A wider
+      // one (an old hold nobody released) is not free, so another room is
+      // picked; it is only logged.
       const stray = await strayLabHold(slots, date, series.startTime, endTime)
+      if (stray?.exact)
+        throw new Error(
+          `系上已有實驗室帳號借的 ${stray.room}，portal 沒有這筆紀錄，可能是之前的預約沒收到回應；請確認後自己借或取消`
+        )
       if (stray)
         emitErrorLog(new Error("lab hold without a portal booking"), {
           "room_series.id": series.id,
-          room: stray,
+          room: stray.room,
           date,
         })
       const room = roomFor(slots, series.startTime, endTime, true)

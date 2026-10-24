@@ -1,4 +1,4 @@
-import { and, asc, eq, gte, inArray, lte, sql } from "drizzle-orm"
+import { and, asc, eq, gte, inArray, isNotNull, lte, sql } from "drizzle-orm"
 import { z } from "zod"
 
 import { defineAction } from "@/lib/actions/define"
@@ -29,8 +29,10 @@ import {
   labAccount,
   listBusy,
   listRooms,
+  findLabReservation,
   release,
   reserve,
+  Unanswered,
 } from "@/lib/meetingroom"
 import {
   daySlots,
@@ -428,6 +430,44 @@ export type NewBooking = {
 }
 
 /**
+ * Reserves a room. When the system gives no clear answer, looks for the
+ * lab's reservation of exactly that room and span and releases it unless a
+ * portal booking holds it (another member's, booked a moment earlier), so
+ * nothing stays held that nobody can cancel.
+ */
+async function reserveOrClean(reservation: {
+  room: string
+  start: string
+  end: string
+}) {
+  try {
+    return await reserve(reservation)
+  } catch (error) {
+    if (!(error instanceof Unanswered)) throw error
+  }
+  // A slow system may still be writing it down.
+  await new Promise((resolve) => setTimeout(resolve, 3000))
+  const found = await findLabReservation(reservation).catch(() => undefined)
+  if (found === undefined)
+    throw new Error(
+      "系上借用系統沒有回應，也查不到有沒有借到，請到系上借用系統確認"
+    )
+  if (found) {
+    const [ours] = await db
+      .select({ id: roomBookings.id })
+      .from(roomBookings)
+      .where(
+        and(
+          eq(roomBookings.externalId, found),
+          eq(roomBookings.status, "booked")
+        )
+      )
+    if (!ours) await release(found, reservation)
+  }
+  throw new Error("系上借用系統沒有回應，這次沒有借到教室，請再試一次")
+}
+
+/**
  * Reserves the room in the department system, records the booking with its
  * invite, then asks for the Teams meeting. A reservation the portal fails
  * to record is released again, so nothing is held that nobody can cancel.
@@ -436,7 +476,7 @@ export async function placeBooking(input: NewBooking) {
   const start = taipeiIso(input.date, input.startTime)
   const end = taipeiIso(input.date, input.endTime)
   const externalId = input.room
-    ? await reserve({ room: input.room, start, end })
+    ? await reserveOrClean({ room: input.room, start, end })
     : null
   let booking: Booking
   try {
@@ -481,23 +521,32 @@ export async function placeBooking(input: NewBooking) {
   return booking
 }
 
+const BUSY = Symbol("busy")
+
 /**
  * Runs fn holding a lock on one member's bookings for one day, so a hand
  * booking and the standing meeting catch-up cannot both book the same slot
- * for them. Held through the reserve and the insert; it costs one pool
- * connection while fn runs.
+ * for them. Held through the reserve and the insert. A caller that finds
+ * it taken waits without a connection and tries again, for up to a
+ * minute, so waiters cannot fill the pool.
  */
 export async function withBookingLock<T>(
   userId: string,
   date: string,
   fn: () => Promise<T>
 ) {
-  return db.transaction(async (tx) => {
-    await tx.execute(
-      sql`select pg_advisory_xact_lock(hashtext('room_bookings'), hashtext(${`${userId} ${date}`}))`
-    )
-    return fn()
-  })
+  for (let attempt = 0; attempt < 120; attempt++) {
+    const result = await db.transaction(async (tx) => {
+      const { rows } = await tx.execute<{ ok: boolean }>(
+        sql`select pg_try_advisory_xact_lock(hashtext('room_bookings'), hashtext(${`${userId} ${date}`})) as ok`
+      )
+      if (!rows[0]?.ok) return BUSY
+      return { value: await fn() }
+    })
+    if (result !== BUSY) return result.value
+    await new Promise((resolve) => setTimeout(resolve, 500))
+  }
+  throw new Error("同一天的另一筆預約還在處理，稍後再試")
 }
 
 export async function organizerOf(userId: string) {
@@ -583,19 +632,38 @@ export const bookMeeting = defineAction({
       includeAdvisor: input.include_advisor,
     })
     const epic = await resolveEpic(group, input.epic ?? null, false)
-    // Picked from a fresh read, not the grid the member clicked minutes ago.
-    const room = input.online_only
-      ? null
-      : roomFor(
-          (await availability([input.date], true))[0].slots,
-          input.start_time,
-          input.end_time,
-          input.allow_paid
-        )
     const prefix = topicPrefix(group, attendees)
     const organizer = await organizerOf(actor.userId)
-    const booking = await withBookingLock(actor.userId, input.date, () =>
-      placeBooking({
+    const { booking, room } = await withBookingLock(
+      actor.userId,
+      input.date,
+      async () => {
+        // A standing meeting of theirs may have just booked this span.
+        const [standing] = await db
+          .select({ id: roomBookings.id })
+          .from(roomBookings)
+          .where(
+            and(
+              eq(roomBookings.requestedBy, actor.userId),
+              eq(roomBookings.date, input.date),
+              eq(roomBookings.status, "booked"),
+              isNotNull(roomBookings.seriesId),
+              eq(roomBookings.startTime, input.start_time),
+              eq(roomBookings.endTime, input.end_time)
+            )
+          )
+        if (standing) throw new Error("你的固定會議已經借好這個時段了")
+        // Picked from a fresh read, not the grid the member clicked
+        // minutes ago, and inside the lock.
+        const room = input.online_only
+          ? null
+          : roomFor(
+              (await availability([input.date], true))[0].slots,
+              input.start_time,
+              input.end_time,
+              input.allow_paid
+            )
+        const booking = await placeBooking({
         date: input.date,
         startTime: input.start_time,
         endTime: input.end_time,
@@ -610,6 +678,8 @@ export const bookMeeting = defineAction({
         agenda: input.agenda || null,
         ...epic,
       })
+        return { booking, room }
+      }
     )
     return {
       id: booking.id,

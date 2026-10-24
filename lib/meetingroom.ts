@@ -153,14 +153,15 @@ async function post(path: string, body: Record<string, string>) {
 /** The system answered no: nothing was reserved. */
 class Refused extends Error {}
 
+/** A reserve with no clear answer (a timeout, a body that is not the
+ * id): the system may or may not have made it. */
+export class Unanswered extends Error {}
+
 /**
- * After a reserve that got no clear answer (a timeout, a body that is not
- * the id): the lab's reservation for exactly that room and span, if the
- * system made one, released again so nothing stays held that the portal
- * has no record of. The room was free when picked, so such a reservation
- * can only be this one.
+ * The lab's reservation for exactly that room and span, if the system
+ * has one: its id, else null. Whose it is, the caller decides.
  */
-async function releaseIfHeld(reservation: Reservation) {
+export async function findLabReservation(reservation: Reservation) {
   const day = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Taipei",
   }).format(new Date(reservation.start))
@@ -173,11 +174,11 @@ async function releaseIfHeld(reservation: Reservation) {
       Number(row.start) === Date.parse(reservation.start) &&
       Number(row.end) === Date.parse(reservation.end)
   )
-  if (held) await release(String(held.id), reservation)
-  return Boolean(held)
+  return held ? String(held.id) : null
 }
 
-/** Books a room; returns the system's reservation id. */
+/** Books a room; returns the system's reservation id. Throws Unanswered
+ * when the system may have booked it without saying so. */
 export async function reserve(reservation: Reservation) {
   let id: string | number | undefined | null
   try {
@@ -187,16 +188,8 @@ export async function reserve(reservation: Reservation) {
     if (error instanceof Refused) throw error
     id = undefined
   }
-  if (id === undefined || id === null || id === "") {
-    // A slow system may still be writing it down.
-    await new Promise((resolve) => setTimeout(resolve, 3000))
-    const released = await releaseIfHeld(reservation).catch(() => null)
-    throw new Error(
-      released === null
-        ? "系上借用系統沒有回應，也查不到有沒有借到，請到系上借用系統確認"
-        : "系上借用系統沒有回應，這次沒有借到教室，請再試一次"
-    )
-  }
+  if (id === undefined || id === null || id === "")
+    throw new Unanswered("系上借用系統沒有回應")
   return String(id)
 }
 
