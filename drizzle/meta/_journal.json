@@ -253,6 +253,13 @@
       "when": 1792775793203,
       "tag": "0035_member_avatars",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1792820355470,
+      "tag": "0036_door_card_changes",
+      "breakpoints": true
     }
   ]
 }

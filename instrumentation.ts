@@ -18,6 +18,8 @@ export async function register() {
     const { startMeetingMailScheduler } =
       await import("@/lib/actions/meetings-mail")
     startMeetingMailScheduler()
+    const { startDoorCardsScheduler } = await import("@/lib/actions/door-cards")
+    startDoorCardsScheduler()
   }
 
   const endpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT?.replace(/\/+$/, "")
