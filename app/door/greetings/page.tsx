@@ -18,7 +18,7 @@ import { requireActor } from "@/lib/auth/session"
 import { givenName, panelName, voiceParts } from "@/lib/door-greeting"
 
 import { doorNav, doorPage } from "../nav"
-import { AddPhrase, PhraseList } from "./phrase-list"
+import { AddPhrase, PhraseList, type Recording } from "./phrase-list"
 
 export const dynamic = "force-dynamic"
 
@@ -35,10 +35,10 @@ export default async function DoorGreetingsPage() {
   // A phrase is still being recorded while its own words have no clip.
   const waiting = new Set(missing)
   const recording = Object.fromEntries(
-    [...mine, ...defaults].flatMap((phrase) => {
+    [...mine, ...defaults].flatMap((phrase): [string, Recording][] => {
       const parts = voiceParts("", phrase.before, phrase.after)
       if (job.text && parts.includes(job.text))
-        return [[phrase.id, `錄製中 ${job.step}/${job.steps}`]]
+        return [[phrase.id, { step: job.step, steps: job.steps }]]
       if (parts.some((part) => waiting.has(part)))
         return [[phrase.id, job.online ? "排隊中" : "等 furnace"]]
       return []

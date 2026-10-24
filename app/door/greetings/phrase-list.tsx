@@ -14,6 +14,7 @@ import { Switch } from "@/components/ui/switch"
 import type { DoorPhrase } from "@/lib/actions/door-phrases"
 import { report } from "@/lib/report"
 
+import { VoiceProgress } from "../voice/voice-progress"
 import { create, remove, update } from "./actions"
 
 // Kept here: lib/door-greeting imports node:crypto, which a client component must not pull in.
@@ -31,6 +32,9 @@ export const dayLabel = (days: number[]) =>
         : `週${days.map((day) => WEEKDAYS[day - 1]).join("、")}`
 
 /** The time slot a new phrase starts in: its group's, or empty for a new one. */
+/** A phrase still waiting for CC's voice: the step it is at, or why not. */
+export type Recording = { step: number; steps: number } | string
+
 type Slot = Pick<DoorPhrase, "starts_at" | "ends_at" | "days" | "first_visit">
 
 // First-visit phrases sort first ("0"), then slots by start time.
@@ -182,7 +186,7 @@ function PhraseRow({
 }: {
   phrase: DoorPhrase
   sample: string
-  recording?: string
+  recording?: Recording
   editable: boolean
 }) {
   if (!editable)
@@ -193,7 +197,11 @@ function PhraseRow({
           {sample}
           {phrase.after || "。"}
         </span>
-        {recording && <Badge variant="muted">{recording}</Badge>}
+        {typeof recording === "string" ? (
+          <Badge variant="muted">{recording}</Badge>
+        ) : (
+          recording && <VoiceProgress {...recording} />
+        )}
         {!phrase.enabled && <Badge variant="muted">停用</Badge>}
       </li>
     )
@@ -204,7 +212,11 @@ function PhraseRow({
         {sample}
         {phrase.after || "。"}
       </span>
-      {recording && <Badge variant="muted">{recording}</Badge>}
+      {typeof recording === "string" ? (
+        <Badge variant="muted">{recording}</Badge>
+      ) : (
+        recording && <VoiceProgress {...recording} />
+      )}
       <Label className="flex shrink-0 items-center gap-2 text-muted-foreground">
         啟用
         <Switch
@@ -260,7 +272,7 @@ export function PhraseList({
   now: string[]
   sample: string
   /** Phrase id to how far its clips in CC's voice are. */
-  recording: Record<string, string>
+  recording: Record<string, Recording>
   lab: boolean
   editable: boolean
 }) {
