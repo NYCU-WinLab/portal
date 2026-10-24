@@ -76,6 +76,20 @@ export const serviceGroups: { title: string; apps: Service[] }[] = [
         emoji: "🎵",
         href: "https://music.winlab.tw",
       },
+      {
+        key: "oai",
+        label: "OAI",
+        name: "AI 辦公室",
+        emoji: "🧠",
+        href: "https://ai.winlab.tw",
+      },
+      {
+        key: "website",
+        label: "Website",
+        name: "官網",
+        emoji: "🌐",
+        href: "https://www.winlab.tw",
+      },
     ],
   },
   {
