@@ -12,8 +12,10 @@ const nextConfig: NextConfig = {
     authInterrupts: true,
   },
   // Rooms became part of Meetings; /rooms/join/<id> stays, it is in invites.
+  // Door tokens became API keys.
   async redirects() {
     return [
+      { source: "/door/tokens", destination: "/api-keys", permanent: true },
       { source: "/rooms", destination: "/meetings", permanent: true },
       { source: "/rooms/series", destination: "/meetings", permanent: true },
     ]

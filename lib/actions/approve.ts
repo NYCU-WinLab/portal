@@ -213,7 +213,7 @@ export const getApproveDocument = defineAction({
     const mine = doc.createdBy === actor.userId
     const shown = fields.map((f) => {
       if (!mine && f.signerId !== actor.userId) return { ...f, value: null }
-      if (actor.via === "mcp" && f.category === "signature" && f.value)
+      if (actor.via !== "web" && f.category === "signature" && f.value)
         return { ...f, value: "（已簽名）" }
       return f
     })

@@ -1,6 +1,7 @@
 import { and, desc, eq, inArray, sql } from "drizzle-orm"
 import { z } from "zod"
 
+import { claimDoorOpening } from "@/lib/actions/api-keys"
 import { announceChange } from "@/lib/actions/changes"
 import { defineAction } from "@/lib/actions/define"
 import { db } from "@/lib/db"
@@ -34,6 +35,12 @@ export const openDoor = defineAction({
   kind: "mutation",
   input: z.object({}),
   run: async (actor) => {
+    // A key opens the door only within its rate limit, and only while
+    // Keycloak still says its owner is in the lab, however it is called.
+    if (actor.via === "api") {
+      if (!actor.tokenId) throw new Error("API 開門要有金鑰")
+      await claimDoorOpening(actor.tokenId, actor.userId)
+    }
     const [member] = await db
       .select({ name: user.name })
       .from(user)
