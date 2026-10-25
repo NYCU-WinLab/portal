@@ -6,21 +6,41 @@ import { EmptyState } from "@/components/empty-state"
 import { ExpandRow } from "@/components/expand-row"
 import { FieldList, FieldRow } from "@/components/field-list"
 import { Input } from "@/components/ui/input"
-import type { Asset } from "@/lib/assetweb"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import type { Asset, AssetKind } from "@/lib/assetweb"
 import { ntd } from "@/lib/money"
 
-// The property the lab keeps, as NYCU's property system lists it: search
-// across every field, newest first. Locations are free text there, so
-// they stay as typed.
+const kindLabel: Record<AssetKind, string> = {
+  property: "財產",
+  nonconsumable: "非消耗品",
+}
+const ALL = "all"
+const filters = [
+  { value: ALL, label: "全部" },
+  ...Object.entries(kindLabel).map(([value, label]) => ({ value, label })),
+]
+
+// What the lab keeps, as NYCU's property system lists it: both books,
+// search across every field, newest first. Locations are free text there,
+// so they stay as typed.
 export function AssetList({ assets }: { assets: Asset[] }) {
   const [query, setQuery] = React.useState("")
+  const [filter, setFilter] = React.useState(ALL)
   const q = query.trim().toLowerCase()
   const shown = assets
-    .filter((a) =>
-      [a.id, a.no, a.name, a.alias, a.brand, a.model, a.user, a.location]
-        .join(" ")
-        .toLowerCase()
-        .includes(q)
+    .filter(
+      (a) =>
+        (filter === ALL || a.kind === filter) &&
+        [a.id, a.no, a.name, a.alias, a.brand, a.model, a.user, a.location]
+          .join(" ")
+          .toLowerCase()
+          .includes(q)
     )
     .sort(
       (a, b) =>
@@ -31,11 +51,30 @@ export function AssetList({ assets }: { assets: Asset[] }) {
 
   return (
     <div className="flex flex-col gap-8">
-      <Input
-        placeholder="搜尋名稱、廠牌、型式、地點或財產編號"
-        value={query}
-        onChange={(event) => setQuery(event.target.value)}
-      />
+      <div className="flex flex-wrap gap-2">
+        <Input
+          className="min-w-0 flex-1"
+          placeholder="搜尋名稱、廠牌、型式、地點或財產編號"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+        />
+        <Select
+          value={filter}
+          onValueChange={(v) => setFilter(String(v))}
+          items={filters}
+        >
+          <SelectTrigger className="w-40">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {filters.map((f) => (
+              <SelectItem key={f.value} value={f.value}>
+                {f.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
       {shown.length === 0 ? (
         <EmptyState
           noun="財產"
@@ -46,7 +85,7 @@ export function AssetList({ assets }: { assets: Asset[] }) {
         <ul className="flex flex-col">
           {shown.map((a) => (
             <ExpandRow
-              key={`${a.id}/${a.no}`}
+              key={`${a.kind}/${a.id}/${a.no}`}
               summary={
                 <span className="flex flex-wrap items-center gap-x-4 gap-y-1">
                   <span className="flex min-w-40 flex-1 flex-col">
@@ -65,6 +104,7 @@ export function AssetList({ assets }: { assets: Asset[] }) {
               }
             >
               <FieldList>
+                <FieldRow label="類別">{kindLabel[a.kind]}</FieldRow>
                 <FieldRow label="財產編號">
                   <span className="font-mono tabular-nums">
                     {a.id} / {a.no}

@@ -1,10 +1,11 @@
 // NYCU's property system (財物管理系統, assetweb). Not an official API: read
 // off its own pages' JavaScript. Every call signs in as the account whose
 // property the lab keeps (ASSETWEB_SERVICE_USER / ASSETWEB_SERVICE_PASSWORD)
-// and reads the property it holds, since the session is a plain Tomcat
-// cookie.
+// and reads what it holds, since the session is a plain Tomcat cookie. One
+// sign-in reads both kinds the lab keeps.
 //   POST LoginAction                                  -> JSESSIONID
-//   POST ActionServlet?bean=ppt.ppt0195.PPT0195Do&action=G -> property rows
+//   POST ActionServlet?bean=ppt.ppt0195.PPT0195Do&action=G -> 財產 (NT$10,000+)
+//   POST ActionServlet?bean=ncs.ncs0195.NCS0195Do&action=G -> 非消耗品 (NT$6,000+)
 // Three wrong passwords lock the account until the property office resets
 // it, so a refused sign-in is never retried.
 
@@ -28,7 +29,20 @@ export const assetwebConfigured = () =>
     process.env.ASSETWEB_SERVICE_USER && process.env.ASSETWEB_SERVICE_PASSWORD
   )
 
+/** 財產 (property, NT$10,000 or more) or 非消耗品 (non-consumables,
+ * NT$6,000 to 10,000): the property system keeps them in two books. */
+export type AssetKind = "property" | "nonconsumable"
+
+const books: Record<AssetKind, { bean: string; page: string }> = {
+  property: { bean: "ppt.ppt0195.PPT0195Do", page: "PPT/PPT0195Tab1.jsp" },
+  nonconsumable: {
+    bean: "ncs.ncs0195.NCS0195Do",
+    page: "NCS/NCS0195Tab1.jsp",
+  },
+}
+
 export type Asset = {
+  kind: AssetKind
   /** 財產編號, e.g. 3100508-040 */
   id: string
   /** 財產分號 */
@@ -63,8 +77,9 @@ function rocDate(value: Row[string]) {
   return `${Number(match[1]) + 1911}-${match[2]}-${match[3]}`
 }
 
-function asset(row: Row): Asset {
+function asset(kind: AssetKind, row: Row): Asset {
   return {
+    kind,
     id: text(row.ppt_id),
     no: text(row.ppt_no),
     name: text(row.ppt_name),
@@ -118,21 +133,21 @@ async function signIn() {
 
 const PAGE = 500
 
-async function fetchAssets(): Promise<Asset[]> {
-  const cookie = await signIn()
+async function readBook(cookie: string, kind: AssetKind): Promise<Asset[]> {
+  const { bean, page } = books[kind]
   const rows: Row[] = []
   for (let start = 0; ; start += PAGE) {
     const response = await fetch(
-      `${base()}/ActionServlet?bean=ppt.ppt0195.PPT0195Do&action=G&a_id=&p_id=`,
+      `${base()}/ActionServlet?bean=${bean}&action=G&a_id=&p_id=`,
       {
         method: "POST",
         headers: {
           ...browser,
           cookie,
           "content-type": "application/x-www-form-urlencoded",
-          referer: `${base()}/PPT/PPT0195Tab1.jsp`,
+          referer: `${base()}/${page}`,
         },
-        // rpt_type 1 is 未減損: the property still on the books.
+        // rpt_type 1 is 未減損: what is still on the books.
         body: new URLSearchParams({
           limit: String(PAGE),
           start: String(start),
@@ -156,7 +171,16 @@ async function fetchAssets(): Promise<Asset[]> {
     rows.push(...(body.rows ?? []))
     if (!body.rows?.length || rows.length >= (body.total ?? 0)) break
   }
-  return rows.map(asset)
+  return rows.map((row) => asset(kind, row))
+}
+
+async function fetchAssets(): Promise<Asset[]> {
+  const cookie = await signIn()
+  const [property, nonconsumable] = await Promise.all([
+    readBook(cookie, "property"),
+    readBook(cookie, "nonconsumable"),
+  ])
+  return [...property, ...nonconsumable]
 }
 
 // Property changes a few times a year: ten minutes spares the account a
@@ -164,7 +188,7 @@ async function fetchAssets(): Promise<Asset[]> {
 let cache: { at: number; assets: Promise<Asset[]> } | null = null
 const CACHE_MS = 10 * 60_000
 
-/** The property the account keeps, still on the books. */
+/** Everything the account keeps, both books, still on the books. */
 export function listAssets(fresh = false): Promise<Asset[]> {
   if (!fresh && cache && Date.now() - cache.at < CACHE_MS) return cache.assets
   const assets = fetchAssets()
