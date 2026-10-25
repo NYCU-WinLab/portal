@@ -323,6 +323,13 @@
       "when": 1792851649566,
       "tag": "0045_drop_door_tokens_view",
       "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "7",
+      "when": 1792944743218,
+      "tag": "0046_powerful_firebird",
+      "breakpoints": true
     }
   ]
 }

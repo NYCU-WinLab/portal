@@ -1,0 +1,2 @@
+ALTER TABLE "admins" DROP CONSTRAINT "admins_app_known";--> statement-breakpoint
+ALTER TABLE "admins" ADD CONSTRAINT "admins_app_known" CHECK (app in ('portal', 'bento', 'meetings', 'receipts', 'reimburse', 'trip', 'door', 'assets'));
