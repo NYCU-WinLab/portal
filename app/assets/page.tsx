@@ -1,6 +1,7 @@
 import { PageHeader } from "@/components/page-header"
 import { PortalShell } from "@/components/portal-shell"
 import { listAssets } from "@/lib/actions/assets"
+import { requireAdminPage } from "@/lib/actions/authz"
 import { runAction } from "@/lib/actions/define"
 import { requireActor } from "@/lib/auth/session"
 
@@ -11,6 +12,7 @@ export const dynamic = "force-dynamic"
 
 export default async function AssetsPage() {
   const actor = await requireActor("/assets")
+  await requireAdminPage(actor, "assets")
   // The property system is NYCU's, not ours: when it is down, say so on
   // the page instead of failing it.
   const result = await runAction(listAssets, actor, {}).catch(

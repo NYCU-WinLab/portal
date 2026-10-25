@@ -10,6 +10,7 @@ export const adminApps = {
   reimburse: "Reimburse",
   trip: "Trip",
   door: "Door",
+  assets: "Assets",
 } as const
 
 export type AdminApp = keyof typeof adminApps
