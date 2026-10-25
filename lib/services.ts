@@ -96,6 +96,13 @@ export const serviceGroups: { title: string; apps: Service[] }[] = [
         href: "/approve",
       },
       {
+        key: "assets",
+        label: "Assets",
+        name: "財產",
+        emoji: "🏷️",
+        href: "/assets",
+      },
+      {
         key: "receipts",
         label: "Receipts",
         name: "收據",
