@@ -205,6 +205,7 @@ class Mixer(AudioSource):
         self.clips = deque()
         self.clip = None
         self.volume = volume  # what the song plays at; clips return to it
+        self.hold = None  # the clip whose volume the song waits out, in silence
         self.finished = False
         self.tasks = set()
 
@@ -253,9 +254,15 @@ class Mixer(AudioSource):
             clip.pos += len(data)
             if clip.pos >= len(clip.pcm):
                 self.clip = None
-                # The next clip, if any, sets its own volume; the song gets its own back.
-                self.later(self.heard(clip, None if self.clips else self.volume))
+                if self.clips or self.volume is None or self.song_over:
+                    # The next clip, if any, sets its own volume.
+                    self.later(self.heard(clip, None))
+                else:
+                    self.hold = clip
+                    self.later(self.restore(clip))
             return data + bytes(size - len(data))
+        if self.hold is not None:
+            return bytes(size)
         if not self.song_over:
             data = b""
             try:
@@ -268,6 +275,20 @@ class Mixer(AudioSource):
                 return data
         self.finished = True
         return AudioSource.NO_FRAMES
+
+    async def restore(self, clip):
+        """Gives the song its volume back before any of it plays: silence until
+        the HomePod confirms, so the song never plays at the clip's level."""
+        try:
+            await asyncio.sleep(BUFFER_S)
+            # A clip that came in meanwhile keeps its own volume.
+            if self.clip is None and not self.clips:
+                await self.set_volume(self.volume)
+        finally:
+            if not clip.heard.done():
+                clip.heard.set_result(None)
+            if self.hold is clip:
+                self.hold = None
 
     async def delayed_volume(self, level):
         await asyncio.sleep(BUFFER_S)
