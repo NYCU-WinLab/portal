@@ -15,6 +15,7 @@ import {
 import type { listQueue } from "@/lib/actions/music"
 
 import { add, next, remove } from "./actions"
+import { LikeButton } from "./like-button"
 import { ok } from "./ok"
 import { addedAsLabel, addedLine, Cover, length } from "./song"
 
@@ -57,6 +58,7 @@ function Row({ item }: { item: Item }) {
         </span>
       </div>
       <div className="flex shrink-0 gap-1">
+        <LikeButton videoId={item.track.videoId} liked={item.liked} />
         <DropdownMenu>
           <DropdownMenuTrigger
             render={<Button variant="ghost" size="icon" aria-label="更多" />}

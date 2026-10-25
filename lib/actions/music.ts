@@ -1,4 +1,4 @@
-import { and, desc, eq, isNotNull } from "drizzle-orm"
+import { and, desc, eq, isNotNull, sql } from "drizzle-orm"
 import { z } from "zod"
 
 import { defineAction } from "@/lib/actions/define"
@@ -6,6 +6,7 @@ import {
   currentItem,
   describeItems,
   dropRecommendations,
+  likedAmong,
   liveItemOf,
   logActivity,
   playerRow,
@@ -20,6 +21,7 @@ import {
 import { db } from "@/lib/db"
 import {
   musicLyrics,
+  musicLikes,
   musicPlayer,
   musicQueueItems,
   musicTracks,
@@ -61,17 +63,17 @@ export const nowPlaying = defineAction({
   name: "now_playing",
   title: "正在播放",
   description:
-    "The song playing on the lab HomePod: title, artist, who added it and how (queue, next or cut_in), position in seconds, paused, volume (0-100), autoplay (recommend a song when the queue runs dry) and whether the player on the lab network is online.",
+    "The song playing on the lab HomePod: title, artist, who added it and how (queue, next or cut_in), whether the caller liked it, position in seconds, paused, volume (0-100), autoplay (recommend a song when the queue runs dry) and whether the player on the lab network is online.",
   kind: "query",
   input: z.object({}),
-  run: async () => {
+  run: async (actor) => {
     const state = await playerRow()
     const [item] = await db
       .select()
       .from(musicQueueItems)
       .where(eq(musicQueueItems.status, "playing"))
       .limit(1)
-    const [current] = item ? await describeItems(db, [item]) : []
+    const [current] = item ? await describeItems(db, actor.userId, [item]) : []
     return {
       current: current ?? null,
       paused: state?.paused ?? false,
@@ -91,10 +93,12 @@ export const listQueue = defineAction({
   name: "list_queue",
   title: "播放佇列",
   description:
-    "Songs waiting to play, in order, each with who added it and how (queue, next, cut_in). The playing song is not included; see now_playing.",
+    "Songs waiting to play, in order, each with who added it and how (queue, next, cut_in) and whether the caller liked it. The playing song is not included; see now_playing.",
   kind: "query",
   input: z.object({}),
-  run: async () => ({ items: await describeItems(db, await queuedItems()) }),
+  run: async (actor) => ({
+    items: await describeItems(db, actor.userId, await queuedItems()),
+  }),
 })
 
 export const listActivity = defineAction({
@@ -388,17 +392,17 @@ export const listPlayed = defineAction({
   name: "list_played",
   title: "播過的歌",
   description:
-    "Songs that finished, were skipped or removed, newest first, with who added and who skipped or removed them.",
+    "Songs that finished, were skipped or removed, newest first, with who added and who skipped or removed them and whether the caller liked each.",
   kind: "query",
   input: z.object({ limit: z.number().int().min(1).max(100).default(30) }),
-  run: async (_actor, { limit }) => {
+  run: async (actor, { limit }) => {
     const items = await db
       .select()
       .from(musicQueueItems)
       .where(isNotNull(musicQueueItems.endedAt))
       .orderBy(desc(musicQueueItems.endedAt))
       .limit(limit)
-    return { items: await describeItems(db, items) }
+    return { items: await describeItems(db, actor.userId, items) }
   },
 })
 
@@ -471,4 +475,80 @@ export const setAutoplay = defineAction({
       })
       return { autoplay: on }
     }),
+})
+
+/** Most songs one member can keep liked. */
+const LIKE_MAX = 500
+
+export const likeSong = defineAction({
+  name: "like_song",
+  title: "按愛心",
+  description: `Like a song by YouTube video id, so it is kept in the caller's own list (list_liked_songs). Likes are private to the caller and belong to the song, not to a queue item. Liking a liked song changes nothing. At most ${LIKE_MAX} songs per member.`,
+  kind: "mutation",
+  input: z.object({ videoId }),
+  run: async (actor, input) =>
+    db.transaction(async (tx) => {
+      const [track] = await tx
+        .select({ videoId: musicTracks.videoId })
+        .from(musicTracks)
+        .where(eq(musicTracks.videoId, input.videoId))
+      if (!track) throw new Error("找不到這首歌")
+      // One member's likes take turns, so two at once cannot both pass the
+      // cap.
+      await tx.execute(
+        sql`select pg_advisory_xact_lock(hashtext('music_likes'), hashtext(${actor.userId}))`
+      )
+      if ((await likedAmong(tx, actor.userId, [input.videoId])).size)
+        return { liked: true }
+      const [{ count }] = await tx
+        .select({ count: sql<number>`count(*)::int` })
+        .from(musicLikes)
+        .where(eq(musicLikes.userId, actor.userId))
+      if (count >= LIKE_MAX) throw new Error(`最多收藏 ${LIKE_MAX} 首`)
+      await tx
+        .insert(musicLikes)
+        .values({ userId: actor.userId, videoId: input.videoId })
+      return { liked: true }
+    }),
+})
+
+export const unlikeSong = defineAction({
+  name: "unlike_song",
+  title: "收回愛心",
+  description:
+    "Remove a song (YouTube video id) from the caller's liked songs. Unliking a song that is not liked changes nothing.",
+  kind: "mutation",
+  input: z.object({ videoId }),
+  run: async (actor, input) => {
+    await db
+      .delete(musicLikes)
+      .where(
+        and(
+          eq(musicLikes.userId, actor.userId),
+          eq(musicLikes.videoId, input.videoId)
+        )
+      )
+    return { liked: false }
+  },
+})
+
+export const listLikedSongs = defineAction({
+  name: "list_liked_songs",
+  title: "我的愛心歌曲",
+  description:
+    "The caller's own liked songs, newest like first, each with title, artist, duration and when it was liked. Add one to the queue with add_song and its video id.",
+  kind: "query",
+  input: z.object({ limit: z.number().int().min(1).max(500).default(100) }),
+  run: async (actor, { limit }) => ({
+    songs: await db
+      .select({
+        track: musicTracks,
+        likedAt: musicLikes.createdAt,
+      })
+      .from(musicLikes)
+      .innerJoin(musicTracks, eq(musicTracks.videoId, musicLikes.videoId))
+      .where(eq(musicLikes.userId, actor.userId))
+      .orderBy(desc(musicLikes.createdAt))
+      .limit(limit),
+  }),
 })

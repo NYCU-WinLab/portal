@@ -7,6 +7,7 @@ import {
   integer,
   jsonb,
   pgTable,
+  primaryKey,
   real,
   text,
   timestamp,
@@ -59,6 +60,25 @@ export const musicQueueItems = pgTable(
   (table) => [
     index("music_queue_items_status_sort").on(table.status, table.sort),
     index("music_queue_items_ended").on(table.endedAt),
+  ]
+)
+
+// A member's liked songs: private, one row per member and track, so a song
+// liked in the queue and again in the played list is the same like.
+export const musicLikes = pgTable(
+  "music_likes",
+  {
+    userId: uuid()
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    videoId: text()
+      .notNull()
+      .references(() => musicTracks.videoId),
+    createdAt: timestamp({ withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.userId, table.videoId] }),
+    index("music_likes_user_created").on(table.userId, table.createdAt),
   ]
 )
 
