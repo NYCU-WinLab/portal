@@ -218,6 +218,7 @@ import {
   setVolume,
   skipSong,
 } from "@/lib/actions/music"
+import { listAssets } from "@/lib/actions/assets"
 import { listLabMembers } from "@/lib/actions/members"
 import { listLabMeetingStats } from "@/lib/actions/stats"
 import { whoami } from "@/lib/actions/users"
@@ -261,6 +262,10 @@ export const actionGroups: { app: ApiApp | null; actions: Action[] }[] = [
       updateAnnouncement,
       deleteAnnouncement,
     ],
+  },
+  {
+    app: "assets",
+    actions: [listAssets],
   },
   {
     app: "receipts",

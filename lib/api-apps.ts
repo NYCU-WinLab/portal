@@ -15,6 +15,7 @@ export const apiApps = {
   music: "點歌",
   games: "遊戲",
   approve: "簽核",
+  assets: "財產",
   receipts: "收據",
   reimburse: "記帳",
   trip: "出差文件",
