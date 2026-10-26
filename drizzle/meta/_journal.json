@@ -330,6 +330,13 @@
       "when": 1792944743218,
       "tag": "0046_powerful_firebird",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1793002692532,
+      "tag": "0047_talented_nico_minoru",
+      "breakpoints": true
     }
   ]
 }
