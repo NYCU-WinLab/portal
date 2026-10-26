@@ -5,6 +5,7 @@ import { ApiRefusal, checkApiKey } from "@/lib/actions/api-keys"
 import { type Action, errorMessage, runAction } from "@/lib/actions/define"
 import { actions, appOfAction } from "@/lib/actions/registry"
 import { apiApps } from "@/lib/api-apps"
+import contract from "@/contract/actions.json"
 import { recordRefusal } from "@/lib/otel"
 
 // The HTTP API: the same actions as MCP and the pages, run with an API key
@@ -43,15 +44,18 @@ function refuse(
 
 type KeyHolder = { userId: string; keyId: string; apps: Set<string> }
 
-/** The key in the Authorization header, or the response refusing it. */
+/** The key in the Authorization header, or the response refusing it.
+ * touch: false checks it without counting as a use (the change stream's
+ * periodic recheck). */
 export async function authenticate(
-  request: Request
+  request: Request,
+  { touch = true }: { touch?: boolean } = {}
 ): Promise<KeyHolder | Response> {
   const token = /^Bearer (\S{1,256})$/i.exec(
     request.headers.get("authorization") ?? ""
   )?.[1]
   if (!token) return refuse(401, "missing bearer key")
-  const check = await checkApiKey(token)
+  const check = await checkApiKey(token, { touch })
   if (!check.ok) return refuse(check.status, check.error)
   return { userId: check.userId, keyId: check.keyId, apps: new Set(check.apps) }
 }
@@ -135,7 +139,14 @@ export async function readInput(
   }
 }
 
-/** The actions this key can call, with their input as JSON Schema. */
+// Output schemas and hashes come from contract/actions.json, which
+// `bun run api:check` keeps equal to the code.
+const contractOf = new Map(
+  contract.map((entry) => [entry.name, entry] as const)
+)
+
+/** The actions this key can call, with their input and output as JSON
+ * Schema and a hash that changes when either does. */
 export async function listForKey(holder: KeyHolder) {
   const adminOf = await adminAppsOf({ userId: holder.userId, via: "api" })
   return actions
@@ -148,6 +159,8 @@ export async function listForKey(holder: KeyHolder) {
       kind: action.kind,
       app: appOfAction.get(action.name),
       input: z.toJSONSchema(action.input, { io: "input" }),
+      output: contractOf.get(action.name)?.output ?? {},
+      hash: contractOf.get(action.name)?.hash ?? null,
     }))
 }
 

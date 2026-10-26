@@ -496,3 +496,25 @@ export const actions: Action[] = actionGroups.flatMap((g) => g.actions)
 export const appOfAction = new Map(
   actionGroups.flatMap((g) => g.actions.map((a) => [a.name, g.app] as const))
 )
+
+/** Changes announced outside an action, by the app whose data they touch;
+ * null keeps them off API keys. `bun run api:check` fails when an
+ * announceChange name is missing here. The music player's reports arrive
+ * as player_<event>. */
+export const backgroundChanges: Record<string, ApiApp | null> = {
+  "player_*": "music",
+  autoplay: "music",
+  card_swipe: "door",
+  compare_door_cards: null,
+  room_daily_run: "meetings",
+  room_meeting_callback: "meetings",
+  store_door_voice_clip: "greetings",
+}
+
+/** The app a change on /api/events belongs to, or null. */
+export function appOfChange(name: string): ApiApp | null {
+  if (name.startsWith("player_")) return backgroundChanges["player_*"] ?? null
+  if (Object.hasOwn(backgroundChanges, name))
+    return backgroundChanges[name] ?? null
+  return appOfAction.get(name) ?? null
+}

@@ -13,6 +13,13 @@ export function proxy(request: NextRequest) {
       301
     )
   if (getSessionCookie(request)) return NextResponse.next()
+  // The change stream also takes an API key (the Mac app); the route
+  // checks it.
+  if (
+    request.nextUrl.pathname === "/api/events" &&
+    request.headers.has("authorization")
+  )
+    return NextResponse.next()
   const url = new URL("/sign-in", request.url)
   url.searchParams.set(
     "next",
