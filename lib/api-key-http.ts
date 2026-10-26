@@ -5,6 +5,7 @@ import { ApiRefusal, checkApiKey } from "@/lib/actions/api-keys"
 import { type Action, errorMessage, runAction } from "@/lib/actions/define"
 import { actions, appOfAction } from "@/lib/actions/registry"
 import { apiApps } from "@/lib/api-apps"
+import contract from "@/contract/actions.json"
 import { recordRefusal } from "@/lib/otel"
 
 // The HTTP API: the same actions as MCP and the pages, run with an API key
@@ -135,7 +136,14 @@ export async function readInput(
   }
 }
 
-/** The actions this key can call, with their input as JSON Schema. */
+// Output schemas and hashes come from contract/actions.json, which
+// `bun run api:check` keeps equal to the code.
+const contractOf = new Map(
+  contract.map((entry) => [entry.name, entry] as const)
+)
+
+/** The actions this key can call, with their input and output as JSON
+ * Schema and a hash that changes when either does. */
 export async function listForKey(holder: KeyHolder) {
   const adminOf = await adminAppsOf({ userId: holder.userId, via: "api" })
   return actions
@@ -148,6 +156,8 @@ export async function listForKey(holder: KeyHolder) {
       kind: action.kind,
       app: appOfAction.get(action.name),
       input: z.toJSONSchema(action.input, { io: "input" }),
+      output: contractOf.get(action.name)?.output ?? {},
+      hash: contractOf.get(action.name)?.hash ?? null,
     }))
 }
 
