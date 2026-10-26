@@ -6,6 +6,7 @@ import { type Action, errorMessage, runAction } from "@/lib/actions/define"
 import {
   addPlaylist,
   addSong,
+  getLyrics,
   playNext,
   removeSong,
   searchMusic,
@@ -42,3 +43,4 @@ export const remove = async (input: unknown) => call(removeSong, input)
 export const pause = async (input: unknown) => call(setPaused, input)
 export const volume = async (input: unknown) => call(setVolume, input)
 export const autoplay = async (input: unknown) => call(setAutoplay, input)
+export const lyrics = async (input: unknown) => call(getLyrics, input)

@@ -21,6 +21,7 @@ import {
 import type { nowPlaying } from "@/lib/actions/music"
 
 import { autoplay, pause, skip, volume } from "./actions"
+import { Lyrics } from "./lyrics"
 import { ok } from "./ok"
 import { addedLine, Cover, duration } from "./song"
 
@@ -74,6 +75,12 @@ export function NowPlaying({ playing }: { playing: Playing }) {
         total={current?.track.durationS ?? null}
         live={!!current && !current.track.durationS}
         note={note}
+      />
+
+      <Lyrics
+        videoId={current?.track.videoId ?? null}
+        positionS={current ? playing.positionS : 0}
+        running={!!current && playing.state === "playing" && !playing.paused}
       />
 
       <div className="flex flex-wrap items-center gap-3">

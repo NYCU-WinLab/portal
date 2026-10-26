@@ -206,6 +206,7 @@ import {
 import {
   addPlaylist,
   addSong,
+  getLyrics,
   listActivity,
   listPlayed,
   listQueue,
@@ -477,6 +478,7 @@ export const actionGroups: { app: ApiApp | null; actions: Action[] }[] = [
       listQueue,
       listActivity,
       listPlayed,
+      getLyrics,
       searchMusic,
       addSong,
       addPlaylist,

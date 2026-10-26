@@ -119,3 +119,14 @@ export const musicPlayer = pgTable("music_player", {
     .default(sql`now()`)
     .notNull(),
 })
+
+// Lyrics for a track as LRCLIB had them when first asked: timed LRC text,
+// plain text, or neither. A miss is kept too, and asked again after a week.
+export const musicLyrics = pgTable("music_lyrics", {
+  videoId: text()
+    .primaryKey()
+    .references(() => musicTracks.videoId, { onDelete: "cascade" }),
+  synced: text(),
+  plain: text(),
+  fetchedAt: timestamp({ withTimezone: true }).defaultNow().notNull(),
+})

@@ -18,7 +18,13 @@ import {
   withQueue,
 } from "@/lib/actions/music-queue"
 import { db } from "@/lib/db"
-import { musicPlayer, musicQueueItems } from "@/lib/db/schema"
+import {
+  musicLyrics,
+  musicPlayer,
+  musicQueueItems,
+  musicTracks,
+} from "@/lib/db/schema"
+import { findLyrics, parseLrc } from "@/lib/lrclib"
 import {
   getPlaylist,
   getTrack,
@@ -373,6 +379,57 @@ export const listPlayed = defineAction({
       .orderBy(desc(musicQueueItems.endedAt))
       .limit(limit)
     return { items: await describeItems(db, items) }
+  },
+})
+
+/** A song LRCLIB did not have is asked again after this long. */
+const LYRICS_RETRY_MS = 7 * 24 * 3600_000
+
+export const getLyrics = defineAction({
+  name: "get_lyrics",
+  title: "歌詞",
+  description:
+    "Lyrics of a queued or played song for the page to follow along: timed lines (start second and text) when LRCLIB has them, else plain lines, else none.",
+  kind: "query",
+  input: z.object({ videoId }),
+  // Lyrics are someone else's text, shown while the song plays; an agent
+  // has no use reading them out.
+  mcpExcludedBecause: "song lyrics are third-party text shown only on the page",
+  run: async (_actor, { videoId }) => {
+    const [track] = await db
+      .select()
+      .from(musicTracks)
+      .where(eq(musicTracks.videoId, videoId))
+      .limit(1)
+    if (!track) throw new Error("找不到這首")
+    let [row] = await db
+      .select()
+      .from(musicLyrics)
+      .where(eq(musicLyrics.videoId, videoId))
+      .limit(1)
+    const stale =
+      row &&
+      !row.synced &&
+      !row.plain &&
+      Date.now() - row.fetchedAt.getTime() > LYRICS_RETRY_MS
+    if (!row || stale) {
+      const found = await findLyrics(track.title, track.artist, track.durationS)
+      ;[row] = await db
+        .insert(musicLyrics)
+        .values({ videoId, ...found })
+        .onConflictDoUpdate({
+          target: musicLyrics.videoId,
+          set: { ...found, fetchedAt: new Date() },
+        })
+        .returning()
+    }
+    if (row.synced) return { timed: true, lines: parseLrc(row.synced) }
+    return {
+      timed: false,
+      lines: (row.plain ?? "")
+        .split(/\r?\n/)
+        .map((text) => ({ atS: null, text: text.trim() })),
+    }
   },
 })
 
