@@ -3355,6 +3355,95 @@
     }
   },
   {
+    "name": "get_lyrics",
+    "title": "歌詞",
+    "description": "Lyrics of a queued or played song to follow along (the page and the WinLab Mac app show them): timed lines (start second and text) when LRCLIB has them, else plain lines, else none.",
+    "kind": "query",
+    "app": "music",
+    "hash": "1c108c98a4be3a31",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "videoId": {
+          "pattern": "^[\\w-]{11}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "videoId"
+      ],
+      "type": "object"
+    },
+    "output": {
+      "anyOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "lines": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "atS": {
+                    "type": "null"
+                  },
+                  "text": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "atS",
+                  "text"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "timed": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "timed",
+            "lines"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "lines": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "atS": {
+                    "type": "number"
+                  },
+                  "text": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "atS",
+                  "text"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "timed": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "timed",
+            "lines"
+          ],
+          "type": "object"
+        }
+      ]
+    }
+  },
+  {
     "name": "get_mail_group",
     "title": "群組信成員",
     "description": "One mailing list the member manages and its members as Google reports them (address, role OWNER/MANAGER/MEMBER, type USER/GROUP/CUSTOMER). Google's list is eventually consistent: a change may take a few seconds to show.",

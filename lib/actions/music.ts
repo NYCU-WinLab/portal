@@ -389,12 +389,9 @@ export const getLyrics = defineAction({
   name: "get_lyrics",
   title: "歌詞",
   description:
-    "Lyrics of a queued or played song for the page to follow along: timed lines (start second and text) when LRCLIB has them, else plain lines, else none.",
+    "Lyrics of a queued or played song to follow along (the page and the WinLab Mac app show them): timed lines (start second and text) when LRCLIB has them, else plain lines, else none.",
   kind: "query",
   input: z.object({ videoId }),
-  // Lyrics are someone else's text, shown while the song plays; an agent
-  // has no use reading them out.
-  mcpExcludedBecause: "song lyrics are third-party text shown only on the page",
   run: async (_actor, { videoId }) => {
     const [track] = await db
       .select()
