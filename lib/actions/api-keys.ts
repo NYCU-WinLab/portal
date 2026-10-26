@@ -138,18 +138,28 @@ export type ApiKeyCheck =
 /** Checks a bearer key for the HTTP API. Not an action: the caller has no
  * session yet. Membership is checked as for MCP (cached for minutes); the
  * door asks again, uncached, in claimDoorOpening. */
-export async function checkApiKey(token: string): Promise<ApiKeyCheck> {
+export async function checkApiKey(
+  token: string,
+  { touch = true }: { touch?: boolean } = {}
+): Promise<ApiKeyCheck> {
   const unauthorized = {
     ok: false,
     status: 401,
     error: "invalid or revoked key",
   } as const
   if (!TOKEN.test(token)) return unauthorized
-  const [row] = await db
-    .update(apiKeys)
-    .set({ lastUsedAt: sql`now()` })
-    .where(and(eq(apiKeys.tokenHash, hash(token)), isNull(apiKeys.revokedAt)))
-    .returning({ id: apiKeys.id, userId: apiKeys.userId, apps: apiKeys.apps })
+  const live = and(
+    eq(apiKeys.tokenHash, hash(token)),
+    isNull(apiKeys.revokedAt)
+  )
+  const columns = { id: apiKeys.id, userId: apiKeys.userId, apps: apiKeys.apps }
+  const [row] = touch
+    ? await db
+        .update(apiKeys)
+        .set({ lastUsedAt: sql`now()` })
+        .where(live)
+        .returning(columns)
+    : await db.select(columns).from(apiKeys).where(live).limit(1)
   if (!row) return unauthorized
   try {
     if (!(await isLabMember(row.userId)))

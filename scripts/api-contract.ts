@@ -9,27 +9,29 @@
 // JSON the API sends (Date becomes a string, undefined drops out).
 import { execFileSync } from "node:child_process"
 import { createHash } from "node:crypto"
-import { readFile, writeFile } from "node:fs/promises"
-import { resolve } from "node:path"
+import { readdir, readFile, writeFile } from "node:fs/promises"
+import { join, resolve } from "node:path"
 import ts from "typescript"
 import { z } from "zod"
 
-import { actions, appOfAction } from "@/lib/actions/registry"
+import { breaking, type Entry, type Schema } from "./api-compat"
 
-type Schema = Record<string, unknown>
-type Entry = {
-  name: string
-  title: string
-  description: string
-  kind: "query" | "mutation"
-  app: string
-  admin?: string
-  hash: string
-  input: Schema
-  output: Schema
-}
+import { actions, appOfAction, backgroundChanges } from "@/lib/actions/registry"
 
 const FILE = "contract/actions.json"
+
+/** TypeScript files under these folders. */
+async function sources(dirs: string[]): Promise<string[]> {
+  const out: string[] = []
+  for (const dir of dirs)
+    for (const entry of await readdir(dir, {
+      recursive: true,
+      withFileTypes: true,
+    }))
+      if (entry.isFile() && /\.tsx?$/.test(entry.name))
+        out.push(join(entry.parentPath, entry.name))
+  return out
+}
 const root = process.cwd()
 
 // The program, to read each action's output type.
@@ -44,9 +46,11 @@ const config = ts.getParsedCommandLineOfConfigFile(
   }
 )
 if (!config) throw new Error("tsconfig.json not readable")
+// noUncheckedIndexedAccess only here: `const [row] = rows` may be
+// undefined at runtime, and the contract must say so.
 const program = ts.createProgram(
   config.fileNames.filter((f) => f.includes("/lib/actions/")),
-  config.options
+  { ...config.options, noUncheckedIndexedAccess: true }
 )
 const checker = program.getTypeChecker()
 
@@ -121,13 +125,36 @@ function toSchema(type: ts.Type, seen: ts.Type[] = []): Schema {
         : bools.map((t) => toSchema(t, seen))),
       ...rest.map((t) => toSchema(t, seen)),
     ]
-    const strings = schemas.filter(
-      (s) => s.type === "string" && "const" in s && Object.keys(s).length === 2
+    // String literals become one enum, beside null or anything else.
+    const isConst = (s: Schema) =>
+      s.type === "string" && "const" in s && Object.keys(s).length === 2
+    const consts = [...new Set(schemas.filter(isConst).map((s) => s.const))]
+    const all = [
+      ...schemas.filter((s) => !isConst(s)),
+      ...(consts.length
+        ? [{ type: "string", enum: (consts as string[]).sort() }]
+        : []),
+    ]
+    // Same shape twice (two variants that serialize alike) counts once.
+    const unique = [
+      ...new Map(all.map((s) => [JSON.stringify(sorted(s)), s])).values(),
+    ].sort((a, b) =>
+      JSON.stringify(sorted(a)).localeCompare(JSON.stringify(sorted(b)))
     )
-    if (strings.length === schemas.length)
-      return { type: "string", enum: strings.map((s) => s.const).sort() }
-    if (schemas.length === 1) return schemas[0]!
-    return { anyOf: schemas }
+    if (unique.length === 1) return unique[0]!
+    return { anyOf: unique }
+  }
+
+  // A branded primitive (string & { brand }) is the primitive.
+  if (type.isIntersection()) {
+    const primitive = type.types.find(
+      (t) =>
+        t.flags &
+        (ts.TypeFlags.StringLike |
+          ts.TypeFlags.NumberLike |
+          ts.TypeFlags.BooleanLike)
+    )
+    if (primitive) return toSchema(primitive, seen)
   }
 
   if (seen.includes(type)) return {}
@@ -138,7 +165,8 @@ function toSchema(type: ts.Type, seen: ts.Type[] = []): Schema {
     const [item] = checker.getTypeArguments(type as ts.TypeReference)
     return { type: "array", items: item ? toSchema(item, next) : {} }
   }
-  if (f & ts.TypeFlags.Object) {
+  // Objects, and intersections of objects (A & B): the merged properties.
+  if (f & ts.TypeFlags.Object || type.isIntersection()) {
     const properties: Record<string, Schema> = {}
     const required: string[] = []
     for (const property of checker.getPropertiesOfType(type)) {
@@ -206,77 +234,6 @@ function contract(): Entry[] {
     .sort((a, b) => a.name.localeCompare(b.name))
 }
 
-// What a client built against the old contract would trip on.
-function breaking(before: Entry[], after: Entry[]) {
-  const problems: string[] = []
-  const now = new Map(after.map((e) => [e.name, e]))
-  for (const old of before) {
-    const cur = now.get(old.name)
-    if (!cur) {
-      problems.push(`${old.name}: removed`)
-      continue
-    }
-    // Inputs: a client sends what the old schema allowed.
-    compare(cur.input, old.input, `${old.name} input`, problems, "input")
-    // Outputs: a client reads what the old schema promised.
-    compare(old.output, cur.output, `${old.name} output`, problems, "output")
-  }
-  return problems
-}
-
-/** Problems where `wide` accepts less than `narrow` promises: every value
- * valid for `narrow` must stay valid for `wide`. New object keys are fine:
- * clients ignore keys they do not know. */
-function compare(
-  wide: Schema,
-  narrow: Schema,
-  at: string,
-  out: string[],
-  side: "input" | "output"
-) {
-  if (!Object.keys(wide).length) return
-  if (!Object.keys(narrow).length) return void out.push(`${at}: became untyped`)
-  const types = (s: Schema): string[] =>
-    s.anyOf
-      ? (s.anyOf as Schema[]).flatMap(types)
-      : s.type
-        ? [s.type as string]
-        : []
-  const wideTypes = new Set(types(wide))
-  for (const t of types(narrow))
-    if (!wideTypes.has(t) && !(t === "integer" && wideTypes.has("number")))
-      out.push(`${at}: ${t} no longer allowed`)
-  if (wide.enum && narrow.enum)
-    for (const v of narrow.enum as unknown[])
-      if (!(wide.enum as unknown[]).includes(v))
-        out.push(`${at}: value ${JSON.stringify(v)} no longer allowed`)
-  if (wide.enum && !narrow.enum && narrow.type === "string")
-    out.push(`${at}: string narrowed to an enum`)
-  if (wide.type === "object" && narrow.type === "object") {
-    const wp = (wide.properties ?? {}) as Record<string, Schema>
-    const np = (narrow.properties ?? {}) as Record<string, Schema>
-    const wr = new Set((wide.required ?? []) as string[])
-    const nr = new Set((narrow.required ?? []) as string[])
-    for (const key of wr)
-      if (!nr.has(key))
-        out.push(
-          side === "input"
-            ? `${at}.${key}: now required`
-            : `${at}.${key}: may be missing`
-        )
-    for (const [key, schema] of Object.entries(np))
-      if (wp[key]) compare(wp[key], schema, `${at}.${key}`, out, side)
-  }
-  if (wide.type === "array" && narrow.type === "array")
-    compare(
-      (wide.items ?? {}) as Schema,
-      (narrow.items ?? {}) as Schema,
-      `${at}[]`,
-      out,
-      side
-    )
-}
-
 const text = JSON.stringify(contract(), null, 2) + "\n"
 
 if (process.argv.includes("--check")) {
@@ -288,24 +245,52 @@ if (process.argv.includes("--check")) {
   // a commit message on this branch, and a client release to go with it.
   const base = process.env.API_BASE_REF ?? "origin/main"
   let before: Entry[] | undefined
+  const git = (...args: string[]) =>
+    execFileSync("git", args, {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    })
+  let baseFound = true
   try {
-    before = JSON.parse(
-      execFileSync("git", ["show", `${base}:${FILE}`], {
-        encoding: "utf8",
-        stdio: ["ignore", "pipe", "ignore"],
-      })
-    )
-  } catch {}
+    git("rev-parse", "--verify", `${base}^{commit}`)
+  } catch {
+    baseFound = false
+    // A shallow clone has no base to compare with: say so, and fail in CI.
+    const message = `cannot find ${base}; breaking changes not checked`
+    if (process.env.CI) problems.push(message)
+    else console.warn(message)
+  }
+  // No contract on the base yet (the change that adds it): nothing to break.
+  if (baseFound)
+    try {
+      before = JSON.parse(git("show", `${base}:${FILE}`))
+    } catch {}
   if (before) {
     const breaks = breaking(before, JSON.parse(text))
-    const log = execFileSync("git", ["log", "--format=%B", `${base}..HEAD`], {
-      encoding: "utf8",
-    })
+    const log = git("log", "--format=%B", `${base}..HEAD`)
     if (breaks.length && !/^API-Break: \S/m.test(log))
       problems.push(
         ...breaks.map((b) => `breaking: ${b}`),
         'add a commit trailer "API-Break: <why>" once the clients are ready'
       )
+  }
+  // Every change announced outside an action must say which app it is in,
+  // or API keys would miss it (or see what they should not).
+  for (const path of await sources(["lib", "app"])) {
+    const text = await readFile(path, "utf8")
+    for (const m of text.matchAll(/announceChange\(\s*([`"])([^`"$]*)/g)) {
+      const name = m[2]!.startsWith("player_") ? "player_*" : m[2]!
+      // progress:<topic> never reaches API keys (appOfChange says null).
+      if (name.startsWith("progress:")) continue
+      if (
+        name &&
+        !Object.hasOwn(backgroundChanges, name) &&
+        !appOfAction.has(name)
+      )
+        problems.push(
+          `${path}: announceChange("${name}") is not in backgroundChanges`
+        )
+    }
   }
   if (problems.length) {
     console.error(problems.join("\n"))

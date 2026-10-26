@@ -44,15 +44,18 @@ function refuse(
 
 type KeyHolder = { userId: string; keyId: string; apps: Set<string> }
 
-/** The key in the Authorization header, or the response refusing it. */
+/** The key in the Authorization header, or the response refusing it.
+ * touch: false checks it without counting as a use (the change stream's
+ * periodic recheck). */
 export async function authenticate(
-  request: Request
+  request: Request,
+  { touch = true }: { touch?: boolean } = {}
 ): Promise<KeyHolder | Response> {
   const token = /^Bearer (\S{1,256})$/i.exec(
     request.headers.get("authorization") ?? ""
   )?.[1]
   if (!token) return refuse(401, "missing bearer key")
-  const check = await checkApiKey(token)
+  const check = await checkApiKey(token, { touch })
   if (!check.ok) return refuse(check.status, check.error)
   return { userId: check.userId, keyId: check.keyId, apps: new Set(check.apps) }
 }

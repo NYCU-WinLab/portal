@@ -169,7 +169,7 @@
     "description": "Adds addresses (outside ones too) to a mailing list the member manages, as plain MEMBERs, at most 100 at once. Each address gets its own outcome: ok, already, denied, protected (not a member role) or error. Refused for gcp-* lists, lists outside the domain or nested in one.",
     "kind": "mutation",
     "app": "groups",
-    "hash": "630fe93212a38f1f",
+    "hash": "d6b6c4328013136c",
     "input": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
@@ -200,26 +200,47 @@
         {
           "additionalProperties": false,
           "properties": {
+            "data": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "detail": {
+                    "type": "string"
+                  },
+                  "email": {
+                    "type": "string"
+                  },
+                  "listedAs": {
+                    "type": "string"
+                  },
+                  "outcome": {
+                    "enum": [
+                      "already",
+                      "denied",
+                      "error",
+                      "not_found",
+                      "ok",
+                      "protected"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "email",
+                  "outcome"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            },
             "status": {
-              "const": "unconfigured",
+              "const": "ok",
               "type": "string"
             }
           },
           "required": [
-            "status"
-          ],
-          "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "properties": {
-            "status": {
-              "const": "unconfigured",
-              "type": "string"
-            }
-          },
-          "required": [
-            "status"
+            "status",
+            "data"
           ],
           "type": "object"
         },
@@ -341,47 +362,13 @@
         {
           "additionalProperties": false,
           "properties": {
-            "data": {
-              "items": {
-                "additionalProperties": false,
-                "properties": {
-                  "detail": {
-                    "type": "string"
-                  },
-                  "email": {
-                    "type": "string"
-                  },
-                  "listedAs": {
-                    "type": "string"
-                  },
-                  "outcome": {
-                    "enum": [
-                      "already",
-                      "denied",
-                      "error",
-                      "not_found",
-                      "ok",
-                      "protected"
-                    ],
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "email",
-                  "outcome"
-                ],
-                "type": "object"
-              },
-              "type": "array"
-            },
             "status": {
-              "const": "ok",
+              "const": "unconfigured",
               "type": "string"
             }
           },
           "required": [
-            "status",
-            "data"
+            "status"
           ],
           "type": "object"
         }
@@ -1060,7 +1047,7 @@
     "kind": "mutation",
     "app": "bulletin",
     "admin": "portal",
-    "hash": "1e2c63addb864fea",
+    "hash": "4879c9c3a48a7bdd",
     "input": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
@@ -1099,9 +1086,7 @@
         }
       },
       "required": [
-        "mailedTo",
-        "id",
-        "title"
+        "mailedTo"
       ],
       "type": "object"
     }
@@ -2211,7 +2196,7 @@
     "description": "One document the member created or signs: title, status, creator, signers, and every field (page, box in fractions of the page from the top left, category, label, signer, the value once signed). to_fill lists the member's own empty fields, prefilled from what they entered last time; a signature is filled from the signature saved on their account.",
     "kind": "query",
     "app": "approve",
-    "hash": "8d4018ded705633d",
+    "hash": "e6f97b3c89e37632",
     "input": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
@@ -2264,11 +2249,11 @@
               "signedAt": {
                 "anyOf": [
                   {
-                    "type": "null"
-                  },
-                  {
                     "format": "date-time",
                     "type": "string"
+                  },
+                  {
+                    "type": "null"
                   }
                 ]
               },
@@ -2349,11 +2334,11 @@
               "signedAt": {
                 "anyOf": [
                   {
-                    "type": "null"
-                  },
-                  {
                     "format": "date-time",
                     "type": "string"
+                  },
+                  {
+                    "type": "null"
                   }
                 ]
               },
@@ -2481,7 +2466,7 @@
     "description": "The photographed menu of one restaurant as base64 with its content type, or null when it has none. Use it when the typed menu is missing a dish.",
     "kind": "query",
     "app": "bento",
-    "hash": "79e0b9624b64ca65",
+    "hash": "6c54f56adf7b960a",
     "input": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
@@ -2502,9 +2487,6 @@
         "image": {
           "anyOf": [
             {
-              "type": "null"
-            },
-            {
               "additionalProperties": false,
               "properties": {
                 "base64": {
@@ -2519,6 +2501,9 @@
                 "base64"
               ],
               "type": "object"
+            },
+            {
+              "type": "null"
             }
           ]
         }
@@ -2535,7 +2520,7 @@
     "description": "One lunch order in full: the order (date, batch, status), its restaurant with the menu and option groups to order from, every line (id, member, dish, picked options, price), totals per member, and a tally per dish and option combination as the restaurant would take it.",
     "kind": "query",
     "app": "bento",
-    "hash": "7fabfb7811281537",
+    "hash": "d4c0ee71b195897b",
     "input": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
@@ -2749,11 +2734,11 @@
             "closedAt": {
               "anyOf": [
                 {
-                  "type": "null"
-                },
-                {
                   "format": "date-time",
                   "type": "string"
+                },
+                {
+                  "type": "null"
                 }
               ]
             },
@@ -2899,11 +2884,7 @@
             }
           },
           "required": [
-            "menuImage",
-            "id",
-            "name",
-            "phone",
-            "mapUrl"
+            "menuImage"
           ],
           "type": "object"
         },
@@ -3102,7 +3083,7 @@
     "description": "How much each member has ordered: dishes, NT$ spent and their most-ordered dish, over every order. A bento admin sees every member; anyone else sees only themselves.",
     "kind": "query",
     "app": "bento",
-    "hash": "c901a5af5f8a83aa",
+    "hash": "850fe07dadac75bb",
     "input": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {},
@@ -3121,9 +3102,6 @@
               "favorite": {
                 "anyOf": [
                   {
-                    "type": "null"
-                  },
-                  {
                     "additionalProperties": false,
                     "properties": {
                       "count": {
@@ -3138,6 +3116,9 @@
                       "count"
                     ],
                     "type": "object"
+                  },
+                  {
+                    "type": "null"
                   }
                 ]
               },
@@ -3379,7 +3360,7 @@
     "description": "One mailing list the member manages and its members as Google reports them (address, role OWNER/MANAGER/MEMBER, type USER/GROUP/CUSTOMER). Google's list is eventually consistent: a change may take a few seconds to show.",
     "kind": "query",
     "app": "groups",
-    "hash": "450b26ebd2158d3c",
+    "hash": "aed909882c24b38c",
     "input": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
@@ -3399,26 +3380,103 @@
         {
           "additionalProperties": false,
           "properties": {
+            "data": {
+              "additionalProperties": false,
+              "properties": {
+                "group": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "email": {
+                      "type": "string"
+                    },
+                    "id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "email",
+                    "name"
+                  ],
+                  "type": "object"
+                },
+                "members": {
+                  "items": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "email": {
+                        "anyOf": [
+                          {
+                            "type": "null"
+                          },
+                          {
+                            "type": "string"
+                          }
+                        ]
+                      },
+                      "id": {
+                        "anyOf": [
+                          {
+                            "type": "null"
+                          },
+                          {
+                            "type": "string"
+                          }
+                        ]
+                      },
+                      "role": {
+                        "type": "string"
+                      },
+                      "status": {
+                        "anyOf": [
+                          {
+                            "type": "null"
+                          },
+                          {
+                            "type": "string"
+                          }
+                        ]
+                      },
+                      "type": {
+                        "anyOf": [
+                          {
+                            "type": "null"
+                          },
+                          {
+                            "type": "string"
+                          }
+                        ]
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "email",
+                      "role",
+                      "type",
+                      "status"
+                    ],
+                    "type": "object"
+                  },
+                  "type": "array"
+                }
+              },
+              "required": [
+                "group",
+                "members"
+              ],
+              "type": "object"
+            },
             "status": {
-              "const": "unconfigured",
+              "const": "ok",
               "type": "string"
             }
           },
           "required": [
-            "status"
-          ],
-          "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "properties": {
-            "status": {
-              "const": "unconfigured",
-              "type": "string"
-            }
-          },
-          "required": [
-            "status"
+            "status",
+            "data"
           ],
           "type": "object"
         },
@@ -3540,103 +3598,13 @@
         {
           "additionalProperties": false,
           "properties": {
-            "data": {
-              "additionalProperties": false,
-              "properties": {
-                "group": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "email": {
-                      "type": "string"
-                    },
-                    "id": {
-                      "type": "string"
-                    },
-                    "name": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "id",
-                    "email",
-                    "name"
-                  ],
-                  "type": "object"
-                },
-                "members": {
-                  "items": {
-                    "additionalProperties": false,
-                    "properties": {
-                      "email": {
-                        "anyOf": [
-                          {
-                            "type": "null"
-                          },
-                          {
-                            "type": "string"
-                          }
-                        ]
-                      },
-                      "id": {
-                        "anyOf": [
-                          {
-                            "type": "null"
-                          },
-                          {
-                            "type": "string"
-                          }
-                        ]
-                      },
-                      "role": {
-                        "type": "string"
-                      },
-                      "status": {
-                        "anyOf": [
-                          {
-                            "type": "null"
-                          },
-                          {
-                            "type": "string"
-                          }
-                        ]
-                      },
-                      "type": {
-                        "anyOf": [
-                          {
-                            "type": "null"
-                          },
-                          {
-                            "type": "string"
-                          }
-                        ]
-                      }
-                    },
-                    "required": [
-                      "id",
-                      "email",
-                      "role",
-                      "type",
-                      "status"
-                    ],
-                    "type": "object"
-                  },
-                  "type": "array"
-                }
-              },
-              "required": [
-                "group",
-                "members"
-              ],
-              "type": "object"
-            },
             "status": {
-              "const": "ok",
+              "const": "unconfigured",
               "type": "string"
             }
           },
           "required": [
-            "status",
-            "data"
+            "status"
           ],
           "type": "object"
         }
@@ -3649,7 +3617,7 @@
     "description": "One member's avatar as base64 WebP (size small 96px or large 256px) with its version, or null when they have none. Any signed-in member may look.",
     "kind": "query",
     "app": "profile",
-    "hash": "dbea5a4b231080ef",
+    "hash": "4ab2121dc3d6a7d7",
     "input": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
@@ -3675,9 +3643,6 @@
     "output": {
       "anyOf": [
         {
-          "type": "null"
-        },
-        {
           "additionalProperties": false,
           "properties": {
             "base64": {
@@ -3696,6 +3661,9 @@
             "base64"
           ],
           "type": "object"
+        },
+        {
+          "type": "null"
         }
       ]
     }
@@ -3766,7 +3734,7 @@
     "description": "Whether the signed-in member has saved a handwritten signature, whether it is drawn on documents they upload (stamp), and in which corner of the first page (tl, tr, bl, br). The image itself stays on the web.",
     "kind": "query",
     "app": "profile",
-    "hash": "627521c44204281c",
+    "hash": "264d4ca3cc042bbf",
     "input": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {},
@@ -3785,8 +3753,15 @@
           "type": "boolean"
         },
         "updatedAt": {
-          "format": "date-time",
-          "type": "string"
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
@@ -3804,7 +3779,7 @@
     "description": "The next Monday lab meeting that is not a holiday, from today in Taipei: date, presenter, paper or title, place, start time and questioners. null when nothing is scheduled.",
     "kind": "query",
     "app": "meetings",
-    "hash": "5b7079a203372e01",
+    "hash": "b1fd95b2454c78fa",
     "input": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {},
@@ -3815,9 +3790,6 @@
       "properties": {
         "meeting": {
           "anyOf": [
-            {
-              "type": "null"
-            },
             {
               "additionalProperties": false,
               "properties": {
@@ -3882,9 +3854,6 @@
                 "paper": {
                   "anyOf": [
                     {
-                      "type": "null"
-                    },
-                    {
                       "additionalProperties": false,
                       "properties": {
                         "id": {
@@ -3921,14 +3890,14 @@
                         "venue"
                       ],
                       "type": "object"
+                    },
+                    {
+                      "type": "null"
                     }
                   ]
                 },
                 "presenter": {
                   "anyOf": [
-                    {
-                      "type": "null"
-                    },
                     {
                       "additionalProperties": false,
                       "properties": {
@@ -3944,6 +3913,9 @@
                         "name"
                       ],
                       "type": "object"
+                    },
+                    {
+                      "type": "null"
                     }
                   ]
                 },
@@ -4026,6 +3998,9 @@
                 "questioners"
               ],
               "type": "object"
+            },
+            {
+              "type": "null"
             }
           ]
         }
@@ -4303,7 +4278,7 @@
     "description": "One trip with its files (id, filename, description, size in bytes, stamped when their handwritten signature was drawn on page 1, uploaded at): the signed-in member's own, or for a trip admin everyone's grouped by member. Use get_trip_file for a file's contents.",
     "kind": "query",
     "app": "trip",
-    "hash": "5a7d297f94a795cf",
+    "hash": "fd11f168706ebe3a",
     "input": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
@@ -4487,11 +4462,11 @@
             "closedAt": {
               "anyOf": [
                 {
-                  "type": "null"
-                },
-                {
                   "format": "date-time",
                   "type": "string"
+                },
+                {
+                  "type": "null"
                 }
               ]
             },
@@ -4658,7 +4633,7 @@
     "description": "Recent actions, newest first: who added, cut in, skipped, removed, paused, resumed or changed the volume (a member's clicks within a minute show as the level they ended on), with the song title and, for playlists, how many songs.",
     "kind": "query",
     "app": "music",
-    "hash": "b97a41453c1d34f3",
+    "hash": "4252ae6ee97e3728",
     "input": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
@@ -4685,9 +4660,6 @@
               "detail": {
                 "anyOf": [
                   {
-                    "type": "null"
-                  },
-                  {
                     "additionalProperties": false,
                     "properties": {
                       "count": {
@@ -4704,6 +4676,9 @@
                       }
                     },
                     "type": "object"
+                  },
+                  {
+                    "type": "null"
                   }
                 ]
               },
@@ -4776,7 +4751,7 @@
     "description": "Lab announcements, newest first, each with id, title, full content, author name, created_at, updated_at and mail: null when it was posted without mail, otherwise the mail's status (queued, sent or failed) and how many members it went to. Every member sees the same list.",
     "kind": "query",
     "app": "bulletin",
-    "hash": "ec7ed8eddfaa2d3b",
+    "hash": "441ae543f9b00897",
     "input": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
@@ -4819,9 +4794,6 @@
               "mail": {
                 "anyOf": [
                   {
-                    "type": "null"
-                  },
-                  {
                     "additionalProperties": false,
                     "properties": {
                       "recipients": {
@@ -4841,6 +4813,9 @@
                       "recipients"
                     ],
                     "type": "object"
+                  },
+                  {
+                    "type": "null"
                   }
                 ]
               },
@@ -4878,7 +4853,7 @@
     "description": "Documents the signed-in member created or must sign, newest first: id, title, status (draft, pending, completed), creator, each signer with signed_at, and to_sign true when the member still has to sign it. Only the member's own documents and ones they sign; nobody else's.",
     "kind": "query",
     "app": "approve",
-    "hash": "0ea362a788227eca",
+    "hash": "da08db3080e5a329",
     "input": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {},
@@ -4894,11 +4869,11 @@
               "completedAt": {
                 "anyOf": [
                   {
-                    "type": "null"
-                  },
-                  {
                     "format": "date-time",
                     "type": "string"
+                  },
+                  {
+                    "type": "null"
                   }
                 ]
               },
@@ -4925,11 +4900,11 @@
                     "signedAt": {
                       "anyOf": [
                         {
-                          "type": "null"
-                        },
-                        {
                           "format": "date-time",
                           "type": "string"
+                        },
+                        {
+                          "type": "null"
                         }
                       ]
                     },
@@ -5276,7 +5251,7 @@
     "description": "The lab's cohorts from Keycloak (/lab-member/114, 113, …), newest first, each with its current members' names and addresses (alumni left out), for adding a whole cohort to a mailing list. Managers of any list and portal admins only. null when Keycloak cannot be read in time.",
     "kind": "query",
     "app": "groups",
-    "hash": "4ef1a7289a713da6",
+    "hash": "494375d8feb9cf01",
     "input": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {},
@@ -5287,9 +5262,6 @@
       "properties": {
         "cohorts": {
           "anyOf": [
-            {
-              "type": "null"
-            },
             {
               "items": {
                 "additionalProperties": false,
@@ -5353,6 +5325,9 @@
                 "type": "object"
               },
               "type": "array"
+            },
+            {
+              "type": "null"
             }
           ]
         }
@@ -6079,7 +6054,7 @@
     "description": "The Monday lab meeting schedule: for each week its date, label (the week counted from the semester's first week of classes: 第 3 週, or 寒假 / 暑假; null before the semester is set up), semester, kind, presenter, paper or title, slides and recording links, notes, place, start time and questioners. kind is regular (a member presents a paper from the list), thesis (a master's thesis talk, title written by the presenter), speaker (an invited talk, no member presents) or holiday (no meeting; holiday says why). past=false (default) gives today in Taipei onward, soonest first; past=true gives earlier weeks, latest first.",
     "kind": "query",
     "app": "meetings",
-    "hash": "fcb81bd666635e4c",
+    "hash": "c325b8c54568be67",
     "input": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
@@ -6158,9 +6133,6 @@
               "paper": {
                 "anyOf": [
                   {
-                    "type": "null"
-                  },
-                  {
                     "additionalProperties": false,
                     "properties": {
                       "id": {
@@ -6197,14 +6169,14 @@
                       "venue"
                     ],
                     "type": "object"
+                  },
+                  {
+                    "type": "null"
                   }
                 ]
               },
               "presenter": {
                 "anyOf": [
-                  {
-                    "type": "null"
-                  },
                   {
                     "additionalProperties": false,
                     "properties": {
@@ -6220,6 +6192,9 @@
                       "name"
                     ],
                     "type": "object"
+                  },
+                  {
+                    "type": "null"
                   }
                 ]
               },
@@ -6318,7 +6293,7 @@
     "description": "The lab's member directory from Keycloak: every enabled account except those Keycloak marks as not people (the /system group), current members and alumni. Each has id (Keycloak id), name (Chinese), name_en, username, email, phone, student_id, status (teacher, assistant, doctoral, master, undergrad, alumni or other), cohort (ROC admission year) and title (博三 for students, else the position Keycloak holds). status and cohort come from the /lab-member groups, falling back to the role and admissionYear attributes. Sorted by status, then cohort, then name.",
     "kind": "query",
     "app": "members",
-    "hash": "aa62a0c592781e76",
+    "hash": "977a647688d25254",
     "input": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {},
@@ -6373,6 +6348,7 @@
               "assistant",
               "doctoral",
               "master",
+              "other",
               "teacher",
               "undergrad"
             ],
@@ -6622,7 +6598,7 @@
     "description": "The Google mailing lists the member may manage (/groups): every list in the domain for a portal admin, otherwise the ones assigned to them; each with its Directory id, address and name. status unconfigured when the portal has no Google credential.",
     "kind": "query",
     "app": "groups",
-    "hash": "bfaf2d7112ab3aa9",
+    "hash": "9445339827bc5fd8",
     "input": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {},
@@ -6630,19 +6606,6 @@
     },
     "output": {
       "anyOf": [
-        {
-          "additionalProperties": false,
-          "properties": {
-            "status": {
-              "const": "unconfigured",
-              "type": "string"
-            }
-          },
-          "required": [
-            "status"
-          ],
-          "type": "object"
-        },
         {
           "additionalProperties": false,
           "properties": {
@@ -6679,6 +6642,19 @@
             "data"
           ],
           "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "status": {
+              "const": "unconfigured",
+              "type": "string"
+            }
+          },
+          "required": [
+            "status"
+          ],
+          "type": "object"
         }
       ]
     }
@@ -6689,7 +6665,7 @@
     "description": "Every meeting booked through the portal from date (default today, Asia/Taipei) for days days, the lab meeting's weekly Teams meeting included (lab_meeting_id set; its program is in list_lab_meetings): room (null for an online-only meeting), date, start and end, status booked or cancelled (cancelled rows stay), title, agenda, project group, attendees, who booked it, and the Teams meeting's state (pending, success with join_url, or failed with the reason). Every member sees every booking; only the member who booked one can cancel it with cancel_meeting.",
     "kind": "query",
     "app": "meetings",
-    "hash": "8f6f1bf4eed8f86e",
+    "hash": "d4461988d509dc1a",
     "input": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
@@ -6747,11 +6723,11 @@
               "cancelledAt": {
                 "anyOf": [
                   {
-                    "type": "null"
-                  },
-                  {
                     "format": "date-time",
                     "type": "string"
+                  },
+                  {
+                    "type": "null"
                   }
                 ]
               },
@@ -6786,9 +6762,6 @@
               },
               "meeting": {
                 "anyOf": [
-                  {
-                    "type": "null"
-                  },
                   {
                     "additionalProperties": false,
                     "properties": {
@@ -6827,6 +6800,9 @@
                       "error"
                     ],
                     "type": "object"
+                  },
+                  {
+                    "type": "null"
                   }
                 ]
               },
@@ -7085,7 +7061,7 @@
     "description": "The Google mailing lists the signed-in member receives mail from, by their portal email (address): each list's address and name, and via: null when the address is a member itself, else the list the member is in directly that is nested in this one (up to 3 levels). status unconfigured when the portal has no Google credential.",
     "kind": "query",
     "app": "groups",
-    "hash": "262221b6cc9649ea",
+    "hash": "7c7f7c294e975910",
     "input": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {},
@@ -7093,19 +7069,6 @@
     },
     "output": {
       "anyOf": [
-        {
-          "additionalProperties": false,
-          "properties": {
-            "status": {
-              "const": "unconfigured",
-              "type": "string"
-            }
-          },
-          "required": [
-            "status"
-          ],
-          "type": "object"
-        },
         {
           "additionalProperties": false,
           "properties": {
@@ -7151,6 +7114,19 @@
             "status",
             "address",
             "data"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "status": {
+              "const": "unconfigured",
+              "type": "string"
+            }
+          },
+          "required": [
+            "status"
           ],
           "type": "object"
         }
@@ -7339,7 +7315,7 @@
     "description": "Songs that finished, were skipped or removed, newest first, with who added and who skipped or removed them.",
     "kind": "query",
     "app": "music",
-    "hash": "c2a86363631d95a5",
+    "hash": "e075184b05f30443",
     "input": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
@@ -7381,11 +7357,11 @@
               "endedAt": {
                 "anyOf": [
                   {
-                    "type": "null"
-                  },
-                  {
                     "format": "date-time",
                     "type": "string"
+                  },
+                  {
+                    "type": "null"
                   }
                 ]
               },
@@ -7408,11 +7384,11 @@
               "startedAt": {
                 "anyOf": [
                   {
-                    "type": "null"
-                  },
-                  {
                     "format": "date-time",
                     "type": "string"
+                  },
+                  {
+                    "type": "null"
                   }
                 ]
               },
@@ -7502,7 +7478,7 @@
     "description": "The presenter list in turn order: doctoral students, then master's students, each by cohort (ROC admission year) and then by position. status and cohort come live from Keycloak; inRotation is false for anyone no longer a doctoral or master's student, who is skipped for presenting and asking. The same list supplies the questioners.",
     "kind": "query",
     "app": "meetings",
-    "hash": "56f351f7293e600d",
+    "hash": "1b33ed16c649753e",
     "input": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {},
@@ -7547,31 +7523,18 @@
               "status": {
                 "anyOf": [
                   {
+                    "enum": [
+                      "alumni",
+                      "assistant",
+                      "doctoral",
+                      "master",
+                      "teacher",
+                      "undergrad"
+                    ],
+                    "type": "string"
+                  },
+                  {
                     "type": "null"
-                  },
-                  {
-                    "const": "teacher",
-                    "type": "string"
-                  },
-                  {
-                    "const": "assistant",
-                    "type": "string"
-                  },
-                  {
-                    "const": "doctoral",
-                    "type": "string"
-                  },
-                  {
-                    "const": "master",
-                    "type": "string"
-                  },
-                  {
-                    "const": "undergrad",
-                    "type": "string"
-                  },
-                  {
-                    "const": "alumni",
-                    "type": "string"
                   }
                 ]
               },
@@ -7681,7 +7644,7 @@
     "description": "Songs waiting to play, in order, each with who added it and how (queue, next, cut_in). The playing song is not included; see now_playing.",
     "kind": "query",
     "app": "music",
-    "hash": "1126277d35cf41ce",
+    "hash": "a5039ab7e5d35e35",
     "input": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {},
@@ -7716,11 +7679,11 @@
               "endedAt": {
                 "anyOf": [
                   {
-                    "type": "null"
-                  },
-                  {
                     "format": "date-time",
                     "type": "string"
+                  },
+                  {
+                    "type": "null"
                   }
                 ]
               },
@@ -7743,11 +7706,11 @@
               "startedAt": {
                 "anyOf": [
                   {
-                    "type": "null"
-                  },
-                  {
                     "format": "date-time",
                     "type": "string"
+                  },
+                  {
+                    "type": "null"
                   }
                 ]
               },
@@ -7838,7 +7801,7 @@
     "kind": "query",
     "app": "receipts",
     "admin": "receipts",
-    "hash": "10b2e7f18b5e06b1",
+    "hash": "e90a884e9aadbca9",
     "input": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
@@ -7876,15 +7839,14 @@
               "depositAccount": {
                 "anyOf": [
                   {
+                    "enum": [
+                      "esun",
+                      "post"
+                    ],
+                    "type": "string"
+                  },
+                  {
                     "type": "null"
-                  },
-                  {
-                    "const": "post",
-                    "type": "string"
-                  },
-                  {
-                    "const": "esun",
-                    "type": "string"
                   }
                 ]
               },
@@ -7954,7 +7916,7 @@
     "kind": "query",
     "app": "reimburse",
     "admin": "reimburse",
-    "hash": "cdd2c727da2bc982",
+    "hash": "1825220db26e6c44",
     "input": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
@@ -7980,8 +7942,105 @@
         "entries": {
           "items": {
             "anyOf": [
-              {},
-              {}
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "amount": {
+                    "type": "number"
+                  },
+                  "applicant": {
+                    "type": "string"
+                  },
+                  "applicantId": {
+                    "anyOf": [
+                      {
+                        "type": "null"
+                      },
+                      {
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "date": {
+                    "type": "string"
+                  },
+                  "id": {
+                    "type": "string"
+                  },
+                  "invoiceDate": {
+                    "type": "string"
+                  },
+                  "item": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "const": "egress",
+                    "type": "string"
+                  },
+                  "transferDate": {
+                    "anyOf": [
+                      {
+                        "type": "null"
+                      },
+                      {
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "transferFee": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "date",
+                  "id",
+                  "applicantId",
+                  "applicant",
+                  "item",
+                  "amount",
+                  "invoiceDate",
+                  "transferDate",
+                  "transferFee"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "amount": {
+                    "type": "number"
+                  },
+                  "date": {
+                    "type": "string"
+                  },
+                  "id": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "const": "ingress",
+                    "type": "string"
+                  },
+                  "note": {
+                    "anyOf": [
+                      {
+                        "type": "null"
+                      },
+                      {
+                        "type": "string"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "kind",
+                  "id",
+                  "date",
+                  "amount",
+                  "note"
+                ],
+                "type": "object"
+              }
             ]
           },
           "type": "array"
@@ -8401,7 +8460,7 @@
     "description": "Business trips, open ones first then newest: id, name, description, status (open takes uploads, closed does not), how many files the signed-in member uploaded, and for trip admins how many people and files in all. Every member sees every trip; files are their own unless they are a trip admin.",
     "kind": "query",
     "app": "trip",
-    "hash": "1c6e02069aa6a265",
+    "hash": "15f4414062df2c70",
     "input": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {},
@@ -8422,63 +8481,11 @@
                   "closedAt": {
                     "anyOf": [
                       {
-                        "type": "null"
-                      },
-                      {
                         "format": "date-time",
                         "type": "string"
-                      }
-                    ]
-                  },
-                  "createdAt": {
-                    "format": "date-time",
-                    "type": "string"
-                  },
-                  "description": {
-                    "anyOf": [
-                      {
-                        "type": "null"
                       },
                       {
-                        "type": "string"
-                      }
-                    ]
-                  },
-                  "id": {
-                    "type": "string"
-                  },
-                  "mine": {
-                    "type": "number"
-                  },
-                  "name": {
-                    "type": "string"
-                  },
-                  "status": {
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "id",
-                  "name",
-                  "description",
-                  "status",
-                  "createdAt",
-                  "closedAt",
-                  "mine"
-                ],
-                "type": "object"
-              },
-              {
-                "additionalProperties": false,
-                "properties": {
-                  "closedAt": {
-                    "anyOf": [
-                      {
                         "type": "null"
-                      },
-                      {
-                        "format": "date-time",
-                        "type": "string"
                       }
                     ]
                   },
@@ -8518,6 +8525,58 @@
                 "required": [
                   "files",
                   "people",
+                  "id",
+                  "name",
+                  "description",
+                  "status",
+                  "createdAt",
+                  "closedAt",
+                  "mine"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "closedAt": {
+                    "anyOf": [
+                      {
+                        "format": "date-time",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "createdAt": {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  "description": {
+                    "anyOf": [
+                      {
+                        "type": "null"
+                      },
+                      {
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "id": {
+                    "type": "string"
+                  },
+                  "mine": {
+                    "type": "number"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "string"
+                  }
+                },
+                "required": [
                   "id",
                   "name",
                   "description",
@@ -8644,7 +8703,7 @@
     "description": "The song playing on the lab HomePod: title, artist, who added it and how (queue, next or cut_in), position in seconds, paused, volume (0-100), autoplay (recommend a song when the queue runs dry) and whether the player on the lab network is online.",
     "kind": "query",
     "app": "music",
-    "hash": "adb346a277738178",
+    "hash": "5d386b4666d36c33",
     "input": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {},
@@ -8657,96 +8716,20 @@
           "type": "boolean"
         },
         "current": {
-          "additionalProperties": false,
-          "properties": {
-            "addedAs": {
-              "enum": [
-                "auto",
-                "cut_in",
-                "next",
-                "queue"
-              ],
-              "type": "string"
-            },
-            "addedBy": {
-              "anyOf": [
-                {
-                  "type": "null"
-                },
-                {
-                  "type": "string"
-                }
-              ]
-            },
-            "endedAt": {
-              "anyOf": [
-                {
-                  "type": "null"
-                },
-                {
-                  "format": "date-time",
-                  "type": "string"
-                }
-              ]
-            },
-            "endedBy": {
-              "anyOf": [
-                {
-                  "type": "null"
-                },
-                {
-                  "type": "string"
-                }
-              ]
-            },
-            "fromPlaylist": {
-              "type": "boolean"
-            },
-            "id": {
-              "type": "string"
-            },
-            "startedAt": {
-              "anyOf": [
-                {
-                  "type": "null"
-                },
-                {
-                  "format": "date-time",
-                  "type": "string"
-                }
-              ]
-            },
-            "status": {
-              "enum": [
-                "done",
-                "playing",
-                "queued",
-                "removed",
-                "skipped"
-              ],
-              "type": "string"
-            },
-            "track": {
+          "anyOf": [
+            {
               "additionalProperties": false,
               "properties": {
-                "artist": {
+                "addedAs": {
+                  "enum": [
+                    "auto",
+                    "cut_in",
+                    "next",
+                    "queue"
+                  ],
                   "type": "string"
                 },
-                "createdAt": {
-                  "format": "date-time",
-                  "type": "string"
-                },
-                "durationS": {
-                  "anyOf": [
-                    {
-                      "type": "null"
-                    },
-                    {
-                      "type": "number"
-                    }
-                  ]
-                },
-                "thumbnail": {
+                "addedBy": {
                   "anyOf": [
                     {
                       "type": "null"
@@ -8756,36 +8739,119 @@
                     }
                   ]
                 },
-                "title": {
+                "endedAt": {
+                  "anyOf": [
+                    {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "endedBy": {
+                  "anyOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "type": "string"
+                    }
+                  ]
+                },
+                "fromPlaylist": {
+                  "type": "boolean"
+                },
+                "id": {
                   "type": "string"
                 },
-                "videoId": {
+                "startedAt": {
+                  "anyOf": [
+                    {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "status": {
+                  "enum": [
+                    "done",
+                    "playing",
+                    "queued",
+                    "removed",
+                    "skipped"
+                  ],
                   "type": "string"
+                },
+                "track": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "artist": {
+                      "type": "string"
+                    },
+                    "createdAt": {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    "durationS": {
+                      "anyOf": [
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "type": "number"
+                        }
+                      ]
+                    },
+                    "thumbnail": {
+                      "anyOf": [
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "videoId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "videoId",
+                    "title",
+                    "artist",
+                    "durationS",
+                    "thumbnail",
+                    "createdAt"
+                  ],
+                  "type": "object"
                 }
               },
               "required": [
-                "videoId",
-                "title",
-                "artist",
-                "durationS",
-                "thumbnail",
-                "createdAt"
+                "id",
+                "status",
+                "addedAs",
+                "fromPlaylist",
+                "track",
+                "addedBy",
+                "endedBy",
+                "startedAt",
+                "endedAt"
               ],
               "type": "object"
+            },
+            {
+              "type": "null"
             }
-          },
-          "required": [
-            "id",
-            "status",
-            "addedAs",
-            "fromPlaylist",
-            "track",
-            "addedBy",
-            "endedBy",
-            "startedAt",
-            "endedAt"
-          ],
-          "type": "object"
+          ]
         },
         "error": {
           "anyOf": [
@@ -8932,7 +8998,7 @@
     "description": "Removes one MEMBER address from a mailing list the member manages; owners and managers are never removed here. Same list rules as add_mail_group_members.",
     "kind": "mutation",
     "app": "groups",
-    "hash": "30d1fbbd6f61f48a",
+    "hash": "de826dd07b807a81",
     "input": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
@@ -8958,26 +9024,44 @@
         {
           "additionalProperties": false,
           "properties": {
+            "data": {
+              "additionalProperties": false,
+              "properties": {
+                "detail": {
+                  "type": "string"
+                },
+                "email": {
+                  "type": "string"
+                },
+                "listedAs": {
+                  "type": "string"
+                },
+                "outcome": {
+                  "enum": [
+                    "already",
+                    "denied",
+                    "error",
+                    "not_found",
+                    "ok",
+                    "protected"
+                  ],
+                  "type": "string"
+                }
+              },
+              "required": [
+                "email",
+                "outcome"
+              ],
+              "type": "object"
+            },
             "status": {
-              "const": "unconfigured",
+              "const": "ok",
               "type": "string"
             }
           },
           "required": [
-            "status"
-          ],
-          "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "properties": {
-            "status": {
-              "const": "unconfigured",
-              "type": "string"
-            }
-          },
-          "required": [
-            "status"
+            "status",
+            "data"
           ],
           "type": "object"
         },
@@ -9099,44 +9183,13 @@
         {
           "additionalProperties": false,
           "properties": {
-            "data": {
-              "additionalProperties": false,
-              "properties": {
-                "detail": {
-                  "type": "string"
-                },
-                "email": {
-                  "type": "string"
-                },
-                "listedAs": {
-                  "type": "string"
-                },
-                "outcome": {
-                  "enum": [
-                    "already",
-                    "denied",
-                    "error",
-                    "not_found",
-                    "ok",
-                    "protected"
-                  ],
-                  "type": "string"
-                }
-              },
-              "required": [
-                "email",
-                "outcome"
-              ],
-              "type": "object"
-            },
             "status": {
-              "const": "ok",
+              "const": "unconfigured",
               "type": "string"
             }
           },
           "required": [
-            "status",
-            "data"
+            "status"
           ],
           "type": "object"
         }
@@ -9490,7 +9543,7 @@
     "description": "Search YouTube Music for songs, or resolve a pasted YouTube / YouTube Music link. A song link returns that song; a playlist link returns the playlist (id, title, song count) and its first songs. Add results with add_song or add_playlist.",
     "kind": "query",
     "app": "music",
-    "hash": "06e6672b33c6d545",
+    "hash": "fce21a6d9d7c69f2",
     "input": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
@@ -9511,7 +9564,24 @@
           "additionalProperties": false,
           "properties": {
             "playlist": {
-              "type": "null"
+              "additionalProperties": false,
+              "properties": {
+                "count": {
+                  "type": "number"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "title",
+                "count"
+              ],
+              "type": "object"
             },
             "tracks": {
               "items": {
@@ -9569,24 +9639,7 @@
           "additionalProperties": false,
           "properties": {
             "playlist": {
-              "additionalProperties": false,
-              "properties": {
-                "count": {
-                  "type": "number"
-                },
-                "id": {
-                  "type": "string"
-                },
-                "title": {
-                  "type": "string"
-                }
-              },
-              "required": [
-                "id",
-                "title",
-                "count"
-              ],
-              "type": "object"
+              "type": "null"
             },
             "tracks": {
               "items": {

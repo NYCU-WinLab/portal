@@ -1,13 +1,14 @@
 import { authenticate } from "@/lib/api-key-http"
 import { onChange } from "@/lib/actions/changes"
-import { appOfAction } from "@/lib/actions/registry"
+import { appOfChange } from "@/lib/actions/registry"
 import { getSession } from "@/lib/auth/session"
 
 // Server-sent events: one line per change anywhere in the portal, so open
 // pages can refresh. The payload is an action name. Signed-in members get
 // every change; an API key (the Mac app) gets the changes in its apps only,
-// and the stream ends once the key stops being valid.
+// and the stream ends once the key cannot be confirmed again.
 const KEY_RECHECK_MS = 60_000
+const KEY_RECHECK_TIMEOUT_MS = 10_000
 
 export async function GET(request: Request) {
   let wants: (action: string) => boolean = () => true
@@ -18,22 +19,36 @@ export async function GET(request: Request) {
     const holder = await authenticate(request)
     if (holder instanceof Response) return holder
     wants = (action) => {
-      const app = appOfAction.get(action)
+      const app = appOfChange(action)
       return !!app && holder.apps.has(app)
     }
-    recheck = async () => !((await authenticate(request)) instanceof Response)
+    // Revoked, left the lab, or no answer in time: the stream ends and the
+    // client reconnects, which checks the key from scratch.
+    recheck = () =>
+      Promise.race([
+        authenticate(request, { touch: false }).then(
+          (h) => !(h instanceof Response)
+        ),
+        new Promise<boolean>((done) =>
+          setTimeout(() => done(false), KEY_RECHECK_TIMEOUT_MS)
+        ),
+      ]).catch(() => false)
   }
 
   const encoder = new TextEncoder()
+  let closed = false
   let stop = () => {}
   const stream = new ReadableStream({
     async start(controller) {
       const close = () => {
+        closed = true
         stop()
         try {
           controller.close()
         } catch {}
       }
+      // Registered first, so a client gone before LISTEN is up leaks nothing.
+      request.signal.addEventListener("abort", close)
       const send = (text: string) => {
         try {
           controller.enqueue(encoder.encode(text))
@@ -47,13 +62,9 @@ export async function GET(request: Request) {
       })
       // Keeps proxies from closing a quiet connection.
       const ping = setInterval(() => send(": ping\n\n"), 25_000)
-      // A revoked key, or a member who left, stops hearing changes.
       const check = recheck
         ? setInterval(() => {
-            recheck!().then(
-              (ok) => ok || close(),
-              () => {}
-            )
+            void recheck!().then((ok) => ok || close())
           }, KEY_RECHECK_MS)
         : undefined
       stop = () => {
@@ -61,9 +72,10 @@ export async function GET(request: Request) {
         clearInterval(check)
         off()
       }
-      request.signal.addEventListener("abort", close)
+      if (closed || request.signal.aborted) close()
     },
     cancel() {
+      closed = true
       stop()
     },
   })
