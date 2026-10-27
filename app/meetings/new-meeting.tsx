@@ -5,7 +5,11 @@ import { toast } from "sonner"
 
 import { FormDialog } from "@/components/form-dialog"
 import type { Member } from "@/components/member-combobox"
-import { RoomStrip, RoomStripLegend } from "@/components/room-strip"
+import {
+  RoomStrip,
+  RoomStripAxis,
+  RoomStripLegend,
+} from "@/components/room-strip"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -110,11 +114,7 @@ export function NewMeeting({
                   />
                 ))}
               </div>
-              <div className="flex justify-between text-muted-foreground tabular-nums">
-                <span>08:00</span>
-                <span>15:00</span>
-                <span>22:00</span>
-              </div>
+              <RoomStripAxis />
             </div>
           )}
         </DialogContent>
