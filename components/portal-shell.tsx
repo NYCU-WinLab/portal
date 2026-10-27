@@ -15,7 +15,12 @@ export async function PortalShell({
   children,
 }: {
   page?: { label: string; href: string; tip: string }
-  nav?: ({ label: string; href: string; tip: string } & Gated)[]
+  nav?: ({
+    label: string
+    href: string
+    tip: string
+    also?: string[]
+  } & Gated)[]
   layout?: "column" | "spotlight" | "wide"
   children: React.ReactNode
 }) {
@@ -37,7 +42,12 @@ export async function PortalShell({
         { label: "WinLab", href: "/", tip: "所有服務" },
         ...(page ? [page] : []),
       ]}
-      nav={shown?.map(({ label, href, tip }) => ({ label, href, tip }))}
+      nav={shown?.map(({ label, href, tip, also }) => ({
+        label,
+        href,
+        tip,
+        also,
+      }))}
       account={
         page
           ? undefined

@@ -16,7 +16,8 @@ import { type DoorEvent, listDoorEvents } from "@/lib/actions/door"
 import { requireActor } from "@/lib/auth/session"
 import { cn } from "@/lib/utils"
 
-import { doorNav, doorPage } from "../nav"
+import { doorNav, doorPage, recordTabs } from "../nav"
+import { DoorTabs } from "../tabs"
 
 export const dynamic = "force-dynamic"
 
@@ -91,6 +92,7 @@ export default async function DoorLogPage({
   return (
     <PortalShell page={doorPage} nav={doorNav}>
       <div className="flex flex-col gap-12">
+        <DoorTabs actor={actor} tabs={recordTabs} current="/door/log" />
         <PageHeader title="開門紀錄" />
         {today && (
           <Focus>

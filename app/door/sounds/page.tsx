@@ -12,7 +12,8 @@ import { listDoorSounds } from "@/lib/actions/door-sounds"
 import { requireActor } from "@/lib/auth/session"
 import { SOUND_MAX_SECONDS } from "@/lib/door-greeting"
 
-import { doorNav, doorPage } from "../nav"
+import { doorNav, doorPage, soundTabs } from "../nav"
+import { DoorTabs } from "../tabs"
 import { SoundList, UploadSound } from "./sound-list"
 
 export const dynamic = "force-dynamic"
@@ -24,6 +25,7 @@ export default async function DoorSoundsPage() {
   return (
     <PortalShell page={doorPage} nav={doorNav}>
       <div className="flex flex-col gap-12">
+        <DoorTabs actor={actor} tabs={soundTabs} current="/door/sounds" />
         <PageHeader
           title="音效池"
           actions={<UploadSound maxSeconds={SOUND_MAX_SECONDS} />}
