@@ -53,7 +53,14 @@ export async function GET(request: Request) {
             }
           } while (again)
         })()
-          .catch(() => {})
+          // A state the route cannot read is a broken link: close it, so the
+          // player reconnects and counts the failure instead of hearing pings.
+          .catch(() => {
+            stop()
+            try {
+              controller.close()
+            } catch {}
+          })
           .finally(() => {
             reading = null
           })

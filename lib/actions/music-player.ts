@@ -98,7 +98,9 @@ export async function playerReport(report: PlayerReport) {
             .update(musicPlayer)
             .set({
               seenAt: now,
-              ...(report.event === "taken"
+              // Only the song playing now can be taken; a late report about
+              // another song must not pause the queue.
+              ...(report.event === "taken" && mine
                 ? {
                     paused: true,
                     state: "idle" as const,

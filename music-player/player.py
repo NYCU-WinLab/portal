@@ -78,7 +78,8 @@ class Api:
             f"{base}/api/music/player",
             headers={**self.headers, "accept": "text/event-stream"},
             # The portal pings every 25 seconds; a minute of silence is a dead link.
-            timeout=aiohttp.ClientTimeout(total=None, sock_read=60),
+            # A server that does not answer at all fails in 10 seconds, not the OS minutes.
+            timeout=aiohttp.ClientTimeout(total=None, sock_connect=10, sock_read=60),
         ) as response:
             response.raise_for_status()
             data = []
@@ -438,32 +439,39 @@ class Player:
             log.warning("follow %s: %s", base, e)
         return got
 
+    async def switch(self, base):
+        """Follows another server. The old server's song stops first, so none of
+        its reports (taken would pause the queue) reach the new server."""
+        await self.stop()
+        self.offset = 0.0
+        self.playing = None
+        self.state = "idle"
+        self.api.base = base
+        log.warning("following %s", base)
+
     async def follow(self):
         failures = 0
+        probe = None  # asks the portal while the player follows the backup
         while True:
             base = self.api.base
+            if base != MUSIC_URL and probe is None:
+                probe = asyncio.create_task(self.api.answers(MUSIC_URL))
             stream = asyncio.create_task(self.follow_from(base))
-            waiting = {stream}
-            if base != MUSIC_URL:
-                waiting.add(asyncio.create_task(self.api.answers(MUSIC_URL)))
-            done, pending = await asyncio.wait(waiting, return_when=asyncio.FIRST_COMPLETED)
-            for task in pending:
-                task.cancel()
-            await asyncio.gather(*pending, return_exceptions=True)
-            if stream not in done:
-                log.warning("portal answers again; following it")
-                self.api.base = MUSIC_URL
+            done, _ = await asyncio.wait(
+                {stream, probe} - {None}, return_when=asyncio.FIRST_COMPLETED
+            )
+            if probe in done:
+                probe = None
+                stream.cancel()
+                await asyncio.gather(stream, return_exceptions=True)
+                await self.switch(MUSIC_URL)
                 continue
             if base == MUSIC_URL:
                 failures = 0 if stream.result() else failures + 1
                 if FALLBACK_URL and failures >= FAILOVER_AFTER:
-                    log.warning("portal unreachable %d times; following %s", failures, FALLBACK_URL)
-                    self.api.base = FALLBACK_URL
                     failures = 0
+                    await self.switch(FALLBACK_URL)
                     continue
-            elif not stream.result():
-                # The backup is down too: try the portal again first.
-                self.api.base = MUSIC_URL
             await asyncio.sleep(3)
 
     async def heartbeat(self):
