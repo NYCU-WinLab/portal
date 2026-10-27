@@ -19,7 +19,8 @@ import { whoami } from "@/lib/actions/users"
 import { requireActor } from "@/lib/auth/session"
 import { givenName, panelName, voiceParts } from "@/lib/door-greeting"
 
-import { doorNav, doorPage } from "../nav"
+import { doorNav, doorPage, soundTabs } from "../nav"
+import { DoorTabs } from "../tabs"
 import { AddPhrase, PhraseList, type Recording } from "./phrase-list"
 import { SpeakNameSwitch } from "./speak-name-switch"
 
@@ -58,6 +59,7 @@ export default async function DoorGreetingsPage() {
     <PortalShell page={doorPage} nav={doorNav}>
       <ProgressRefresh topic="door_voice" />
       <div className="flex flex-col gap-12">
+        <DoorTabs actor={actor} tabs={soundTabs} current="/door/greetings" />
         <PageHeader title="問候語" actions={<AddPhrase sample={sample} />} />
         <Focus>
           <FocusLabel>現在你開門，門口會說</FocusLabel>

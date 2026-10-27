@@ -16,7 +16,9 @@ import {
 // the label leaves out (where a link goes, what a page holds, whose account
 // it is); it never repeats the label.
 type Crumb = { label: string; href: string; tip: string }
-type NavItem = { label: string; href: string; tip: string }
+// A nav link that stands for a group of pages names the others in also, so
+// it stays current on each of them.
+type NavItem = { label: string; href: string; tip: string; also?: string[] }
 
 // The chrome of every WinLab app is its four corners. By default each corner
 // has one job, filled from the props below; an app that needs something else
@@ -64,10 +66,14 @@ function AppShell({
       : pathname === href || pathname.startsWith(`${href}/`)
   // Of nav links that nest (/meetings, /meetings/papers), only the deepest
   // match is the current page.
+  const depth = (item: NavItem) =>
+    Math.max(
+      -1,
+      ...[item.href, ...(item.also ?? [])].filter(matches).map((h) => h.length)
+    )
   const navCurrent = nav
-    ?.map((item) => item.href)
-    .filter(matches)
-    .sort((a, b) => b.length - a.length)[0]
+    ?.filter((item) => depth(item) >= 0)
+    .sort((a, b) => depth(b) - depth(a))[0]?.href
   const isCurrent = (href: string) =>
     nav?.some((item) => item.href === href)
       ? href === navCurrent
@@ -85,9 +91,11 @@ function AppShell({
         className="pointer-events-none fixed inset-x-0 bottom-0 z-40 h-16 mask-t-from-0% backdrop-blur-md"
       />
 
-      <header className="fixed top-6 left-6 z-50 flex items-center gap-4">
+      {/* Each top corner keeps to two fifths of the width and wraps inside it,
+          so a long nav never runs over the breadcrumb. */}
+      <header className="fixed top-6 left-6 z-50 flex max-w-2/5 items-center gap-4">
         {corners?.topLeft ?? (
-          <nav aria-label="位置" className="flex items-center gap-2">
+          <nav aria-label="位置" className="flex flex-wrap items-center gap-2">
             {breadcrumb.map((crumb, index) => {
               const last = index === breadcrumb.length - 1
               return (
@@ -114,10 +122,13 @@ function AppShell({
         )}
       </header>
 
-      <div className="fixed top-6 right-6 z-50 flex items-center gap-4">
+      <div className="fixed top-6 right-6 z-50 flex max-w-2/5 items-center justify-end gap-4">
         {corners?.topRight ??
           ((nav.length > 0 || account) && (
-            <nav aria-label="頁面" className="flex items-center gap-4">
+            <nav
+              aria-label="頁面"
+              className="flex flex-wrap items-center justify-end gap-x-4 gap-y-1"
+            >
               {[...nav, ...(account ? [account] : [])].map((item) => (
                 <CornerTip key={item.href} tip={item.tip} corner="top-right">
                   <Link

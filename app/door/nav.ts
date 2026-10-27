@@ -4,28 +4,22 @@ export const doorPage = {
   tip: "實驗室的門",
 }
 
-/** Every member gets the door, the sound pool, their greetings and their
- * own cards and openings; the voice clips, every card and the full log are
- * door admins' alone. API keys
- * moved to /api-keys. */
+/** Three corner links: the door button sits behind the Door crumb, and each
+ * link opens a group whose pages switch with DoorTabs. Every member gets the
+ * sounds, their greetings and their own record; the voice clips, every card
+ * and the full log are door admins' alone. API keys moved to /api-keys. */
 export const doorNav = [
-  { label: "開門", href: "/door", tip: "按一下開門" },
-  { label: "音效", href: "/door/sounds", tip: "開門時播的音效" },
   {
-    label: "問候語",
-    href: "/door/greetings",
-    tip: "門口依時段跟你說的話",
+    label: "聲音",
+    href: "/door/sounds",
+    tip: "開門時的音效與問候語",
+    also: ["/door/greetings", "/door/voice"],
   },
   {
-    label: "我的紀錄",
+    label: "紀錄",
     href: "/door/mine",
-    tip: "我的門禁卡與開門紀錄",
-  },
-  {
-    label: "語音",
-    href: "/door/voice",
-    tip: "門口念的每一句",
-    admin: "door" as const,
+    tip: "門禁卡與開門紀錄",
+    also: ["/door/log"],
   },
   {
     label: "門禁卡",
@@ -33,10 +27,15 @@ export const doorNav = [
     tip: "誰的卡刷得進門",
     admin: "door" as const,
   },
-  {
-    label: "紀錄",
-    href: "/door/log",
-    tip: "誰開了門",
-    admin: "door" as const,
-  },
+]
+
+export const soundTabs = [
+  { label: "音效", href: "/door/sounds" },
+  { label: "問候語", href: "/door/greetings" },
+  { label: "語音", href: "/door/voice", admin: "door" as const },
+]
+
+export const recordTabs = [
+  { label: "我的", href: "/door/mine" },
+  { label: "全部", href: "/door/log", admin: "door" as const },
 ]

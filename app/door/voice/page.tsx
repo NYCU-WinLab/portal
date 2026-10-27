@@ -13,7 +13,8 @@ import { runAction } from "@/lib/actions/define"
 import { listDoorVoiceClips } from "@/lib/actions/door-phrases"
 import { requireActor } from "@/lib/auth/session"
 
-import { doorNav, doorPage } from "../nav"
+import { doorNav, doorPage, soundTabs } from "../nav"
+import { DoorTabs } from "../tabs"
 import { ClipList } from "./clip-list"
 
 export const dynamic = "force-dynamic"
@@ -26,6 +27,7 @@ export default async function DoorVoicePage() {
     <PortalShell page={doorPage} nav={doorNav}>
       <ProgressRefresh topic="door_voice" />
       <div className="flex flex-col gap-12">
+        <DoorTabs actor={actor} tabs={soundTabs} current="/door/voice" />
         <PageHeader title="語音" />
         <Focus>
           <FocusLabel>
