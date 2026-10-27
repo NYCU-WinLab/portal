@@ -446,6 +446,8 @@ class Player:
         self.offset = 0.0
         self.playing = None
         self.state = "idle"
+        # What the old server asked for no longer holds; run() waits for the new one.
+        self.want = None
         self.api.base = base
         log.warning("following %s", base)
 
@@ -503,6 +505,8 @@ class Player:
             await self.changed.wait()
             self.changed.clear()
             want = self.want
+            if want is None:
+                continue
             current = want["current"]
             if want["paused"] or current is None:
                 if self.task:
@@ -524,6 +528,9 @@ class Player:
                 except Exception as e:  # noqa: BLE001
                     log.warning("volume: %s", e)
                     self.homepod.drop()
+            # A switch or a newer state during the awaits above: start nothing old.
+            if self.want is not want:
+                continue
             if self.playing != current["itemId"] or not self.task or self.task.done():
                 await self.stop()
                 self.playing = current["itemId"]
