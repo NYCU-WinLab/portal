@@ -5,6 +5,10 @@ It follows MUSIC_URL/api/music/player (MUSIC_URL is the portal, server-sent
 events) for what members asked for, fetches the audio with yt-dlp, and streams
 it over AirPlay (RAOP) with pyatv. It reports what it did back to the same route.
 
+FALLBACK_URL (optional) is a backup queue with the same route (638.winlab.tw on
+Spawner): while the portal cannot be reached FAILOVER_AFTER times in a row, the
+player follows the backup instead, and goes back as soon as the portal answers.
+
 The door (idm-display on the same host) posts its greeting to ANNOUNCE_LISTEN.
 The clip goes into the stream that is already playing: the song pauses, the
 clip plays at its own volume, and the song carries on from the same frame. With
@@ -16,6 +20,7 @@ takes longer than TAKEN_AFTER_S, it reports "taken" and the queue pauses.
 """
 
 import asyncio
+import contextlib
 import json
 import logging
 import os
@@ -33,6 +38,7 @@ from pyatv.interface import MediaMetadata
 from pyatv.protocols.raop.audio_source import AudioSource
 
 MUSIC_URL = os.environ["MUSIC_URL"].rstrip("/")
+FALLBACK_URL = os.environ.get("FALLBACK_URL", "").rstrip("/")
 PLAYER_TOKEN = os.environ["PLAYER_TOKEN"]
 HOMEPOD_HOST = os.environ.get("HOMEPOD_HOST", "")
 HOMEPOD_NAME = os.environ.get("HOMEPOD_NAME", "車庫")
@@ -46,6 +52,8 @@ BUFFER_S = 2.0
 REPORT_EVERY_S = 10
 TAKEN_AFTER_S = 90
 DOWNLOAD_TIMEOUT_S = 120
+FAILOVER_AFTER = 5  # failed connections to the portal, 3 seconds apart
+PROBE_EVERY_S = 30  # how often the player asks the portal while on the backup
 ANNOUNCE_MAX_BYTES = 8 * 1024 * 1024
 ANNOUNCE_GAP_S = 0.3  # silence on each side of a door clip, so the song does not cut straight into it
 
@@ -61,11 +69,13 @@ class Api:
     def __init__(self, session):
         self.session = session
         self.headers = {"authorization": f"Bearer {PLAYER_TOKEN}"}
+        # The server followed now: the portal, or FALLBACK_URL while it is down.
+        self.base = MUSIC_URL
 
-    async def states(self):
-        """Each player state the portal sends, the current one first."""
+    async def states(self, base):
+        """Each player state the server sends, the current one first."""
         async with self.session.get(
-            f"{MUSIC_URL}/api/music/player",
+            f"{base}/api/music/player",
             headers={**self.headers, "accept": "text/event-stream"},
             # The portal pings every 25 seconds; a minute of silence is a dead link.
             timeout=aiohttp.ClientTimeout(total=None, sock_read=60),
@@ -88,7 +98,7 @@ class Api:
             body["error"] = error[:1000]
         try:
             async with self.session.post(
-                f"{MUSIC_URL}/api/music/player",
+                f"{self.base}/api/music/player",
                 json=body,
                 headers=self.headers,
                 timeout=aiohttp.ClientTimeout(total=10),
@@ -97,6 +107,18 @@ class Api:
                     log.warning("report %s: HTTP %s", event, response.status)
         except Exception as e:  # noqa: BLE001  the next report catches up
             log.warning("report %s: %s", event, e)
+
+    async def answers(self, base):
+        """Returns once base sends a player state; asks every PROBE_EVERY_S."""
+        while True:
+            await asyncio.sleep(PROBE_EVERY_S)
+            try:
+                async with asyncio.timeout(10):
+                    async with contextlib.aclosing(self.states(base)) as states:
+                        async for _ in states:
+                            return
+            except Exception:  # noqa: BLE001  still down; ask again later
+                pass
 
 
 async def fetch(video_id):
@@ -404,14 +426,44 @@ class Player:
             return self.offset
         return self.mixer.song_position(self.offset)
 
+    async def follow_from(self, base):
+        """Follows one server until its stream ends; True if it sent a state."""
+        got = False
+        try:
+            async for state in self.api.states(base):
+                got = True
+                self.want = state
+                self.changed.set()
+        except Exception as e:  # noqa: BLE001
+            log.warning("follow %s: %s", base, e)
+        return got
+
     async def follow(self):
+        failures = 0
         while True:
-            try:
-                async for state in self.api.states():
-                    self.want = state
-                    self.changed.set()
-            except Exception as e:  # noqa: BLE001
-                log.warning("follow: %s", e)
+            base = self.api.base
+            stream = asyncio.create_task(self.follow_from(base))
+            waiting = {stream}
+            if base != MUSIC_URL:
+                waiting.add(asyncio.create_task(self.api.answers(MUSIC_URL)))
+            done, pending = await asyncio.wait(waiting, return_when=asyncio.FIRST_COMPLETED)
+            for task in pending:
+                task.cancel()
+            await asyncio.gather(*pending, return_exceptions=True)
+            if stream not in done:
+                log.warning("portal answers again; following it")
+                self.api.base = MUSIC_URL
+                continue
+            if base == MUSIC_URL:
+                failures = 0 if stream.result() else failures + 1
+                if FALLBACK_URL and failures >= FAILOVER_AFTER:
+                    log.warning("portal unreachable %d times; following %s", failures, FALLBACK_URL)
+                    self.api.base = FALLBACK_URL
+                    failures = 0
+                    continue
+            elif not stream.result():
+                # The backup is down too: try the portal again first.
+                self.api.base = MUSIC_URL
             await asyncio.sleep(3)
 
     async def heartbeat(self):
