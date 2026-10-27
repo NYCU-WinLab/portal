@@ -46,14 +46,30 @@ export async function GET(request: Request) {
         reading = (async () => {
           do {
             again = false
-            const state = await playerState()
+            // A read that hangs counts as a failed one.
+            const state = await Promise.race([
+              playerState(),
+              new Promise<never>((_, reject) =>
+                setTimeout(
+                  () => reject(new Error("state read timed out")),
+                  10_000
+                )
+              ),
+            ])
             if (state.version !== sent) {
               sent = state.version
               send(`data: ${JSON.stringify(state)}\n\n`)
             }
           } while (again)
         })()
-          .catch(() => {})
+          // A state the route cannot read is a broken link: close it, so the
+          // player reconnects and counts the failure instead of hearing pings.
+          .catch(() => {
+            stop()
+            try {
+              controller.close()
+            } catch {}
+          })
           .finally(() => {
             reading = null
           })
@@ -61,8 +77,12 @@ export async function GET(request: Request) {
       send("retry: 3000\n\n")
       const off = await onChange(push)
       push()
-      // Keeps proxies from closing a quiet connection.
-      const ping = setInterval(() => send(": ping\n\n"), 25_000)
+      // Keeps proxies from closing a quiet connection, and reads the state
+      // each time, so a database gone quiet still closes the stream.
+      const ping = setInterval(() => {
+        send(": ping\n\n")
+        push()
+      }, 25_000)
       stop = () => {
         clearInterval(ping)
         off()

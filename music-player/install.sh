@@ -1,6 +1,7 @@
 #!/bin/sh
 # Installs or updates the player as a systemd service, from this folder.
 # First install: MUSIC_URL, PLAYER_TOKEN and HOMEPOD_NAME in the environment
+# (FALLBACK_URL optional: the backup queue, http://10.10.10.209:3000 on spawner)
 # (HOMEPOD_HOST optional) write /etc/winlab-music-player.env; later runs keep it.
 set -eu
 here=$(cd "$(dirname "$0")" && pwd)
@@ -33,6 +34,7 @@ MUSIC_URL=${MUSIC_URL:?set MUSIC_URL}
 PLAYER_TOKEN=${PLAYER_TOKEN:?set PLAYER_TOKEN}
 HOMEPOD_NAME=${HOMEPOD_NAME:?set HOMEPOD_NAME}
 HOMEPOD_HOST=${HOMEPOD_HOST:-}
+FALLBACK_URL=${FALLBACK_URL:-}
 ENV
 fi
 
