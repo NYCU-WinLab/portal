@@ -55,10 +55,7 @@ export default async function Played() {
                   <span className="hidden shrink-0 text-muted-foreground tabular-nums sm:inline">
                     {item.endedAt ? time.format(item.endedAt) : ""}
                   </span>
-                  <LikeButton
-                    videoId={item.track.videoId}
-                    liked={item.liked}
-                  />
+                  <LikeButton videoId={item.track.videoId} liked={item.liked} />
                   <AddButtons videoId={item.track.videoId} />
                 </li>
               )
