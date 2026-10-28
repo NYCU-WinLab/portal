@@ -24,19 +24,37 @@ import {
   musicQueueItems,
   musicTracks,
 } from "@/lib/db/schema"
+import * as bilibili from "@/lib/bilibili"
 import { findLyrics, parseLrc } from "@/lib/lrclib"
+import * as twitch from "@/lib/twitch"
 import {
   getPlaylist,
   getTrack,
   parseLink,
   PLAYLIST_LIMIT,
   searchSongs,
+  type Track,
 } from "@/lib/youtube"
 
 /** The player counts as online when it reported within this long. */
 const ONLINE_MS = 45_000
 
-const videoId = z.string().regex(/^[\w-]{11}$/, "不是 YouTube 影片")
+// A YouTube video id as is; other sources carry a prefix (bilibili:, twitch:).
+const videoId = z.union(
+  [
+    z.string().regex(/^[\w-]{11}$/),
+    z.string().regex(new RegExp(bilibili.ID_PATTERN)),
+    z.string().regex(new RegExp(twitch.ID_PATTERN)),
+  ],
+  "不是 YouTube、Bilibili 影片或 Twitch 頻道"
+)
+
+/** One song's details from the source its id names. */
+function trackOf(id: string): Promise<Track> {
+  if (id.startsWith("bilibili:")) return bilibili.getTrack(id)
+  if (id.startsWith("twitch:")) return twitch.getTrack(id)
+  return getTrack(id)
+}
 const itemId = z.uuid("找不到這首")
 
 export const nowPlaying = defineAction({
@@ -95,12 +113,14 @@ export const searchMusic = defineAction({
   name: "search_music",
   title: "搜尋歌曲",
   description:
-    "Search YouTube Music for songs, or resolve a pasted YouTube / YouTube Music link. A song link returns that song; a playlist link returns the playlist (id, title, song count) and its first songs. Add results with add_song or add_playlist.",
+    "Search YouTube Music for songs, or resolve a pasted link: YouTube / YouTube Music, a Bilibili video (bilibili.com, b23.tv) or a live Twitch channel (twitch.tv). A song link returns that song; a playlist link returns the playlist (id, title, song count) and its first songs. Add results with add_song or add_playlist.",
   kind: "query",
   input: z.object({
     query: z.string().trim().min(1, "輸入歌名或連結").max(300),
   }),
   run: async (_actor, { query }) => {
+    const other = twitch.parseLink(query) ?? (await bilibili.parseLink(query))
+    if (other) return { tracks: [await trackOf(other)], playlist: null }
     const link = parseLink(query)
     if (link?.kind === "video")
       return { tracks: [await getTrack(link.videoId)], playlist: null }
@@ -123,14 +143,14 @@ export const addSong = defineAction({
   name: "add_song",
   title: "點歌",
   description:
-    "Queue a song by YouTube video id. as=queue adds it at the end, as=next plays it after the current song, as=cut_in plays it now and puts the current song back at the front to resume later. Waiting recommendations (added_as auto) give way and are taken out. A song already in the queue is not added twice: queue leaves it where it is, next moves it to the front, cut_in plays it now.",
+    "Queue a song by id: a YouTube video id, bilibili:<bvid> (bilibili:<bvid>_p<n> for part n) or twitch:<channel> for a channel that is live now; search_music turns a link into one. as=queue adds it at the end, as=next plays it after the current song, as=cut_in plays it now and puts the current song back at the front to resume later. Waiting recommendations (added_as auto) give way and are taken out. A song already in the queue is not added twice: queue leaves it where it is, next moves it to the front, cut_in plays it now.",
   kind: "mutation",
   input: z.object({
     videoId,
     as: z.enum(["queue", "next", "cut_in"]).default("queue"),
   }),
   run: async (actor, input) => {
-    const track = await getTrack(input.videoId)
+    const track = await trackOf(input.videoId)
     return withQueue(async (tx) => {
       await dropRecommendations(tx)
       await saveTracks(tx, [track])

@@ -73,7 +73,12 @@ async function fill() {
     )
     .orderBy(desc(musicQueueItems.createdAt))
     .limit(SEEDS * 4)
-  const seeds = [...new Set(picked.map((p) => p.videoId))].slice(0, SEEDS)
+  // YouTube Music only knows its own videos: no Bilibili or Twitch seeds.
+  const seeds = [
+    ...new Set(
+      picked.map((p) => p.videoId).filter((id) => /^[\w-]{11}$/.test(id))
+    ),
+  ].slice(0, SEEDS)
   if (!seeds.length) return
 
   const now = Date.now()

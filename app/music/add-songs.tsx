@@ -20,7 +20,8 @@ import { Cover, length } from "./song"
 type Found = Awaited<ReturnType<typeof searchMusic.run>>
 
 // One box for everything: type a song to search YouTube Music, or paste a
-// song or playlist link. Results come as you type.
+// link (a YouTube song or playlist, a Bilibili video, a live Twitch channel).
+// Results come as you type.
 export function AddSongs() {
   const [query, setQuery] = React.useState("")
   const [found, setFound] = React.useState<Found | null>(null)
@@ -53,7 +54,7 @@ export function AddSongs() {
         type="search"
         value={query}
         onChange={(event) => setQuery(event.target.value)}
-        placeholder="搜尋歌名，或貼上 YouTube、YT Music 的歌曲或歌單連結"
+        placeholder="搜尋歌名，或貼上 YouTube、Bilibili、Twitch 連結"
         aria-label="搜尋歌曲"
       />
       {searching && !shown && <p className="text-muted-foreground">搜尋中…</p>}

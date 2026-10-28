@@ -12,7 +12,7 @@ export function length(seconds: number | null | undefined) {
   return seconds ? duration(seconds) : "直播"
 }
 
-/** The cover art, square, from YouTube. */
+/** The cover art, square, from the song's source. */
 export function Cover({
   src,
   className,
@@ -21,7 +21,7 @@ export function Cover({
   className?: string
 }) {
   return src ? (
-    // eslint-disable-next-line @next/next/no-img-element -- remote YouTube art at its own size
+    // eslint-disable-next-line @next/next/no-img-element -- remote cover art at its own size
     <img
       src={src}
       alt=""

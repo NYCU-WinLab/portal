@@ -21,11 +21,13 @@ takes longer than TAKEN_AFTER_S, it reports "taken" and the queue pauses.
 
 import asyncio
 import contextlib
+import hashlib
 import json
 import logging
 import os
 import shutil
 import time
+import urllib.parse
 from collections import deque
 from pathlib import Path
 
@@ -63,6 +65,33 @@ RATE, CHANNELS, WIDTH = 44100, 2, 2
 FRAME = CHANNELS * WIDTH
 
 log = logging.getLogger("music-player")
+
+# Bilibili answers anything but its own page with 412 unless the request is
+# signed the way the page signs it (WBI); yt-dlp cannot read it either, so the
+# player asks the API for the audio address itself.
+BILIBILI_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36",
+    "Referer": "https://www.bilibili.com/",
+}
+BILIBILI_MIXIN = [
+    46, 47, 18, 2, 53, 8, 23, 32, 15, 50, 10, 31, 58, 3, 45, 35, 27, 43, 5, 49,
+    33, 9, 42, 19, 29, 28, 14, 39, 12, 38, 41, 13, 37, 48, 7, 16, 24, 55, 40, 61,
+    26, 17, 0, 1, 60, 51, 30, 4, 22, 25, 54, 21, 56, 59, 6, 63, 57, 62, 11, 36,
+    20, 34, 44, 52,
+]
+
+
+def page_url(video_id):
+    """The page yt-dlp reads for an id: a YouTube id as is, twitch:<channel>
+    for a live channel. (Bilibili does not go through yt-dlp.)"""
+    if video_id.startswith("twitch:"):
+        return f"https://www.twitch.tv/{video_id.split(':', 1)[1]}"
+    return f"https://www.youtube.com/watch?v={video_id}"
+
+
+def cache_name(video_id):
+    """A file name for an id: a YouTube id as is, others without the colon."""
+    return video_id.replace(":", "_")
 
 
 class Api:
@@ -124,23 +153,33 @@ class Api:
 
 async def fetch(video_id):
     """The audio file of a video, downloaded once into CACHE_DIR."""
-    for path in CACHE_DIR.glob(f"{video_id}.*"):
+    name = cache_name(video_id)
+    for path in CACHE_DIR.glob(f"{name}.*"):
         if path.suffix not in (".part", ".ytdl"):
             path.touch()
             return path
+    if video_id.startswith("bilibili:"):
+        try:
+            path = await asyncio.wait_for(fetch_bilibili(video_id, name), DOWNLOAD_TIMEOUT_S)
+        except asyncio.TimeoutError:
+            raise RuntimeError("下載逾時")
+        finally:
+            (CACHE_DIR / f"{name}.m4a.part").unlink(missing_ok=True)
+        trim_cache()
+        return path
     process = await asyncio.create_subprocess_exec(
         YT_DLP, "--quiet", "--no-warnings", "--no-playlist",
         "-f", "bestaudio/best",
-        "-o", str(CACHE_DIR / "%(id)s.%(ext)s"),
+        "-o", str(CACHE_DIR / f"{name}.%(ext)s"),
         "--print", "after_move:filepath",
-        f"https://www.youtube.com/watch?v={video_id}",
+        page_url(video_id),
         stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
     )
     try:
         out, err = await asyncio.wait_for(process.communicate(), DOWNLOAD_TIMEOUT_S)
     except asyncio.TimeoutError:
         process.kill()
-        for part in CACHE_DIR.glob(f"{video_id}.*.part"):
+        for part in CACHE_DIR.glob(f"{name}.*.part"):
             part.unlink(missing_ok=True)
         raise RuntimeError("下載逾時")
     if process.returncode != 0:
@@ -150,13 +189,62 @@ async def fetch(video_id):
     return path
 
 
+async def fetch_bilibili(video_id, name):
+    """Downloads a Bilibili video's best audio (part n for an id ending _p<n>)
+    to CACHE_DIR/<name>.m4a."""
+    bvid, _, part = video_id.split(":", 1)[1].partition("_p")
+    async with aiohttp.ClientSession(headers=BILIBILI_HEADERS, timeout=aiohttp.ClientTimeout(total=DOWNLOAD_TIMEOUT_S)) as session:
+        async def read(path, query, signed=True):
+            if signed:
+                query = dict(query, wts=str(int(time.time())))
+                text = urllib.parse.urlencode(sorted(query.items()))
+                query["w_rid"] = hashlib.md5((text + salt).encode()).hexdigest()
+            async with session.get(f"https://api.bilibili.com{path}", params=query) as response:
+                response.raise_for_status()
+                body = await response.json(content_type=None)
+            if signed and body.get("code") != 0:
+                raise RuntimeError(f"Bilibili: {body.get('message') or body.get('code')}")
+            return body["data"]
+
+        salt = ""
+        keys = (await read("/x/web-interface/nav", {}, signed=False))["wbi_img"]
+        raw = "".join(Path(urllib.parse.urlparse(keys[k]).path).stem for k in ("img_url", "sub_url"))
+        salt = "".join(raw[i] for i in BILIBILI_MIXIN)[:32]
+        view = await read("/x/web-interface/wbi/view", {"bvid": bvid})
+        page = next((p for p in view["pages"] if p["page"] == int(part or 1)), None)
+        if not page:
+            raise RuntimeError("這部影片沒有這一 P")
+        play = await read("/x/player/wbi/playurl", {"bvid": bvid, "cid": str(page["cid"]), "fnval": "16"})
+        audio = max((play.get("dash") or {}).get("audio") or [], key=lambda a: a["bandwidth"], default=None)
+        if not audio:
+            raise RuntimeError("Bilibili 沒有給音訊")
+        # The CDN answers 567 without a Range header; a mirror may fail on its own.
+        part_path = CACHE_DIR / f"{name}.m4a.part"
+        error = None
+        for url in [audio["baseUrl"], *(audio.get("backupUrl") or [])]:
+            try:
+                async with session.get(url, headers={"Range": "bytes=0-"}) as response:
+                    response.raise_for_status()
+                    with part_path.open("wb") as out:
+                        async for chunk in response.content.iter_chunked(1 << 16):
+                            out.write(chunk)
+                break
+            except aiohttp.ClientError as e:
+                error = e
+        else:
+            raise RuntimeError(f"Bilibili 音訊下載失敗：{error}")
+        path = CACHE_DIR / f"{name}.m4a"
+        part_path.rename(path)
+        return path
+
+
 async def live_url(video_id):
     """The address of a live stream's audio right now. A live stream has no
-    end to download to, so it plays straight from YouTube, from the live edge."""
+    end to download to, so it plays straight from the source, from the live edge."""
     process = await asyncio.create_subprocess_exec(
         YT_DLP, "--quiet", "--no-warnings", "--no-playlist",
         "-f", "bestaudio/best", "-g",
-        f"https://www.youtube.com/watch?v={video_id}",
+        page_url(video_id),
         stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
     )
     try:

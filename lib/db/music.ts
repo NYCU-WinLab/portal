@@ -15,8 +15,10 @@ import {
 
 import { user } from "@/lib/db/auth-schema"
 
-// A YouTube video as the lab knows it: what the queue shows and what the
-// player asks YouTube for. One row per video, however often it is queued.
+// A video as the lab knows it: what the queue shows and what the player
+// fetches. One row per video, however often it is queued. videoId is a YouTube
+// id as is; other sources carry a prefix: bilibili:<bvid>[_p<n>] for a
+// Bilibili video (part n), twitch:<channel> for a live Twitch channel.
 export const musicTracks = pgTable("music_tracks", {
   videoId: text().primaryKey(),
   title: text().notNull(),
