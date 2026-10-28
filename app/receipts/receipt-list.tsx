@@ -1,5 +1,6 @@
 "use client"
 
+import { ArrowUpRightIcon } from "lucide-react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 
 import { EmptyState } from "@/components/empty-state"
@@ -136,9 +137,13 @@ export function ReceiptList({
                     href={`/receipts/files/${receipt.id}`}
                     target="_blank"
                     rel="noreferrer"
-                    className="underline-offset-4 hover:underline"
+                    className="underline decoration-current/40 underline-offset-4 hover:decoration-current"
                   >
                     {receipt.name}
+                    <ArrowUpRightIcon
+                      aria-hidden
+                      className="ml-1 inline size-3 align-baseline text-muted-foreground"
+                    />
                   </a>
                 </TableCell>
                 <TableCell>{receipt.project}</TableCell>
