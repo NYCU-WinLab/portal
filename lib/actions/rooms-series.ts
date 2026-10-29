@@ -11,6 +11,7 @@ import { defineAction } from "@/lib/actions/define"
 import { queueMail } from "@/lib/actions/mail"
 import {
   availability,
+  organizerOf,
   placeBooking,
   resolveAttendees,
   roomFor,
@@ -343,7 +344,7 @@ export async function createStandingMeeting(
     )
   }
   // Frozen now: a series keeps filing under the same project all term.
-  const prefix = topicPrefix(group, attendees)
+  const prefix = topicPrefix(group, (await organizerOf(actorId)).username)
   const today = todayInTaipei()
   if (input.start_date !== undefined) {
     if (weekdayOf(input.start_date) !== input.weekday)
