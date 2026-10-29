@@ -33,6 +33,7 @@ import { depositAccounts } from "@/lib/receipts"
 import { report } from "@/lib/report"
 
 import { edit, remove, upload } from "./actions"
+import { ProjectCombobox } from "./project-combobox"
 
 const LIMIT = 10 * 1024 * 1024
 const MAX_SIDE = 2000
@@ -69,7 +70,7 @@ async function base64(blob: Blob) {
 
 const text = (data: FormData, key: string) => String(data.get(key) ?? "")
 
-// Name, project (picked from the ones used, or typed) and account: the
+// Name, project (picked from the ones used, or added) and account: the
 // fields both forms share.
 function Fields({
   receipt,
@@ -78,24 +79,23 @@ function Fields({
   receipt?: Receipt
   projects: string[]
 }) {
+  const [project, setProject] = React.useState(receipt?.project ?? null)
   return (
     <>
       <FormField label="名稱" required>
         <Input name="name" maxLength={200} defaultValue={receipt?.name} />
       </FormField>
-      <FormField label="計畫">
-        <Input
-          name="project"
-          maxLength={50}
-          list="receipt-projects"
-          defaultValue={receipt?.project ?? ""}
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="receipt-project">計畫</Label>
+        <ProjectCombobox
+          id="receipt-project"
+          projects={projects}
+          value={project}
+          onValueChange={setProject}
+          className="w-full"
         />
-      </FormField>
-      <datalist id="receipt-projects">
-        {projects.map((project) => (
-          <option key={project} value={project} />
-        ))}
-      </datalist>
+        <input type="hidden" name="project" value={project ?? ""} />
+      </div>
       <div className="flex flex-col gap-2">
         <Label htmlFor="receipt-account" className="gap-1">
           存入
