@@ -467,7 +467,14 @@ export default async function MeetingsPage() {
           title="會議"
           actions={
             <>
-              <NewMeeting today={today} groups={groups} members={members} />
+              <NewMeeting
+                today={today}
+                groups={groups}
+                members={members}
+                username={
+                  members.find((m) => m.id === actor.userId)?.username ?? null
+                }
+              />
               {admin && (
                 <AdminActions
                   dates={meetings

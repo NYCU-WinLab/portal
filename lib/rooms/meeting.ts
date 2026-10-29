@@ -5,8 +5,9 @@
 export type Attendee = { name: string; email: string; username?: string }
 
 // The topic names the recording file, which is later sorted into Nextcloud
-// by its [prefix]: an ASCII id (the group's slug, or a member's username),
-// joined here only, so typed text can never pose as another project's.
+// by its [prefix]: an ASCII id (the group's slug, or the organizer's
+// username), joined here only, so typed text can never pose as another
+// project's.
 const UNSAFE = /[\\/:*?"<>|[\]]/g
 
 export const DEFAULT_TOPIC = "meeting"
@@ -14,12 +15,12 @@ export const DEFAULT_TOPIC = "meeting"
 export const forFilename = (value: string) =>
   value.replace(UNSAFE, " ").replace(/\s+/g, " ").trim()
 
-/** The group, else the first attendee with a username; null for neither. */
+/** The group, else the organizer's username; null for neither. */
 export function topicPrefix(
   groupName: string | null | undefined,
-  attendees: Attendee[]
+  organizerUsername: string | null | undefined
 ) {
-  const raw = groupName ?? attendees.find((a) => a.username)?.username
+  const raw = groupName ?? organizerUsername
   return (raw && forFilename(raw)) || null
 }
 

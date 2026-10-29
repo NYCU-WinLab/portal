@@ -579,7 +579,12 @@ export const withBookingLock = <T>(
 
 export async function organizerOf(userId: string) {
   const [me] = await db
-    .select({ id: user.id, name: user.name, email: user.email })
+    .select({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      username: user.username,
+    })
     .from(user)
     .where(eq(user.id, userId))
   if (!me) throw new Error("找不到你的帳號")
@@ -660,8 +665,8 @@ export const bookMeeting = defineAction({
       includeAdvisor: input.include_advisor,
     })
     const epic = await resolveEpic(group, input.epic ?? null, false)
-    const prefix = topicPrefix(group, attendees)
     const organizer = await organizerOf(actor.userId)
+    const prefix = topicPrefix(group, organizer.username)
     const { booking, room } = await withBookingLock(
       actor.userId,
       input.date,
