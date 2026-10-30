@@ -63,6 +63,13 @@ export const serviceGroups: { title: string; apps: Service[] }[] = [
         href: "/members",
       },
       {
+        key: "meet",
+        label: "Meet",
+        name: "視訊會議",
+        emoji: "📹",
+        href: "https://meet.winlab.tw",
+      },
+      {
         key: "meetings",
         label: "Meetings",
         name: "會議",
