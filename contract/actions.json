@@ -4741,6 +4741,51 @@
     }
   },
   {
+    "name": "like_song",
+    "title": "按愛心",
+    "description": "Like a song by YouTube video id, so it is kept in the caller's own list (list_liked_songs). Likes are private to the caller and belong to the song, not to a queue item. Liking a liked song changes nothing. At most 500 songs per member.",
+    "kind": "mutation",
+    "app": "music",
+    "hash": "b6e410c0e49dc7d4",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "videoId": {
+          "anyOf": [
+            {
+              "pattern": "^[\\w-]{11}$",
+              "type": "string"
+            },
+            {
+              "pattern": "^bilibili:(BV[0-9A-Za-z]{10})(?:_p(\\d{1,3}))?$",
+              "type": "string"
+            },
+            {
+              "pattern": "^twitch:([a-z0-9_]{1,25})$",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "required": [
+        "videoId"
+      ],
+      "type": "object"
+    },
+    "output": {
+      "additionalProperties": false,
+      "properties": {
+        "liked": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "liked"
+      ],
+      "type": "object"
+    }
+  },
+  {
     "name": "list_activity",
     "title": "誰做了什麼",
     "description": "Recent actions, newest first: who added, cut in, skipped, removed, paused, resumed or changed the volume (a member's clicks within a minute show as the level they ended on), with the song title and, for playlists, how many songs.",
@@ -6575,6 +6620,99 @@
     }
   },
   {
+    "name": "list_liked_songs",
+    "title": "我的愛心歌曲",
+    "description": "The caller's own liked songs, newest like first, each with title, artist, duration and when it was liked. Add one to the queue with add_song and its video id.",
+    "kind": "query",
+    "app": "music",
+    "hash": "bad04a32c420e5a0",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "limit": {
+          "default": 100,
+          "maximum": 500,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "output": {
+      "additionalProperties": false,
+      "properties": {
+        "songs": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "likedAt": {
+                "format": "date-time",
+                "type": "string"
+              },
+              "track": {
+                "additionalProperties": false,
+                "properties": {
+                  "artist": {
+                    "type": "string"
+                  },
+                  "createdAt": {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  "durationS": {
+                    "anyOf": [
+                      {
+                        "type": "null"
+                      },
+                      {
+                        "type": "number"
+                      }
+                    ]
+                  },
+                  "thumbnail": {
+                    "anyOf": [
+                      {
+                        "type": "null"
+                      },
+                      {
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "videoId": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "videoId",
+                  "title",
+                  "artist",
+                  "durationS",
+                  "thumbnail",
+                  "createdAt"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "track",
+              "likedAt"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "songs"
+      ],
+      "type": "object"
+    }
+  },
+  {
     "name": "list_mail_group_changes",
     "title": "群組信變更",
     "description": "The latest 50 membership changes tried on a mailing list the member manages, newest first: who, which address, add or remove, and the outcome (refused tries included).",
@@ -7425,10 +7563,10 @@
   {
     "name": "list_played",
     "title": "播過的歌",
-    "description": "Songs that finished, were skipped or removed, newest first, with who added and who skipped or removed them.",
+    "description": "Songs that finished, were skipped or removed, newest first, with who added and who skipped or removed them and whether the caller liked each.",
     "kind": "query",
     "app": "music",
-    "hash": "e075184b05f30443",
+    "hash": "1d671d37d3a1177c",
     "input": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
@@ -7493,6 +7631,9 @@
               },
               "id": {
                 "type": "string"
+              },
+              "liked": {
+                "type": "boolean"
               },
               "startedAt": {
                 "anyOf": [
@@ -7569,6 +7710,7 @@
               "addedAs",
               "fromPlaylist",
               "track",
+              "liked",
               "addedBy",
               "endedBy",
               "startedAt",
@@ -7754,10 +7896,10 @@
   {
     "name": "list_queue",
     "title": "播放佇列",
-    "description": "Songs waiting to play, in order, each with who added it and how (queue, next, cut_in). The playing song is not included; see now_playing.",
+    "description": "Songs waiting to play, in order, each with who added it and how (queue, next, cut_in) and whether the caller liked it. The playing song is not included; see now_playing.",
     "kind": "query",
     "app": "music",
-    "hash": "a5039ab7e5d35e35",
+    "hash": "d6cd40defc720a0d",
     "input": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {},
@@ -7815,6 +7957,9 @@
               },
               "id": {
                 "type": "string"
+              },
+              "liked": {
+                "type": "boolean"
               },
               "startedAt": {
                 "anyOf": [
@@ -7891,6 +8036,7 @@
               "addedAs",
               "fromPlaylist",
               "track",
+              "liked",
               "addedBy",
               "endedBy",
               "startedAt",
@@ -8813,10 +8959,10 @@
   {
     "name": "now_playing",
     "title": "正在播放",
-    "description": "The song playing on the lab HomePod: title, artist, who added it and how (queue, next or cut_in), position in seconds, paused, volume (0-100), autoplay (recommend a song when the queue runs dry) and whether the player on the lab network is online.",
+    "description": "The song playing on the lab HomePod: title, artist, who added it and how (queue, next or cut_in), whether the caller liked it, position in seconds, paused, volume (0-100), autoplay (recommend a song when the queue runs dry) and whether the player on the lab network is online.",
     "kind": "query",
     "app": "music",
-    "hash": "5d386b4666d36c33",
+    "hash": "43e38547bf1925cc",
     "input": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {},
@@ -8878,6 +9024,9 @@
                 },
                 "id": {
                   "type": "string"
+                },
+                "liked": {
+                  "type": "boolean"
                 },
                 "startedAt": {
                   "anyOf": [
@@ -8954,6 +9103,7 @@
                 "addedAs",
                 "fromPlaylist",
                 "track",
+                "liked",
                 "addedBy",
                 "endedBy",
                 "startedAt",
@@ -10820,6 +10970,51 @@
       "required": [
         "first",
         "second"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "unlike_song",
+    "title": "收回愛心",
+    "description": "Remove a song (YouTube video id) from the caller's liked songs. Unliking a song that is not liked changes nothing.",
+    "kind": "mutation",
+    "app": "music",
+    "hash": "b6e410c0e49dc7d4",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "videoId": {
+          "anyOf": [
+            {
+              "pattern": "^[\\w-]{11}$",
+              "type": "string"
+            },
+            {
+              "pattern": "^bilibili:(BV[0-9A-Za-z]{10})(?:_p(\\d{1,3}))?$",
+              "type": "string"
+            },
+            {
+              "pattern": "^twitch:([a-z0-9_]{1,25})$",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "required": [
+        "videoId"
+      ],
+      "type": "object"
+    },
+    "output": {
+      "additionalProperties": false,
+      "properties": {
+        "liked": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "liked"
       ],
       "type": "object"
     }

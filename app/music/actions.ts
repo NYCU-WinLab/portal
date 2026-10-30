@@ -7,6 +7,7 @@ import {
   addPlaylist,
   addSong,
   getLyrics,
+  likeSong,
   playNext,
   removeSong,
   searchMusic,
@@ -14,6 +15,7 @@ import {
   setPaused,
   setVolume,
   skipSong,
+  unlikeSong,
 } from "@/lib/actions/music"
 import { requireActor } from "@/lib/auth/session"
 
@@ -44,3 +46,5 @@ export const pause = async (input: unknown) => call(setPaused, input)
 export const volume = async (input: unknown) => call(setVolume, input)
 export const autoplay = async (input: unknown) => call(setAutoplay, input)
 export const lyrics = async (input: unknown) => call(getLyrics, input)
+export const like = async (input: unknown) => call(likeSong, input)
+export const unlike = async (input: unknown) => call(unlikeSong, input)

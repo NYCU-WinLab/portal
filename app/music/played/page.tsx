@@ -6,6 +6,7 @@ import { listPlayed } from "@/lib/actions/music"
 import { requireActor } from "@/lib/auth/session"
 
 import { AddButtons } from "../add-songs"
+import { LikeButton } from "../like-button"
 import { addedLine, Cover } from "../song"
 import { musicNav, musicPage } from "../nav"
 
@@ -54,6 +55,7 @@ export default async function Played() {
                   <span className="hidden shrink-0 text-muted-foreground tabular-nums sm:inline">
                     {item.endedAt ? time.format(item.endedAt) : ""}
                   </span>
+                  <LikeButton videoId={item.track.videoId} liked={item.liked} />
                   <AddButtons videoId={item.track.videoId} />
                 </li>
               )
