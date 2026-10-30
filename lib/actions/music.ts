@@ -25,7 +25,7 @@ import {
   musicTracks,
 } from "@/lib/db/schema"
 import * as bilibili from "@/lib/bilibili"
-import { findLyrics, parseLrc } from "@/lib/lrclib"
+import { findLyrics, LyricsUnavailable, parseLrc } from "@/lib/lrclib"
 import * as twitch from "@/lib/twitch"
 import {
   getPlaylist,
@@ -430,7 +430,17 @@ export const getLyrics = defineAction({
       !row.plain &&
       Date.now() - row.fetchedAt.getTime() > LYRICS_RETRY_MS
     if (!row || stale) {
-      const found = await findLyrics(track.title, track.artist, track.durationS)
+      // When LRCLIB is down the song gets no row, so the next open asks again
+      // instead of remembering "no lyrics" for a week.
+      const found = await findLyrics(
+        track.title,
+        track.artist,
+        track.durationS
+      ).catch((error) => {
+        if (error instanceof LyricsUnavailable) return null
+        throw error
+      })
+      if (!found) return { timed: false, lines: [] }
       ;[row] = await db
         .insert(musicLyrics)
         .values({ videoId, ...found })
