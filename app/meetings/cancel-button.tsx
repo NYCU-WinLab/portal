@@ -15,9 +15,7 @@ export function CancelButton({ id, title }: { id: string; title: string }) {
       throw new Error(error)
     }
     if (result!.teams_error)
-      toast.warning(
-        `已取消，但 Teams 會議沒有關掉（${result!.teams_error}），請到 Teams 刪除`
-      )
+      toast.warning(`已取消，但線上會議沒有關掉（${result!.teams_error}）`)
     else toast.success("已取消，取消通知寄出中")
   }
 

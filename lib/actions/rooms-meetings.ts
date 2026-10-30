@@ -14,11 +14,15 @@ import { mailBody } from "@/lib/mail-body"
 import { db } from "@/lib/db"
 import { roomBookings, roomMeetingRequests, user } from "@/lib/db/schema"
 import { meetingPipelineConfigured, triggerMeetingPipeline } from "@/lib/gitlab"
+import { meetAction, meetConfigured, meetHost } from "@/lib/meet"
 import { MEETING_FAILURES } from "@/lib/rooms/meeting"
 import { dayLabel, taipeiOffsetIso } from "@/lib/rooms/time"
 
 const sha256 = (value: string) =>
   createHash("sha256").update(value).digest("hex")
+
+/** Online meetings happen somewhere: on meet, or through the Teams pipeline. */
+const meetingsConfigured = () => meetConfigured() || meetingPipelineConfigured()
 
 export const joinUrl = (bookingId: string) =>
   `${process.env.BETTER_AUTH_URL}/rooms/join/${bookingId}`
@@ -67,6 +71,7 @@ async function askIf(
   })
   if (!asked) return null
   const { booking, variables } = asked
+  if (meetConfigured()) return askMeet(requestId, kind, booking, variables)
   try {
     const pipelineId = await triggerMeetingPipeline({
       REQUEST_ID: requestId,
@@ -100,6 +105,85 @@ async function askIf(
   }
 }
 
+/**
+ * The meet side of ask: books, renames or cancels the room on meet right
+ * away and settles the request row itself, since meet answers in the call.
+ * The create request's id is the booking id meet files recordings under;
+ * an update or cancel names it as BOOKING_REQUEST_ID. The room name goes
+ * in cancelId and "meet" in messageId so the Teams-era checks for "a
+ * meeting was made" keep working. Returns why it failed, or null.
+ */
+async function askMeet(
+  requestId: string,
+  kind: "create" | "update" | "cancel",
+  booking: Booking,
+  variables: Record<string, string>
+) {
+  const target = kind === "create" ? requestId : variables.BOOKING_REQUEST_ID
+  try {
+    let joinUrl: string | null = null
+    let roomName: string | null = null
+    if (kind === "create") {
+      const [who] = await db
+        .select({ username: user.username })
+        .from(user)
+        .where(eq(user.id, booking.requestedBy))
+      const room = await meetAction<{ name: string; url: string }>(
+        "schedule_room",
+        {
+          title: booking.title,
+          group: booking.groupName ?? undefined,
+          booking: target,
+          startsAt: taipeiOffsetIso(booking.date, booking.startTime),
+          endsAt: taipeiOffsetIso(booking.date, booking.endTime),
+          opener: who?.username ?? undefined,
+        }
+      )
+      joinUrl = room.url
+      roomName = room.name
+    } else if (kind === "update") {
+      const room = await meetAction<{ name: string; url: string }>(
+        "update_scheduled_room",
+        {
+          booking: target,
+          title: booking.title,
+          group: booking.groupName ?? undefined,
+          startsAt: taipeiOffsetIso(booking.date, booking.startTime),
+          endsAt: taipeiOffsetIso(booking.date, booking.endTime),
+        }
+      )
+      roomName = room.name
+    } else {
+      await meetAction("cancel_scheduled_room", { booking: target })
+    }
+    await db
+      .update(roomMeetingRequests)
+      .set({
+        status: "success",
+        joinUrl,
+        cancelId: roomName,
+        messageId: roomName ? "meet" : null,
+        optionsApplied: kind === "create",
+        completedAt: sql`now()`,
+      })
+      .where(eq(roomMeetingRequests.requestId, requestId))
+    await announceChange("meet_room").catch(() => {})
+    return null
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    await db
+      .update(roomMeetingRequests)
+      .set({
+        status: "failed",
+        errorCode: "TRIGGER_FAILED",
+        errorMessage: message,
+        completedAt: sql`now()`,
+      })
+      .where(eq(roomMeetingRequests.requestId, requestId))
+    return message
+  }
+}
+
 const createVariables = (booking: Booking) => ({
   START_TIME: taipeiOffsetIso(booking.date, booking.startTime),
   END_TIME: taipeiOffsetIso(booking.date, booking.endTime),
@@ -111,7 +195,7 @@ const createVariables = (booking: Booking) => ({
 
 /** Asks for the Teams meeting of a booking just made. */
 export async function requestTeamsMeeting(booking: Booking) {
-  if (!booking.online || !meetingPipelineConfigured()) return
+  if (!booking.online || !meetingsConfigured()) return
   await ask(booking, "create", createVariables(booking))
 }
 
@@ -170,7 +254,7 @@ async function teamsTopicState(tx: Tx, booking: Booking) {
  * why the ask failed, or null.
  */
 export async function renameTeamsMeeting(bookingId: string) {
-  if (!meetingPipelineConfigured()) return null
+  if (!meetingsConfigured()) return null
   return askIf("update", async (tx) => {
     const [booking] = await tx
       .select()
@@ -254,7 +338,7 @@ async function cancelsOf(tx: Tx | typeof db, bookingId: string) {
  * and a cancel arriving together ask once.
  */
 export async function cancelTeamsMeeting(booking: Booking) {
-  if (!booking.online || !meetingPipelineConfigured()) return null
+  if (!booking.online || !meetingsConfigured()) return null
   let missing = false
   const error = await askIf("cancel", async (tx) => {
     const [row] = await tx
@@ -428,10 +512,12 @@ export async function applyMeetingCallback(
     pipelineUrl: text(body.pipeline?.url),
     completedAt: sql`now()`,
   }
-  // Only a Teams link may become the invite's redirect.
+  // Only a Teams or meet link may become the invite's redirect.
   const rawJoin = text(body.meeting?.join_url)
   const join =
-    rawJoin && /^https:\/\/teams\.microsoft\.com\//.test(rawJoin)
+    rawJoin &&
+    (/^https:\/\/teams\.microsoft\.com\//.test(rawJoin) ||
+      rawJoin.startsWith(`https://${meetHost()}/`))
       ? rawJoin
       : null
   const succeeded =
@@ -523,7 +609,7 @@ const ORPHAN_MINUTES = 10
  * past one has already happened.
  */
 export async function reconcileTeams() {
-  if (!meetingPipelineConfigured()) return
+  if (!meetingsConfigured()) return
   const today = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Taipei",
   }).format(new Date())

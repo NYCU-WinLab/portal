@@ -259,7 +259,7 @@ async function remindTitle(meeting: ScheduledMeeting, today: string) {
           ["主講", meeting.presenter.name],
         ],
         paragraphs: [
-          "填好後會建立 Teams 會議，週五中午的公告信會帶上主題。還沒填的話，每天早上 9 點會再提醒。",
+          "填好後會建立線上會議，週五中午的公告信會帶上主題。還沒填的話，每天早上 9 點會再提醒。",
         ],
         action: { label: "填主題", url: `${site()}/meetings` },
       }),

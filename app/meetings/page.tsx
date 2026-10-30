@@ -51,8 +51,8 @@ function When({ date, aside }: { date: string; aside: React.ReactNode }) {
 const teamsText = (booking: Booking) => {
   if (!booking.meeting) return null
   if (booking.meeting.status === "success") return null
-  if (booking.meeting.status === "pending") return "Teams 會議建立中"
-  return `Teams 會議沒有建成：${booking.meeting.error ?? "原因不明"}`
+  if (booking.meeting.status === "pending") return "線上會議建立中"
+  return `線上會議沒有建成：${booking.meeting.error ?? "原因不明"}`
 }
 
 const link = "underline-offset-4 hover:underline"

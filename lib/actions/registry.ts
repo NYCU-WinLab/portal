@@ -510,6 +510,7 @@ export const backgroundChanges: Record<string, ApiApp | null> = {
   compare_door_cards: null,
   room_daily_run: "meetings",
   room_meeting_callback: "meetings",
+  meet_room: "meetings",
   store_door_voice_clip: "greetings",
 }
 
