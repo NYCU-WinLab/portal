@@ -25,14 +25,40 @@ export function bareTitle(title: string) {
   )
 }
 
+/** LRCLIB answers 503 now and then and an overloaded one stalls; a second try
+ * a moment later usually works. */
+const RETRY_AFTER_MS = 600
+
+export class LyricsUnavailable extends Error {}
+
 async function read<T>(path: string, query: Record<string, string>) {
-  const response = await fetch(
-    `${BASE}/${path}?${new URLSearchParams(query)}`,
-    { headers, cache: "no-store", signal: timeout() }
-  )
-  if (response.status === 404) return null
-  if (!response.ok) throw new Error(`LRCLIB ${path} ${response.status}`)
-  return (await response.json()) as T
+  const url = `${BASE}/${path}?${new URLSearchParams(query)}`
+  for (let attempt = 1; ; attempt++) {
+    try {
+      const response = await fetch(url, {
+        headers,
+        cache: "no-store",
+        signal: timeout(),
+      })
+      if (response.status === 404) return null
+      if (response.ok) return (await response.json()) as T
+      if (response.status < 500 && response.status !== 429)
+        throw new Error(`LRCLIB ${path} ${response.status}`)
+      if (attempt === 2)
+        throw new LyricsUnavailable(`LRCLIB ${path} ${response.status}`)
+    } catch (error) {
+      if (error instanceof LyricsUnavailable) throw error
+      // A stall or a dropped connection counts like a 5xx.
+      if (
+        error instanceof Error &&
+        (error.name === "TimeoutError" || error.name === "TypeError")
+      ) {
+        if (attempt === 2)
+          throw new LyricsUnavailable(`LRCLIB ${path} ${error.name}`)
+      } else throw error
+    }
+    await new Promise((resolve) => setTimeout(resolve, RETRY_AFTER_MS))
+  }
 }
 
 /** The lyrics of one song, timed when LRCLIB has them. An exact match on
