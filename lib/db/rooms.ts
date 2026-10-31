@@ -152,6 +152,13 @@ export const roomMeetingRequests = pgTable(
     errorMessage: text(),
     pipelineId: text(),
     pipelineUrl: text(),
+    // A meet booking's record epic, asked of winlab-helper after meet
+    // answered: the pipeline it started, or why the trigger failed (retried
+    // by reconcileTeams up to 3 times, then mailed once).
+    helperPipelineId: text(),
+    helperError: text(),
+    helperTries: integer().default(0).notNull(),
+    helperNotifiedAt: timestamp({ withTimezone: true }),
     createdAt: timestamp({ withTimezone: true }).defaultNow().notNull(),
     completedAt: timestamp({ withTimezone: true }),
     notifiedAt: timestamp({ withTimezone: true }),
