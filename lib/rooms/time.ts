@@ -60,6 +60,53 @@ export function addMinutes(time: string, minutes: number) {
   return clock(start + minutes)
 }
 
+/** An online-only meeting runs at most this long. */
+export const ONLINE_MAX_MINUTES = 300
+/** An online-only meeting is booked at most this many days ahead. */
+export const ONLINE_AHEAD_DAYS = 90
+
+/** Like addMinutes, but a meeting may end at midnight, "24:00". */
+export function endAfter(time: string, minutes: number) {
+  const start = minutesOf(time)
+  if (start === null || start + minutes > 24 * 60) return null
+  return start + minutes === 24 * 60 ? "24:00" : clock(start + minutes)
+}
+
+/** Minutes since midnight of an end time, "24:00" included. */
+const endMinutesOf = (time: string) =>
+  time === "24:00" ? 24 * 60 : minutesOf(time)
+
+/**
+ * Why start..end is not a span for an online-only meeting, or null: any
+ * time of day on the 30-minute grid, ending by midnight, 30 to 300 minutes.
+ */
+export function onlineSpanProblem(start: string, end: string) {
+  const from = minutesOf(start)
+  const to = endMinutesOf(end)
+  if (from === null || to === null) return "時間格式要是 HH:MM"
+  if (from % SLOT_MINUTES || to % SLOT_MINUTES)
+    return `時間要對齊 ${SLOT_MINUTES} 分鐘的格子`
+  if (to <= from) return "結束時間要晚於開始時間，最晚 24:00"
+  if (to - from > ONLINE_MAX_MINUTES)
+    return `線上會議最長 ${ONLINE_MAX_MINUTES} 分鐘`
+  return null
+}
+
+/** Whether two spans on the same day overlap; ends may be "24:00". */
+export function spansOverlap(
+  a: { start: string; end: string },
+  b: { start: string; end: string }
+) {
+  const [as, ae, bs, be] = [
+    minutesOf(a.start),
+    endMinutesOf(a.end),
+    minutesOf(b.start),
+    endMinutesOf(b.end),
+  ]
+  if (as === null || ae === null || bs === null || be === null) return false
+  return as < be && bs < ae
+}
+
 /** The instant a Taipei wall-clock time is, as ISO 8601 UTC. */
 export const taipeiIso = (day: string, time: string) =>
   new Date(`${day}T${time}:00+08:00`).toISOString()
