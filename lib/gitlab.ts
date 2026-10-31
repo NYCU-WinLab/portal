@@ -1,9 +1,11 @@
-// The lab's GitLab, two ways and never a write: a read_api token
-// (GITLAB_API_TOKEN) reads epics for the booking form, and a pipeline
-// trigger token (GITLAB_MEETING_TRIGGER_TOKEN) asks winlab-helper to create
-// or cancel a booking's Teams meeting. The helper holds the Teams and GitLab
-// credentials and writes the meeting's issue itself; it answers on
-// /api/rooms/meeting-callback.
+// The lab's GitLab, three ways and never a write: a read_api token
+// (GITLAB_API_TOKEN) reads epics for the booking form; a pipeline trigger
+// token (GITLAB_MEETING_TRIGGER_TOKEN) asks teams-meeting-bot (177) to
+// create or cancel a booking's Teams meeting, answering on
+// /api/rooms/meeting-callback; and one on winlab-helper (165,
+// GITLAB_HELPER_TRIGGER_TOKEN) has it open, update or close the record epic
+// of a meet booking (`meeting_open`). The helper holds the GitLab
+// credentials and writes the epic itself.
 
 import { deliverablesOf, readEpic, type Epic } from "@/lib/rooms/meeting"
 
@@ -24,16 +26,45 @@ export async function triggerMeetingPipeline(
 ) {
   const token = process.env.GITLAB_MEETING_TRIGGER_TOKEN
   if (!token) throw new Error("GitLab 會議 pipeline 沒有設定")
+  return trigger(
+    process.env.GITLAB_MEETING_TRIGGER_URL ??
+      `${base()}/api/v4/projects/177/trigger/pipeline`,
+    token,
+    variables
+  )
+}
+
+export const helperConfigured = () =>
+  Boolean(process.env.GITLAB_HELPER_TRIGGER_TOKEN)
+
+/** Starts winlab-helper's `meeting_open` with these variables; returns the
+ * pipeline id. */
+export async function triggerHelperPipeline(variables: Record<string, string>) {
+  const token = process.env.GITLAB_HELPER_TRIGGER_TOKEN
+  if (!token) throw new Error("winlab-helper trigger 沒有設定")
+  return trigger(
+    process.env.GITLAB_HELPER_TRIGGER_URL ??
+      `${base()}/api/v4/projects/165/trigger/pipeline`,
+    token,
+    variables
+  )
+}
+
+async function trigger(
+  url: string,
+  token: string,
+  variables: Record<string, string>
+) {
   const form = new FormData()
   form.set("token", token)
   form.set("ref", "main")
   for (const [key, value] of Object.entries(variables))
     form.set(`variables[${key}]`, value)
-  const response = await fetch(
-    process.env.GITLAB_MEETING_TRIGGER_URL ??
-      `${base()}/api/v4/projects/177/trigger/pipeline`,
-    { method: "POST", body: form, signal: timeout() }
-  )
+  const response = await fetch(url, {
+    method: "POST",
+    body: form,
+    signal: timeout(),
+  })
   if (!response.ok) {
     const body = (await response.text().catch(() => "")).slice(0, 200)
     throw new Error(
