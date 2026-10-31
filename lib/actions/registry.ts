@@ -192,6 +192,7 @@ import {
 import {
   bookMeeting,
   cancelMeeting,
+  getBookingAgenda,
   getEpicDeliverables,
   listGroupEpics,
   listRoomAvailability,
@@ -345,6 +346,7 @@ export const actionGroups: { app: ApiApp | null; actions: Action[] }[] = [
       getEpicDeliverables,
       bookMeeting,
       cancelMeeting,
+      getBookingAgenda,
       listStandingMeetings,
       setStandingMeetingActive,
       deleteStandingMeeting,

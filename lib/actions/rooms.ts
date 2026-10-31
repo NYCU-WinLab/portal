@@ -8,6 +8,7 @@ import {
 } from "@/lib/actions/rooms-series"
 import { queueMail } from "@/lib/actions/mail"
 import {
+  bookingAgenda,
   cancelTeamsMeeting,
   joinUrl,
   meetingsOf,
@@ -16,7 +17,12 @@ import {
 import type { Mail } from "@/lib/mail"
 import { mailBody } from "@/lib/mail-body"
 import { db } from "@/lib/db"
-import { bookingLeases, roomBookings, user } from "@/lib/db/schema"
+import {
+  bookingLeases,
+  roomBookings,
+  roomMeetingRequests,
+  user,
+} from "@/lib/db/schema"
 import {
   epicIssues,
   epicsConfigured,
@@ -48,6 +54,7 @@ import {
   deliverablesOf,
   epicIid,
   mergeAttendees,
+  splitTopic,
   topicPrefix,
   type Attendee,
 } from "@/lib/rooms/meeting"
@@ -58,6 +65,7 @@ import {
   minutesOf,
   spanProblem,
   taipeiIso,
+  taipeiOffsetIso,
   todayInTaipei,
   weekdayOf,
 } from "@/lib/rooms/time"
@@ -720,6 +728,48 @@ export const bookMeeting = defineAction({
       paid: room?.paid ?? false,
       title: booking.title,
       attendees: attendees.length,
+    }
+  },
+})
+
+export const getBookingAgenda = defineAction({
+  name: "get_booking_agenda",
+  title: "預約議程",
+  description:
+    "The agenda of an online booking as meet shows it, by the meet booking id (room-booking-…, the create request's id): status booked or cancelled, title, project group, startsAt and endsAt (Asia/Taipei offset), the epic reference, and items: the booking's agenda lines (source booking), then the epic's open child issues with their url (source issue), at most 30. gitlab is unavailable when GitLab did not answer and only the booking's lines are listed. meet calls this when the room opens; any member may read it.",
+  kind: "query",
+  input: z.object({
+    booking: z
+      .string()
+      .regex(/^room-booking-(?:[0-9a-f]){12}$/, "預約編號格式不對"),
+  }),
+  run: async (_actor, input) => {
+    const [row] = await db
+      .select({ booking: roomBookings })
+      .from(roomMeetingRequests)
+      .innerJoin(
+        roomBookings,
+        eq(roomBookings.id, roomMeetingRequests.bookingId)
+      )
+      .where(
+        and(
+          eq(roomMeetingRequests.requestId, input.booking),
+          eq(roomMeetingRequests.kind, "create")
+        )
+      )
+    if (!row) throw new Error("沒有這個預約")
+    const { booking } = row
+    const { items, gitlab } = await bookingAgenda(booking)
+    return {
+      booking: input.booking,
+      status: booking.status === "booked" ? "booked" : "cancelled",
+      title: splitTopic(booking.title).title,
+      group: booking.groupName,
+      startsAt: taipeiOffsetIso(booking.date, booking.startTime),
+      endsAt: taipeiOffsetIso(booking.date, booking.endTime),
+      epic: booking.issueRefs[0] ?? null,
+      items,
+      gitlab,
     }
   },
 })

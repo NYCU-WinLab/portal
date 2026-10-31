@@ -125,6 +125,27 @@ export async function listOpenEpics(groupPath: string): Promise<Epic[]> {
   return rows.map(readEpic).filter((epic) => epic !== null)
 }
 
+/**
+ * The open child issues of the epic a booking names (`<group path>&<iid>`),
+ * for its agenda. Every epic kind: a meeting covers what is still open
+ * under it, whatever it owes.
+ */
+export async function openEpicIssues(ref: string) {
+  const match = /^(.+)&(\d+)$/.exec(ref)
+  if (!match) return []
+  const rows = await getAll(`${group(match[1])}/epics/${match[2]}/issues`)
+  return rows.flatMap((row) => {
+    const issue = row as { title?: unknown; web_url?: unknown; state?: unknown }
+    if (issue.state !== "opened" || typeof issue.title !== "string") return []
+    return [
+      {
+        title: issue.title.trim(),
+        url: typeof issue.web_url === "string" ? issue.web_url : null,
+      },
+    ]
+  })
+}
+
 /** One epic, or null when GitLab says it does not exist. */
 export async function getEpic(groupPath: string, iid: number) {
   try {
