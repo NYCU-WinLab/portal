@@ -6,7 +6,17 @@
 // booking actions or the daily run.
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto"
 
-import { and, desc, eq, inArray, isNotNull, isNull, lt, sql } from "drizzle-orm"
+import {
+  and,
+  desc,
+  eq,
+  inArray,
+  isNotNull,
+  isNull,
+  lt,
+  or,
+  sql,
+} from "drizzle-orm"
 
 import { announceChange } from "@/lib/actions/changes"
 import { queueMail } from "@/lib/actions/mail"
@@ -220,9 +230,25 @@ async function askMeet(
  * REQUEST_ID is always the create request's id, the one the epic is
  * stamped with. Records the pipeline or the error on the request row; an
  * error is retried by reconcileTeams. A no-op without the trigger token.
+ * Never throws: the meet request it follows has already succeeded.
  */
 async function notifyHelper(requestId: string) {
   if (!helperConfigured()) return
+  try {
+    await tellHelper(requestId)
+  } catch (error) {
+    await db
+      .update(roomMeetingRequests)
+      .set({
+        helperError: error instanceof Error ? error.message : String(error),
+        helperTries: sql`${roomMeetingRequests.helperTries} + 1`,
+      })
+      .where(eq(roomMeetingRequests.requestId, requestId))
+      .catch(() => {})
+  }
+}
+
+async function tellHelper(requestId: string) {
   const [row] = await db
     .select({ request: roomMeetingRequests, booking: roomBookings })
     .from(roomMeetingRequests)
@@ -250,39 +276,29 @@ async function notifyHelper(requestId: string) {
     .select({ username: user.username })
     .from(user)
     .where(eq(user.id, booking.requestedBy))
-  try {
-    const pipelineId = await triggerHelperPipeline({
-      REQUEST_ID: created.requestId,
-      KIND: request.kind,
-      SUBJECT: booking.title,
-      ...(request.kind === "cancel" ? {} : createVariables(booking)),
-      ...(request.kind === "cancel"
-        ? { START_TIME: taipeiOffsetIso(booking.date, booking.startTime) }
-        : {}),
-      ...(booking.groupName ? { GROUP_NAME: booking.groupName } : {}),
-      ...(who?.username ? { PERSON: who.username } : {}),
-      ...(booking.issueRefs.length
-        ? { ISSUE_REFS: booking.issueRefs.join(",") }
-        : {}),
-      ...(created.joinUrl ? { MEETING_URL: created.joinUrl } : {}),
+  const pipelineId = await triggerHelperPipeline({
+    REQUEST_ID: created.requestId,
+    KIND: request.kind,
+    SUBJECT: booking.title,
+    ...(request.kind === "cancel" ? {} : createVariables(booking)),
+    ...(request.kind === "cancel"
+      ? { START_TIME: taipeiOffsetIso(booking.date, booking.startTime) }
+      : {}),
+    ...(booking.groupName ? { GROUP_NAME: booking.groupName } : {}),
+    ...(who?.username ? { PERSON: who.username } : {}),
+    ...(booking.issueRefs.length
+      ? { ISSUE_REFS: booking.issueRefs.join(",") }
+      : {}),
+    ...(created.joinUrl ? { MEETING_URL: created.joinUrl } : {}),
+  })
+  await db
+    .update(roomMeetingRequests)
+    .set({
+      helperPipelineId: pipelineId,
+      helperError: null,
+      helperTries: sql`${roomMeetingRequests.helperTries} + 1`,
     })
-    await db
-      .update(roomMeetingRequests)
-      .set({
-        helperPipelineId: pipelineId,
-        helperError: null,
-        helperTries: sql`${roomMeetingRequests.helperTries} + 1`,
-      })
-      .where(eq(roomMeetingRequests.requestId, requestId))
-  } catch (error) {
-    await db
-      .update(roomMeetingRequests)
-      .set({
-        helperError: error instanceof Error ? error.message : String(error),
-        helperTries: sql`${roomMeetingRequests.helperTries} + 1`,
-      })
-      .where(eq(roomMeetingRequests.requestId, requestId))
-  }
+    .where(eq(roomMeetingRequests.requestId, requestId))
 }
 
 const createVariables = (booking: Booking) => ({
@@ -778,7 +794,7 @@ export async function reconcileTeams() {
       )
     )
   // A record epic winlab-helper was not told about, while the meeting is
-  // still ahead.
+  // still ahead. Opening or updating one stops once the booking is cancelled.
   const untold = await db
     .select({ requestId: roomMeetingRequests.requestId })
     .from(roomMeetingRequests)
@@ -787,7 +803,11 @@ export async function reconcileTeams() {
       and(
         isNotNull(roomMeetingRequests.helperError),
         lt(roomMeetingRequests.helperTries, HELPER_TRIES),
-        ahead
+        ahead,
+        or(
+          eq(roomMeetingRequests.kind, "cancel"),
+          eq(roomBookings.status, "booked")
+        )
       )
     )
   for (const { requestId } of untold) await notifyHelper(requestId)
@@ -927,12 +947,14 @@ export async function sweepMeetingRequests() {
 /**
  * A meet booking whose record epic winlab-helper was never told about,
  * after HELPER_TRIES tries or once the meeting is over: the booker is
- * mailed once, since the recording will then file under no epic.
+ * mailed once, since the recording will then file under no epic. A
+ * cancel the helper never heard of is mailed too: its epic stays open.
  */
 async function mailUntoldRecords(today: string) {
   const rows = await db
     .select({
       id: roomMeetingRequests.id,
+      kind: roomMeetingRequests.kind,
       helperError: roomMeetingRequests.helperError,
       title: roomBookings.title,
       date: roomBookings.date,
@@ -947,7 +969,10 @@ async function mailUntoldRecords(today: string) {
       and(
         isNotNull(roomMeetingRequests.helperError),
         isNull(roomMeetingRequests.helperNotifiedAt),
-        eq(roomBookings.status, "booked"),
+        or(
+          eq(roomMeetingRequests.kind, "cancel"),
+          eq(roomBookings.status, "booked")
+        ),
         sql`(${roomMeetingRequests.helperTries} >= ${HELPER_TRIES} or ${roomBookings.date} < ${today})`
       )
     )
@@ -966,7 +991,10 @@ async function mailUntoldRecords(today: string) {
       if (!claimed) return
       await queueMail(tx, {
         to: [row.email],
-        subject: `[WinLab 會議] GitLab 會議紀錄沒有建立：${row.title}`,
+        subject:
+          row.kind === "cancel"
+            ? `[WinLab 會議] GitLab 會議紀錄沒有關閉：${row.title}`
+            : `[WinLab 會議] GitLab 會議紀錄沒有建立：${row.title}`,
         ...mailBody({
           title: row.title,
           rows: [
@@ -977,7 +1005,9 @@ async function mailUntoldRecords(today: string) {
             ["原因", row.helperError ?? ""],
           ],
           paragraphs: [
-            "會議連結不受影響，但 GitLab 上沒有這場會議的紀錄 epic，錄影會歸到未對應的區域，請到 GitLab 手動建立或通知管理員。",
+            row.kind === "cancel"
+              ? "會議已取消，但 GitLab 上這場會議的紀錄 epic 還開著，請到 GitLab 手動關閉或通知管理員。"
+              : "會議連結不受影響，但 GitLab 上沒有這場會議的紀錄 epic，錄影會歸到未對應的區域，請到 GitLab 手動建立或通知管理員。",
           ],
         }),
       })
