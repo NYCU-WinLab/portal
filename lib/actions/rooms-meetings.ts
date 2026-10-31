@@ -16,10 +16,12 @@ import { roomBookings, roomMeetingRequests, user } from "@/lib/db/schema"
 import {
   helperConfigured,
   meetingPipelineConfigured,
+  openEpicIssues,
   triggerHelperPipeline,
   triggerMeetingPipeline,
 } from "@/lib/gitlab"
 import { meetAction, meetConfigured, meetHost } from "@/lib/meet"
+import { agendaItems } from "@/lib/rooms/agenda"
 import { MEETING_FAILURES, splitTopic } from "@/lib/rooms/meeting"
 import { dayLabel, taipeiOffsetIso } from "@/lib/rooms/time"
 
@@ -111,6 +113,21 @@ async function askIf(
 }
 
 /**
+ * What meet shows as the booking's agenda: its lines, then the epic's open
+ * child issues. GitLab not answering leaves the lines alone and says so.
+ */
+export async function bookingAgenda(booking: Booking) {
+  const ref = booking.issueRefs[0]
+  if (!ref) return { items: agendaItems(booking.agenda, []), gitlab: "ok" }
+  try {
+    const issues = await openEpicIssues(ref)
+    return { items: agendaItems(booking.agenda, issues), gitlab: "ok" }
+  } catch {
+    return { items: agendaItems(booking.agenda, []), gitlab: "unavailable" }
+  }
+}
+
+/**
  * The meet side of ask: books, renames or cancels the room on meet right
  * away and settles the request row itself, since meet answers in the call.
  * The create request's id is the booking id meet files recordings under;
@@ -135,9 +152,11 @@ async function askMeet(
         .select({ username: user.username })
         .from(user)
         .where(eq(user.id, booking.requestedBy))
+      const { items } = await bookingAgenda(booking)
       const room = await meetAction<{ name: string; url: string }>(
         "schedule_room",
         {
+          agenda: items,
           // meet files by group and opener; the [prefix]- is for Teams.
           title: splitTopic(booking.title).title,
           group: booking.groupName ?? undefined,
@@ -150,9 +169,11 @@ async function askMeet(
       joinUrl = room.url
       roomName = room.name
     } else if (kind === "update") {
+      const { items } = await bookingAgenda(booking)
       const room = await meetAction<{ name: string; url: string }>(
         "update_scheduled_room",
         {
+          agenda: items,
           booking: target,
           title: splitTopic(booking.title).title,
           group: booking.groupName ?? undefined,
@@ -296,8 +317,9 @@ const cancelVariables = (
  * "busy" while a create or update is still out or no meeting exists yet,
  * "current" when the last one asked for that title (a failed update is
  * not asked again; the daily run mails it), else "stale" with the create
- * request whose meeting to rename. Only the title counts: an update posts
- * in the channel, and an agenda alone is not worth that.
+ * request whose meeting to rename. On Teams only the title counts: an
+ * update posts in the channel, and an agenda alone is not worth that. On
+ * meet the agenda counts too, since the room's checklist shows it.
  */
 async function teamsTopicState(tx: Tx, booking: Booking) {
   const asked = await tx
@@ -315,7 +337,11 @@ async function teamsTopicState(tx: Tx, booking: Booking) {
   )
   if (!meeting || asked.some((row) => row.status === "pending"))
     return { state: "busy" as const }
-  return asked[0]!.subject === booking.title
+  const last = asked[0]!
+  const current =
+    last.subject === booking.title &&
+    (!meetConfigured() || (last.agenda ?? null) === (booking.agenda ?? null))
+  return current
     ? { state: "current" as const }
     : {
         state: "stale" as const,

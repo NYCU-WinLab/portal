@@ -3167,6 +3167,107 @@
     }
   },
   {
+    "name": "get_booking_agenda",
+    "title": "預約議程",
+    "description": "The agenda of an online booking as meet shows it, by the meet booking id (room-booking-…, the create request's id): status booked or cancelled, title, project group, startsAt and endsAt (Asia/Taipei offset), the epic reference, and items: the booking's agenda lines (source booking), then the epic's open child issues with their url (source issue), at most 30. gitlab is unavailable when GitLab did not answer and only the booking's lines are listed. meet calls this when the room opens; any member may read it.",
+    "kind": "query",
+    "app": "meetings",
+    "hash": "7a9259fabbe7df7c",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "booking": {
+          "pattern": "^room-booking-(?:[0-9a-f]){12}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "booking"
+      ],
+      "type": "object"
+    },
+    "output": {
+      "additionalProperties": false,
+      "properties": {
+        "booking": {
+          "type": "string"
+        },
+        "endsAt": {
+          "type": "string"
+        },
+        "epic": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "gitlab": {
+          "type": "string"
+        },
+        "group": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "items": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "source": {
+                "enum": [
+                  "booking",
+                  "issue"
+                ],
+                "type": "string"
+              },
+              "text": {
+                "type": "string"
+              },
+              "url": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "text",
+              "source"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "startsAt": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "booking",
+        "status",
+        "group",
+        "startsAt",
+        "endsAt",
+        "epic",
+        "items",
+        "gitlab"
+      ],
+      "type": "object"
+    }
+  },
+  {
     "name": "get_door_sound",
     "title": "試聽門口音效",
     "description": "One sound from the door sound pool as base64 with its content type and version (it changes when the file is replaced), to listen to it.",
