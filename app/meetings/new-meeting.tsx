@@ -17,6 +17,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
   Select,
@@ -26,12 +27,17 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { pickRoom, type Slot } from "@/lib/rooms/availability"
 import {
   DURATION_PRESETS,
+  ONLINE_AHEAD_DAYS,
+  ONLINE_MAX_MINUTES,
   SLOT_MINUTES,
-  addMinutes,
+  addDays,
+  clock,
   dayLabel,
+  endAfter,
 } from "@/lib/rooms/time"
 
 import {
@@ -49,7 +55,8 @@ type Day = { date: string; slots: Slot[] }
 type People = (Member & { username: string | null })[]
 
 // 新增會議: two weeks of department rooms, read live when it opens. Press a
-// cell to fill in the meeting from there, once or every week.
+// cell to fill in the meeting from there, once or every week. The 只開線上
+// tab skips the rooms: any day up to 90 ahead, any half hour of the day.
 export function NewMeeting({
   today,
   groups,
@@ -64,10 +71,7 @@ export function NewMeeting({
 }) {
   const [open, setOpen] = React.useState(false)
   const [days, setDays] = React.useState<Day[] | string | null>(null)
-  const [picked, setPicked] = React.useState<{
-    day: Day
-    index: number
-  } | null>(null)
+  const [picked, setPicked] = React.useState<Picked | null>(null)
 
   const load = React.useCallback(() => {
     setDays(null)
@@ -95,38 +99,59 @@ export function NewMeeting({
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent size="wide">
           <DialogHeader>
-            <DialogTitle>選時段</DialogTitle>
+            <DialogTitle>新增會議</DialogTitle>
           </DialogHeader>
-          {days === null ? (
-            <p className="text-muted-foreground">正在讀系上借用系統…</p>
-          ) : typeof days === "string" ? (
-            <p className="text-destructive">讀不到系上借用系統：{days}</p>
-          ) : (
-            <div className="flex flex-col gap-4">
-              <RoomStripLegend />
-              <div className="flex flex-col gap-2">
-                {days.map((day) => (
-                  <RoomStrip
-                    key={day.date}
-                    label={dayLabel(day.date)}
-                    slots={day.slots}
-                    onPick={(index) => {
-                      setOpen(false)
-                      setPicked({ day, index })
-                    }}
-                  />
-                ))}
-              </div>
-              <RoomStripAxis />
-            </div>
-          )}
+          <Tabs defaultValue="room">
+            <TabsList>
+              <TabsTrigger value="room">借教室</TabsTrigger>
+              <TabsTrigger value="online">只開線上</TabsTrigger>
+            </TabsList>
+            <TabsContent value="room" className="pt-4">
+              {days === null ? (
+                <p className="text-muted-foreground">正在讀系上借用系統…</p>
+              ) : typeof days === "string" ? (
+                <p className="text-destructive">讀不到系上借用系統：{days}</p>
+              ) : (
+                <div className="flex flex-col gap-4">
+                  <RoomStripLegend />
+                  <div className="flex flex-col gap-2">
+                    {days.map((day) => (
+                      <RoomStrip
+                        key={day.date}
+                        label={dayLabel(day.date)}
+                        slots={day.slots}
+                        onPick={(index) => {
+                          setOpen(false)
+                          setPicked({
+                            date: day.date,
+                            start: day.slots[index].start,
+                            left: (day.slots.length - index) * SLOT_MINUTES,
+                            slots: day.slots,
+                          })
+                        }}
+                      />
+                    ))}
+                  </div>
+                  <RoomStripAxis />
+                </div>
+              )}
+            </TabsContent>
+            <TabsContent value="online" className="pt-4">
+              <OnlinePicker
+                today={today}
+                onPick={(next) => {
+                  setOpen(false)
+                  setPicked(next)
+                }}
+              />
+            </TabsContent>
+          </Tabs>
         </DialogContent>
       </Dialog>
       {picked && (
         <MeetingDialog
-          key={`${picked.day.date}-${picked.index}`}
-          day={picked.day}
-          index={picked.index}
+          key={`${picked.date}-${picked.start}-${picked.slots ? "room" : "online"}`}
+          picked={picked}
           groups={groups}
           members={members}
           username={username}
@@ -137,33 +162,118 @@ export function NewMeeting({
   )
 }
 
+/** Where a meeting starts and how long it may run; slots only when it may
+ * take a department room. */
+type Picked = {
+  date: string
+  start: string
+  left: number
+  slots: Slot[] | null
+}
+
+const halfHours = Array.from({ length: 48 }, (_, i) => clock(i * SLOT_MINUTES))
+
+// A day and a start for a meeting with no room: today to 90 days ahead,
+// any half hour; it may run until midnight.
+function OnlinePicker({
+  today,
+  onPick,
+}: {
+  today: string
+  onPick: (picked: Picked) => void
+}) {
+  const [date, setDate] = React.useState(today)
+  const [start, setStart] = React.useState("21:00")
+  const last = addDays(today, ONLINE_AHEAD_DAYS)
+  const valid = date >= today && date <= last
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="online-date">日期</Label>
+        <Input
+          id="online-date"
+          type="date"
+          min={today}
+          max={last}
+          value={date}
+          onChange={(event) => setDate(event.target.value)}
+        />
+      </div>
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="online-start">開始</Label>
+        <Select
+          value={start}
+          onValueChange={(next) => setStart(String(next))}
+          items={halfHours.map((t) => ({ value: t, label: t }))}
+        >
+          <SelectTrigger id="online-start" className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {halfHours.map((t) => (
+              <SelectItem key={t} value={t}>
+                {t}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <p className="text-muted-foreground">
+        線上會議在 meet.winlab.tw 開，會錄影並自動做逐字稿與會議紀錄
+      </p>
+      <div className="flex justify-end">
+        <Button
+          disabled={!valid}
+          onClick={() =>
+            onPick({
+              date,
+              start,
+              left: Math.min(
+                ONLINE_MAX_MINUTES,
+                24 * 60 - halfHours.indexOf(start) * SLOT_MINUTES
+              ),
+              slots: null,
+            })
+          }
+        >
+          下一步
+        </Button>
+      </div>
+    </div>
+  )
+}
+
 function MeetingDialog({
-  day,
-  index,
+  picked,
   groups,
   members,
   username,
   onClose,
 }: {
-  day: Day
-  index: number
+  picked: Picked
   groups: RoomGroup[]
   members: People
   username: string | null
   onClose: () => void
 }) {
-  const start = day.slots[index].start
-  const left = (day.slots.length - index) * SLOT_MINUTES
+  const { date, start, left, slots } = picked
+  const onlineOnly = slots === null
   const [minutes, setMinutes] = React.useState(Math.min(60, left))
-  const [online, setOnline] = React.useState(false)
+  const [online, setOnline] = React.useState(onlineOnly)
   const [allowPaid, setAllowPaid] = React.useState(false)
   // 0 once; 1 every week; 2 every other week.
   const [repeat, setRepeat] = React.useState(0)
   const [meeting, setMeeting] = React.useState<MeetingValue>(emptyMeeting)
-  const end = addMinutes(start, minutes)!
-  const room = pickRoom(day.slots, start, end)
+  const end = endAfter(start, minutes)!
+  const room = slots ? pickRoom(slots, start, end) : null
+  const presets = onlineOnly
+    ? Array.from(
+        { length: ONLINE_MAX_MINUTES / SLOT_MINUTES },
+        (_, i) => (i + 1) * SLOT_MINUTES
+      )
+    : DURATION_PRESETS
   const durations = [
-    ...new Set([...DURATION_PRESETS, minutes].filter((m) => m <= left)),
+    ...new Set([...presets, minutes].filter((m) => m <= left)),
   ].sort((a, b) => a - b)
 
   async function submit() {
@@ -176,7 +286,7 @@ function MeetingDialog({
       throw new Error("paid")
     }
     const { result, error } = await bookMeetingAction({
-      date: day.date,
+      date,
       start_time: start,
       end_time: end,
       online_only: !repeat && online,
@@ -210,7 +320,7 @@ function MeetingDialog({
     <FormDialog
       open
       onOpenChange={(open) => !open && onClose()}
-      title={`${dayLabel(day.date)} ${start} 到 ${end}`}
+      title={`${dayLabel(date)} ${start} 到 ${end}`}
       size="wide"
       submitLabel={repeat ? "新增" : online ? "開會議" : "預約"}
       pendingLabel={repeat ? "新增中…" : "預約中…"}
@@ -238,28 +348,30 @@ function MeetingDialog({
           </SelectContent>
         </Select>
       </div>
-      <div className="flex flex-col gap-2">
-        <Label htmlFor="book-repeat">重複</Label>
-        <Select
-          value={String(repeat)}
-          onValueChange={(next) => setRepeat(Number(next))}
-          items={[
-            { value: "0", label: "不重複" },
-            { value: "1", label: "每週" },
-            { value: "2", label: "隔週" },
-          ]}
-        >
-          <SelectTrigger id="book-repeat" className="w-full">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="0">不重複</SelectItem>
-            <SelectItem value="1">每週</SelectItem>
-            <SelectItem value="2">隔週</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-      {!repeat && (
+      {!onlineOnly && (
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="book-repeat">重複</Label>
+          <Select
+            value={String(repeat)}
+            onValueChange={(next) => setRepeat(Number(next))}
+            items={[
+              { value: "0", label: "不重複" },
+              { value: "1", label: "每週" },
+              { value: "2", label: "隔週" },
+            ]}
+          >
+            <SelectTrigger id="book-repeat" className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="0">不重複</SelectItem>
+              <SelectItem value="1">每週</SelectItem>
+              <SelectItem value="2">隔週</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+      {!repeat && !onlineOnly && (
         <>
           <div className="flex items-center justify-between gap-4">
             <Label htmlFor="book-online">只開線上會議，不借教室</Label>
