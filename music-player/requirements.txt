@@ -1,2 +1,4 @@
 pyatv==0.18.0
+# srptools 2.x stalls the AirPlay setup with pyatv 0.18 (no audio)
+srptools==1.0.1
 yt-dlp[default]
