@@ -24,9 +24,15 @@ import {
 } from "@/lib/actions/rooms-meetings"
 import { mailBody } from "@/lib/mail-body"
 import { db } from "@/lib/db"
-import { roomBookings, roomDailyRuns, roomSeries, user } from "@/lib/db/schema"
+import {
+  account,
+  roomBookings,
+  roomDailyRuns,
+  roomSeries,
+  user,
+} from "@/lib/db/schema"
 import { epicIssues, getEpic } from "@/lib/gitlab"
-import { projectGroups } from "@/lib/keycloak"
+import { inProjectGroup, projectGroups } from "@/lib/keycloak"
 import { bookingConfigured } from "@/lib/meetingroom"
 import type { Slot } from "@/lib/rooms/availability"
 import {
@@ -69,7 +75,7 @@ export const listStandingMeetings = defineAction({
   name: "list_standing_meetings",
   title: "固定會議",
   description:
-    "Every standing meeting on /meetings: title, weekday (0 Sunday), start time, duration, every week or every other week (anchorDate is a day it meets on, fixing which weeks), attendees, whether the advisor is invited, whether it is active, who made it, and its next occurrence with the room already held for it (booked false until the daily run books it, 7 days ahead). Every member sees every series; only its creator can pause or delete it.",
+    "Every standing meeting on /meetings: title, weekday (0 Sunday), start time, duration, every week or every other week (anchorDate is a day it meets on, fixing which weeks), attendees, whether the advisor is invited, whether it is active, who made it, and its next occurrence with the room already held for it (booked false until the daily run books it, 7 days ahead). Every member sees every series; only its creator can pause or delete it, and its creator or any member of its project group can edit its external link and agenda with update_meeting.",
   kind: "query",
   input: z.object({}),
   run: async () => {
@@ -417,47 +423,79 @@ export const setStandingMeetingActive = defineAction({
   },
 })
 
-export const setMeetingExternalUrl = defineAction({
-  name: "set_meeting_external_url",
-  title: "設定外部會議連結",
+/**
+ * Whether the member may edit a meeting: its creator, or a member of the
+ * project group it files under. Membership is read live by Keycloak id,
+ * not from the cached group list or a username, so someone just removed
+ * from the group cannot edit; Keycloak not answering refuses the edit.
+ */
+async function mayEdit(
+  actorId: string,
+  meeting: { createdBy: string; groupName: string | null }
+) {
+  if (meeting.createdBy === actorId) return true
+  if (!meeting.groupName) return false
+  const [link] = await db
+    .select({ sub: account.accountId })
+    .from(account)
+    .where(and(eq(account.userId, actorId), eq(account.providerId, "keycloak")))
+  if (!link) return false
+  return inProjectGroup(link.sub, meeting.groupName)
+}
+
+export const updateMeeting = defineAction({
+  name: "update_meeting",
+  title: "編輯會議",
   description:
-    "Sets or clears (external_url null) the link of the meeting people really join, such as another company's Teams, on one of the member's own bookings (booking, an id from list_meetings) or standing meetings (series, an id from list_standing_meetings; its booked occurrences from today on change too). Invites mailed from then on lead with that link and keep the meet room as the internal record. Mails nothing: invites already sent keep their old links. Not for the Monday lab meeting.",
+    "Edits a booking (booking, an id from list_meetings) or a standing meeting (series, an id from list_standing_meetings; its booked occurrences from today on change too): external_url, the meeting people really join when it is someone else's, such as another company's Teams (https, null clears it), and agenda (null clears it). A key left out stays as it is. Its creator or any member of its project group may edit it. Mails nothing: invites already sent keep their old links; meet reads the agenda when the room opens. Not for the Monday lab meeting.",
   kind: "mutation",
   input: z
     .object({
       booking: z.uuid().optional(),
       series: z.uuid().optional(),
-      external_url: z.string().trim().max(2000).nullable(),
+      external_url: z.string().trim().max(2000).nullish(),
+      agenda: z.string().trim().max(2000).nullish(),
     })
     .refine((v) => Boolean(v.booking) !== Boolean(v.series), {
       message: "booking 和 series 要剛好給一個",
     }),
   run: async (actor, input) => {
-    const externalUrl = externalMeetingUrl(input.external_url)
+    const patch: { externalUrl?: string | null; agenda?: string | null } = {}
+    if (input.external_url !== undefined)
+      patch.externalUrl = externalMeetingUrl(input.external_url)
+    if (input.agenda !== undefined) patch.agenda = input.agenda || null
+    if (!Object.keys(patch).length) throw new Error("沒有要改的欄位")
     if (input.series) {
-      await ownSeries(actor.userId, input.series)
+      const [series] = await db
+        .select()
+        .from(roomSeries)
+        .where(eq(roomSeries.id, input.series))
+      if (!series) throw new Error("找不到這個固定會議")
+      if (!(await mayEdit(actor.userId, series)))
+        throw new Error("只有建立者和專案群組的成員能編輯")
       const bookings = await db.transaction(async (tx) => {
         await tx
           .update(roomSeries)
-          .set({ externalUrl })
-          .where(eq(roomSeries.id, input.series!))
+          .set(patch)
+          .where(eq(roomSeries.id, series.id))
         return tx
           .update(roomBookings)
-          .set({ externalUrl })
+          .set(patch)
           .where(
             and(
-              eq(roomBookings.seriesId, input.series!),
+              eq(roomBookings.seriesId, series.id),
               eq(roomBookings.status, "booked"),
               gte(roomBookings.date, todayInTaipei())
             )
           )
           .returning({ id: roomBookings.id })
       })
-      return { series: input.series, externalUrl, bookings: bookings.length }
+      return { series: series.id, ...patch, bookings: bookings.length }
     }
     const [booking] = await db
       .select({
         requestedBy: roomBookings.requestedBy,
+        groupName: roomBookings.groupName,
         status: roomBookings.status,
         meetingId: roomBookings.meetingId,
       })
@@ -465,14 +503,28 @@ export const setMeetingExternalUrl = defineAction({
       .where(eq(roomBookings.id, input.booking!))
     if (!booking || booking.status !== "booked")
       throw new Error("找不到這筆預約，或已經取消")
-    if (booking.requestedBy !== actor.userId)
-      throw new Error("只能改自己的預約")
-    if (booking.meetingId) throw new Error("週一 Lab Meeting 不能設外部連結")
-    await db
+    if (booking.meetingId)
+      throw new Error("週一 Lab Meeting 請到 /meetings 由報告人或管理員改")
+    if (
+      !(await mayEdit(actor.userId, {
+        createdBy: booking.requestedBy,
+        groupName: booking.groupName,
+      }))
+    )
+      throw new Error("只有發起人和專案群組的成員能編輯")
+    const [updated] = await db
       .update(roomBookings)
-      .set({ externalUrl })
-      .where(eq(roomBookings.id, input.booking!))
-    return { booking: input.booking, externalUrl, bookings: 1 }
+      .set(patch)
+      // A cancel since the read above leaves the row alone.
+      .where(
+        and(
+          eq(roomBookings.id, input.booking!),
+          eq(roomBookings.status, "booked")
+        )
+      )
+      .returning({ id: roomBookings.id })
+    if (!updated) throw new Error("這筆預約剛被取消")
+    return { booking: input.booking, ...patch, bookings: 1 }
   },
 })
 

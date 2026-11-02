@@ -8546,7 +8546,7 @@
   {
     "name": "list_standing_meetings",
     "title": "固定會議",
-    "description": "Every standing meeting on /meetings: title, weekday (0 Sunday), start time, duration, every week or every other week (anchorDate is a day it meets on, fixing which weeks), attendees, whether the advisor is invited, whether it is active, who made it, and its next occurrence with the room already held for it (booked false until the daily run books it, 7 days ahead). Every member sees every series; only its creator can pause or delete it.",
+    "description": "Every standing meeting on /meetings: title, weekday (0 Sunday), start time, duration, every week or every other week (anchorDate is a day it meets on, fixing which weeks), attendees, whether the advisor is invited, whether it is active, who made it, and its next occurrence with the room already held for it (booked false until the daily run books it, 7 days ahead). Every member sees every series; only its creator can pause or delete it, and its creator or any member of its project group can edit its external link and agenda with update_meeting.",
     "kind": "query",
     "app": "meetings",
     "hash": "4278c9feb05c4e04",
@@ -10532,107 +10532,6 @@
     }
   },
   {
-    "name": "set_meeting_external_url",
-    "title": "設定外部會議連結",
-    "description": "Sets or clears (external_url null) the link of the meeting people really join, such as another company's Teams, on one of the member's own bookings (booking, an id from list_meetings) or standing meetings (series, an id from list_standing_meetings; its booked occurrences from today on change too). Invites mailed from then on lead with that link and keep the meet room as the internal record. Mails nothing: invites already sent keep their old links. Not for the Monday lab meeting.",
-    "kind": "mutation",
-    "app": "meetings",
-    "hash": "e0faa55128b5b361",
-    "input": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "properties": {
-        "booking": {
-          "format": "uuid",
-          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
-          "type": "string"
-        },
-        "external_url": {
-          "anyOf": [
-            {
-              "maxLength": 2000,
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "series": {
-          "format": "uuid",
-          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
-          "type": "string"
-        }
-      },
-      "required": [
-        "external_url"
-      ],
-      "type": "object"
-    },
-    "output": {
-      "anyOf": [
-        {
-          "additionalProperties": false,
-          "properties": {
-            "booking": {
-              "type": "null"
-            },
-            "bookings": {
-              "type": "number"
-            },
-            "externalUrl": {
-              "anyOf": [
-                {
-                  "type": "null"
-                },
-                {
-                  "type": "string"
-                }
-              ]
-            },
-            "series": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "series",
-            "externalUrl",
-            "bookings"
-          ],
-          "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "properties": {
-            "booking": {
-              "type": "string"
-            },
-            "bookings": {
-              "type": "number"
-            },
-            "externalUrl": {
-              "anyOf": [
-                {
-                  "type": "null"
-                },
-                {
-                  "type": "string"
-                }
-              ]
-            },
-            "series": {
-              "type": "null"
-            }
-          },
-          "required": [
-            "externalUrl",
-            "bookings"
-          ],
-          "type": "object"
-        }
-      ]
-    }
-  },
-  {
     "name": "set_my_avatar",
     "title": "設定我的頭像",
     "description": "Sets the signed-in member's avatar from base64 png, jpg or webp (up to 5 MB). The portal crops it to a centred square and stores it again as WebP without EXIF; every signed-in lab member can see it.",
@@ -11459,6 +11358,127 @@
         "date"
       ],
       "type": "object"
+    }
+  },
+  {
+    "name": "update_meeting",
+    "title": "編輯會議",
+    "description": "Edits a booking (booking, an id from list_meetings) or a standing meeting (series, an id from list_standing_meetings; its booked occurrences from today on change too): external_url, the meeting people really join when it is someone else's, such as another company's Teams (https, null clears it), and agenda (null clears it). A key left out stays as it is. Its creator or any member of its project group may edit it. Mails nothing: invites already sent keep their old links; meet reads the agenda when the room opens. Not for the Monday lab meeting.",
+    "kind": "mutation",
+    "app": "meetings",
+    "hash": "ae564a3661fdf436",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "agenda": {
+          "anyOf": [
+            {
+              "maxLength": 2000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "booking": {
+          "format": "uuid",
+          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+          "type": "string"
+        },
+        "external_url": {
+          "anyOf": [
+            {
+              "maxLength": 2000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "series": {
+          "format": "uuid",
+          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "output": {
+      "anyOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "agenda": {
+              "anyOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            },
+            "booking": {
+              "type": "string"
+            },
+            "bookings": {
+              "type": "number"
+            },
+            "externalUrl": {
+              "anyOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "required": [
+            "bookings"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "agenda": {
+              "anyOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            },
+            "bookings": {
+              "type": "number"
+            },
+            "externalUrl": {
+              "anyOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            },
+            "series": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "bookings",
+            "series"
+          ],
+          "type": "object"
+        }
+      ]
     }
   },
   {
