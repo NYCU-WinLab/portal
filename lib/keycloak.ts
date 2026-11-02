@@ -171,14 +171,13 @@ export async function projectGroups(): Promise<ProjectGroup[]> {
           email?: string
           firstName?: string
           lastName?: string
+          attributes?: Record<string, string[]>
         }[]
       >(`/groups/${group.id}/members?max=1000&briefRepresentation=false`)
       const members: ProjectGroup["members"] = []
       const unmailable: string[] = []
       for (const person of people) {
-        const name =
-          [person.firstName, person.lastName].filter(Boolean).join(" ") ||
-          person.username
+        const name = displayName(person)
         if (person.email)
           members.push({ name, email: person.email, username: person.username })
         else unmailable.push(name)
@@ -228,6 +227,7 @@ export async function labCohorts() {
             email?: string
             firstName?: string
             lastName?: string
+            attributes?: Record<string, string[]>
           }[]
         >(`/groups/${group.id}/members?max=1000&briefRepresentation=false`)
         return {
@@ -235,8 +235,7 @@ export async function labCohorts() {
           members: people.map((p): KeycloakGroupMember => ({
             id: p.id,
             email: p.email ?? null,
-            name:
-              [p.firstName, p.lastName].filter(Boolean).join(" ") || p.username,
+            name: displayName(p),
             username: p.username,
           })),
         }
@@ -317,4 +316,18 @@ export async function realmAccounts(): Promise<RealmAccount[]> {
     }))
   accounts = { list, at: Date.now() }
   return list
+}
+
+/** The name members see across the portal: the Chinese name when set. */
+function displayName(person: {
+  username: string
+  firstName?: string
+  lastName?: string
+  attributes?: Record<string, string[]>
+}) {
+  return (
+    person.attributes?.chinese_name?.[0]?.trim() ||
+    [person.firstName, person.lastName].filter(Boolean).join(" ") ||
+    person.username
+  )
 }
