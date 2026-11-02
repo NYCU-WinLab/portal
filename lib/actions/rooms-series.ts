@@ -35,6 +35,7 @@ import {
   composeTopic,
   deliverablesOf,
   epicIid,
+  externalMeetingUrl,
   mergeAttendees,
   topicPrefix,
 } from "@/lib/rooms/meeting"
@@ -106,6 +107,7 @@ export const listStandingMeetings = defineAction({
           includeAdvisor: series.includeAdvisor,
           groupName: series.groupName,
           agenda: series.agenda,
+          externalUrl: series.externalUrl,
           active: series.active,
           createdBy: series.createdBy,
           createdByName,
@@ -244,6 +246,7 @@ async function bookOccurrence(
         attendees,
         organizer: owner,
         online: series.online,
+        externalUrl: series.externalUrl,
         meetingPrefix: series.meetingPrefix,
         groupName: series.groupName,
         agenda: series.agenda,
@@ -299,6 +302,7 @@ export const standingMeetingInput = z.object({
   invite_group_members: z.boolean().default(true),
   include_advisor: z.boolean(),
   agenda: z.string().trim().max(2000).nullish(),
+  external_url: z.string().trim().max(2000).nullish(),
   epic: z.string().trim().min(1).nullish(),
 })
 
@@ -366,6 +370,7 @@ export async function createStandingMeeting(
       meetingPrefix: prefix,
       groupName: group,
       agenda: input.agenda || null,
+      externalUrl: externalMeetingUrl(input.external_url),
       issueRefs,
       deliverables,
       createdBy: actorId,
@@ -409,6 +414,65 @@ export const setStandingMeetingActive = defineAction({
     await ownSeries(actor.userId, id)
     await db.update(roomSeries).set({ active }).where(eq(roomSeries.id, id))
     return { id, active }
+  },
+})
+
+export const setMeetingExternalUrl = defineAction({
+  name: "set_meeting_external_url",
+  title: "設定外部會議連結",
+  description:
+    "Sets or clears (external_url null) the link of the meeting people really join, such as another company's Teams, on one of the member's own bookings (booking, an id from list_meetings) or standing meetings (series, an id from list_standing_meetings; its booked occurrences from today on change too). Invites mailed from then on lead with that link and keep the meet room as the internal record. Mails nothing: invites already sent keep their old links. Not for the Monday lab meeting.",
+  kind: "mutation",
+  input: z
+    .object({
+      booking: z.uuid().optional(),
+      series: z.uuid().optional(),
+      external_url: z.string().trim().max(2000).nullable(),
+    })
+    .refine((v) => Boolean(v.booking) !== Boolean(v.series), {
+      message: "booking 和 series 要剛好給一個",
+    }),
+  run: async (actor, input) => {
+    const externalUrl = externalMeetingUrl(input.external_url)
+    if (input.series) {
+      await ownSeries(actor.userId, input.series)
+      const bookings = await db.transaction(async (tx) => {
+        await tx
+          .update(roomSeries)
+          .set({ externalUrl })
+          .where(eq(roomSeries.id, input.series!))
+        return tx
+          .update(roomBookings)
+          .set({ externalUrl })
+          .where(
+            and(
+              eq(roomBookings.seriesId, input.series!),
+              eq(roomBookings.status, "booked"),
+              gte(roomBookings.date, todayInTaipei())
+            )
+          )
+          .returning({ id: roomBookings.id })
+      })
+      return { series: input.series, externalUrl, bookings: bookings.length }
+    }
+    const [booking] = await db
+      .select({
+        requestedBy: roomBookings.requestedBy,
+        status: roomBookings.status,
+        meetingId: roomBookings.meetingId,
+      })
+      .from(roomBookings)
+      .where(eq(roomBookings.id, input.booking!))
+    if (!booking || booking.status !== "booked")
+      throw new Error("找不到這筆預約，或已經取消")
+    if (booking.requestedBy !== actor.userId)
+      throw new Error("只能改自己的預約")
+    if (booking.meetingId) throw new Error("週一 Lab Meeting 不能設外部連結")
+    await db
+      .update(roomBookings)
+      .set({ externalUrl })
+      .where(eq(roomBookings.id, input.booking!))
+    return { booking: input.booking, externalUrl, bookings: 1 }
   },
 })
 
