@@ -71,16 +71,10 @@ export default async function ApprovePage() {
         <Focus>
           <FocusLabel>等你簽</FocusLabel>
           <FocusTitle>
-            {toSign.length ? (
-              <>
-                <FocusHighlight>
-                  <NumberTicker value={toSign.length} />
-                </FocusHighlight>{" "}
-                份文件
-              </>
-            ) : (
-              "沒有"
-            )}
+            <FocusHighlight>
+              <NumberTicker value={toSign.length} />
+            </FocusHighlight>{" "}
+            份文件
           </FocusTitle>
         </Focus>
         {toSign.length > 0 && (

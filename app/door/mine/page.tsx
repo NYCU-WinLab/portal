@@ -1,5 +1,12 @@
 import Link from "next/link"
 
+import {
+  Focus,
+  FocusHighlight,
+  FocusLabel,
+  FocusTitle,
+  FocusMeta,
+} from "@/components/focus"
 import { EmptyState } from "@/components/empty-state"
 import { PageHeader, SectionHeader } from "@/components/page-header"
 import { PortalShell } from "@/components/portal-shell"
@@ -90,6 +97,21 @@ export default async function MyDoorPage({
       <div className="flex flex-col gap-12">
         <DoorTabs actor={actor} tabs={recordTabs} current="/door/mine" />
         <PageHeader title="我的紀錄" />
+        {!before && (
+          <Focus>
+            <FocusLabel>上次</FocusLabel>
+            <FocusTitle>
+              {events[0] ? (
+                <FocusHighlight>{time.format(events[0].at)}</FocusHighlight>
+              ) : (
+                "還沒有紀錄"
+              )}
+            </FocusTitle>
+            <FocusMeta>
+              <span>{cards.length} 張門禁卡</span>
+            </FocusMeta>
+          </Focus>
+        )}
         {!before && (
           <section className="flex flex-col gap-2">
             <SectionHeader title="門禁卡" />

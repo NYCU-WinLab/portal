@@ -1,5 +1,12 @@
 import { notFound } from "next/navigation"
 
+import {
+  Focus,
+  FocusHighlight,
+  FocusLabel,
+  FocusTitle,
+  FocusMeta,
+} from "@/components/focus"
 import { FieldList, FieldRow } from "@/components/field-list"
 import { PageHeader, SectionHeader } from "@/components/page-header"
 import { PortalShell } from "@/components/portal-shell"
@@ -67,6 +74,17 @@ export default async function DeveloperAppPage({
             />
           }
         />
+        <Focus>
+          <FocusLabel>{app.enabled ? "啟用中" : "已停用"}</FocusLabel>
+          <FocusTitle>
+            <FocusHighlight>{activeGrants}</FocusHighlight> 人授權
+          </FocusTitle>
+          {pending && (
+            <FocusMeta>
+              <span>權限申請審核中</span>
+            </FocusMeta>
+          )}
+        </Focus>
         <FieldList>
           <FieldRow label="Client ID">
             <span className="font-mono break-all select-all">{app.id}</span>

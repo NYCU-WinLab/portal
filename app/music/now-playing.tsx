@@ -19,6 +19,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import type { nowPlaying } from "@/lib/actions/music"
+import { cn } from "@/lib/utils"
 
 import { autoplay, pause, skip, volume } from "./actions"
 import { Lyrics } from "./lyrics"
@@ -55,7 +56,12 @@ export function NowPlaying({ playing }: { playing: Playing }) {
       <div className="flex items-center gap-6">
         <Cover src={current?.track.thumbnail ?? null} className="size-24" />
         <div className="flex min-w-0 flex-col gap-1">
-          <h1 className="truncate text-title font-medium">
+          <h1
+            className={cn(
+              "truncate text-title font-medium",
+              current && "text-primary"
+            )}
+          >
             {current?.track.title ?? "還沒有歌，點一首吧"}
           </h1>
           <p className="truncate text-muted-foreground">

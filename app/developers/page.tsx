@@ -1,5 +1,12 @@
 import Link from "next/link"
 
+import {
+  Focus,
+  FocusHighlight,
+  FocusLabel,
+  FocusTitle,
+  FocusMeta,
+} from "@/components/focus"
 import { EmptyState } from "@/components/empty-state"
 import { PageHeader, SectionHeader } from "@/components/page-header"
 import { PortalShell } from "@/components/portal-shell"
@@ -31,6 +38,15 @@ export default async function DevelopersPage() {
     <PortalShell page={developersPage} nav={developersNav}>
       <div className="flex flex-col gap-12">
         <PageHeader title="應用程式" actions={<RegisterApp />} />
+        <Focus>
+          <FocusLabel>你註冊了</FocusLabel>
+          <FocusTitle>
+            <FocusHighlight>{apps.length}</FocusHighlight> 個應用程式
+          </FocusTitle>
+          <FocusMeta>
+            <span>授權給 {grants.length} 個應用程式</span>
+          </FocusMeta>
+        </Focus>
         <section className="flex flex-col gap-2">
           <SectionHeader title="你註冊的" />
           {apps.length === 0 ? (

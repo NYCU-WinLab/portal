@@ -41,16 +41,10 @@ export default async function LeavePage() {
         <Focus>
           <FocusLabel>{dateLabel(nextMonday)} 的實驗室會議</FocusLabel>
           <FocusTitle>
-            {away.length === 0 ? (
-              "沒有人請假"
-            ) : (
-              <>
-                <FocusHighlight>
-                  <NumberTicker value={away.length} />
-                </FocusHighlight>{" "}
-                人請假
-              </>
-            )}
+            <FocusHighlight>
+              <NumberTicker value={away.length} />
+            </FocusHighlight>{" "}
+            人請假
           </FocusTitle>
           {away.length > 0 && (
             <FocusMeta>

@@ -1,3 +1,10 @@
+import {
+  Focus,
+  FocusHighlight,
+  FocusLabel,
+  FocusTitle,
+  FocusMeta,
+} from "@/components/focus"
 import { PageHeader, SectionHeader } from "@/components/page-header"
 import { PortalShell } from "@/components/portal-shell"
 import { listAdmins, listMembers } from "@/lib/actions/admins"
@@ -19,6 +26,12 @@ export default async function AdminsPage() {
     isAdmin(actor, "portal"),
   ])
   const members = canEdit ? await runAction(listMembers, actor, {}) : []
+  const myApps = apps
+    .filter((entry) => entry.admins.some((a) => a.userId === actor.userId))
+    .map((entry) => entry.label)
+  const adminCount = new Set(
+    apps.flatMap((entry) => entry.admins.map((a) => a.userId))
+  ).size
 
   return (
     <PortalShell page={adminsPage} nav={adminsNav}>
@@ -37,6 +50,19 @@ export default async function AdminsPage() {
             )
           }
         />
+        <Focus>
+          <FocusLabel>你管理</FocusLabel>
+          <FocusTitle>
+            {myApps.length > 0 ? (
+              <FocusHighlight>{myApps.join("、")}</FocusHighlight>
+            ) : (
+              "你不是管理員"
+            )}
+          </FocusTitle>
+          <FocusMeta>
+            <span>共 {adminCount} 位管理員</span>
+          </FocusMeta>
+        </Focus>
         {apps.map(({ app, label, admins }) => (
           <section key={app} className="flex flex-col gap-2">
             <SectionHeader title={label} />

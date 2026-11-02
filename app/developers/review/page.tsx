@@ -1,3 +1,9 @@
+import {
+  Focus,
+  FocusHighlight,
+  FocusLabel,
+  FocusTitle,
+} from "@/components/focus"
 import { EmptyState } from "@/components/empty-state"
 import { PageHeader } from "@/components/page-header"
 import { PortalShell } from "@/components/portal-shell"
@@ -21,6 +27,12 @@ export default async function ReviewPage() {
     <PortalShell page={developersPage} nav={developersNav}>
       <div className="flex flex-col gap-12">
         <PageHeader title="審核資料權限" />
+        <Focus>
+          <FocusLabel>資料權限申請</FocusLabel>
+          <FocusTitle>
+            <FocusHighlight>{requests.length}</FocusHighlight> 件待審
+          </FocusTitle>
+        </Focus>
         {requests.length === 0 ? (
           <EmptyState noun="待審申請" />
         ) : (
