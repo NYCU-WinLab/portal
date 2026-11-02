@@ -1,6 +1,7 @@
 "use client"
 
 import { PencilIcon } from "lucide-react"
+import * as React from "react"
 import { toast } from "sonner"
 
 import { FormDialog, FormField } from "@/components/form-dialog"
@@ -23,14 +24,20 @@ export function EditMeeting({
   externalUrl: string | null
   agenda: string | null
 }) {
+  // What the form showed when it opened: a live refresh may change the
+  // props while it is open, and only the member's own edits are sent.
+  const opened = React.useRef({ externalUrl, agenda })
+
   async function save(data: FormData) {
     // Only what changed: a series edit writes each field to every booked
     // week, and a link set on one week by hand should survive an agenda edit.
     const link = String(data.get("external_url") ?? "").trim() || null
     const text = String(data.get("agenda") ?? "").trim() || null
     const changes = {
-      ...(link !== externalUrl ? { external_url: link } : {}),
-      ...(text !== (agenda?.trim() || null) ? { agenda: text } : {}),
+      ...(link !== opened.current.externalUrl ? { external_url: link } : {}),
+      ...(text !== (opened.current.agenda?.trim() || null)
+        ? { agenda: text }
+        : {}),
     }
     if (!Object.keys(changes).length) return
     const { error } = await updateMeetingAction({ ...target, ...changes })
@@ -44,7 +51,14 @@ export function EditMeeting({
   return (
     <FormDialog
       trigger={
-        <Button variant="ghost" size="icon" aria-label="編輯">
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label="編輯"
+          onClick={() => {
+            opened.current = { externalUrl, agenda }
+          }}
+        >
           <PencilIcon />
         </Button>
       }
