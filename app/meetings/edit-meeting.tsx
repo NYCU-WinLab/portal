@@ -24,11 +24,16 @@ export function EditMeeting({
   agenda: string | null
 }) {
   async function save(data: FormData) {
-    const { error } = await updateMeetingAction({
-      ...target,
-      external_url: String(data.get("external_url") ?? "") || null,
-      agenda: String(data.get("agenda") ?? "") || null,
-    })
+    // Only what changed: a series edit writes each field to every booked
+    // week, and a link set on one week by hand should survive an agenda edit.
+    const link = String(data.get("external_url") ?? "").trim() || null
+    const text = String(data.get("agenda") ?? "").trim() || null
+    const changes = {
+      ...(link !== externalUrl ? { external_url: link } : {}),
+      ...(text !== (agenda?.trim() || null) ? { agenda: text } : {}),
+    }
+    if (!Object.keys(changes).length) return
+    const { error } = await updateMeetingAction({ ...target, ...changes })
     if (error) {
       toast.error(error)
       throw new Error(error)

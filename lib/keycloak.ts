@@ -149,6 +149,17 @@ type RawGroup = {
   attributes?: Record<string, string[]>
 }
 
+/**
+ * Whether a member (by Keycloak id, the OIDC sub) is in a project group
+ * right now: read live, never cached, for deciding a write.
+ */
+export async function inProjectGroup(sub: string, groupName: string) {
+  const groups = await adminGet<{ path?: string }[]>(
+    `/users/${encodeURIComponent(sub)}/groups?max=500&briefRepresentation=true`
+  )
+  return groups.some((g) => g.path === `/winlab-projects/${groupName}`)
+}
+
 let projects: { groups: ProjectGroup[]; at: number } | null = null
 
 /**

@@ -24,9 +24,15 @@ import {
 } from "@/lib/actions/rooms-meetings"
 import { mailBody } from "@/lib/mail-body"
 import { db } from "@/lib/db"
-import { roomBookings, roomDailyRuns, roomSeries, user } from "@/lib/db/schema"
+import {
+  account,
+  roomBookings,
+  roomDailyRuns,
+  roomSeries,
+  user,
+} from "@/lib/db/schema"
 import { epicIssues, getEpic } from "@/lib/gitlab"
-import { projectGroups } from "@/lib/keycloak"
+import { inProjectGroup, projectGroups } from "@/lib/keycloak"
 import { bookingConfigured } from "@/lib/meetingroom"
 import type { Slot } from "@/lib/rooms/availability"
 import {
@@ -69,7 +75,7 @@ export const listStandingMeetings = defineAction({
   name: "list_standing_meetings",
   title: "固定會議",
   description:
-    "Every standing meeting on /meetings: title, weekday (0 Sunday), start time, duration, every week or every other week (anchorDate is a day it meets on, fixing which weeks), attendees, whether the advisor is invited, whether it is active, who made it, and its next occurrence with the room already held for it (booked false until the daily run books it, 7 days ahead). Every member sees every series; only its creator can pause or delete it.",
+    "Every standing meeting on /meetings: title, weekday (0 Sunday), start time, duration, every week or every other week (anchorDate is a day it meets on, fixing which weeks), attendees, whether the advisor is invited, whether it is active, who made it, and its next occurrence with the room already held for it (booked false until the daily run books it, 7 days ahead). Every member sees every series; only its creator can pause or delete it, and its creator or any member of its project group can edit its external link and agenda with update_meeting.",
   kind: "query",
   input: z.object({}),
   run: async () => {
@@ -419,7 +425,9 @@ export const setStandingMeetingActive = defineAction({
 
 /**
  * Whether the member may edit a meeting: its creator, or a member of the
- * project group it files under.
+ * project group it files under. Membership is read live by Keycloak id,
+ * not from the cached group list or a username, so someone just removed
+ * from the group cannot edit; Keycloak not answering refuses the edit.
  */
 async function mayEdit(
   actorId: string,
@@ -427,15 +435,12 @@ async function mayEdit(
 ) {
   if (meeting.createdBy === actorId) return true
   if (!meeting.groupName) return false
-  const [me] = await db
-    .select({ username: user.username })
-    .from(user)
-    .where(eq(user.id, actorId))
-  if (!me?.username) return false
-  const group = (await projectGroups()).find(
-    (g) => g.name === meeting.groupName
-  )
-  return Boolean(group?.members.some((m) => m.username === me.username))
+  const [link] = await db
+    .select({ sub: account.accountId })
+    .from(account)
+    .where(and(eq(account.userId, actorId), eq(account.providerId, "keycloak")))
+  if (!link) return false
+  return inProjectGroup(link.sub, meeting.groupName)
 }
 
 export const updateMeeting = defineAction({
@@ -507,10 +512,18 @@ export const updateMeeting = defineAction({
       }))
     )
       throw new Error("只有發起人和專案群組的成員能編輯")
-    await db
+    const [updated] = await db
       .update(roomBookings)
       .set(patch)
-      .where(eq(roomBookings.id, input.booking!))
+      // A cancel since the read above leaves the row alone.
+      .where(
+        and(
+          eq(roomBookings.id, input.booking!),
+          eq(roomBookings.status, "booked")
+        )
+      )
+      .returning({ id: roomBookings.id })
+    if (!updated) throw new Error("這筆預約剛被取消")
     return { booking: input.booking, ...patch, bookings: 1 }
   },
 })
