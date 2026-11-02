@@ -1,3 +1,10 @@
+import {
+  Focus,
+  FocusHighlight,
+  FocusLabel,
+  FocusTitle,
+  FocusMeta,
+} from "@/components/focus"
 import { PageHeader } from "@/components/page-header"
 import { PortalShell } from "@/components/portal-shell"
 import { isAdmin } from "@/lib/actions/authz"
@@ -28,6 +35,18 @@ export default async function PapersPage() {
           title="論文"
           actions={admin && <PapersAdmin tags={tags} />}
         />
+        <Focus>
+          <FocusLabel>論文</FocusLabel>
+          <FocusTitle>
+            <FocusHighlight>
+              {papers.filter((p) => !p.uses.some((use) => use.past)).length}
+            </FocusHighlight>{" "}
+            篇還沒報告
+          </FocusTitle>
+          <FocusMeta>
+            <span>共 {papers.length} 篇</span>
+          </FocusMeta>
+        </Focus>
         <PaperList
           papers={papers}
           tags={tags}

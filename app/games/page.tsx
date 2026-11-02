@@ -1,5 +1,11 @@
 import Link from "next/link"
 
+import {
+  Focus,
+  FocusHighlight,
+  FocusLabel,
+  FocusTitle,
+} from "@/components/focus"
 import { PageHeader } from "@/components/page-header"
 import { PortalShell } from "@/components/portal-shell"
 import { requireActor } from "@/lib/auth/session"
@@ -15,6 +21,12 @@ export default async function GamesPage() {
     <PortalShell page={gamesPage}>
       <div className="flex flex-col gap-12">
         <PageHeader title="小遊戲" />
+        <Focus>
+          <FocusLabel>可以玩</FocusLabel>
+          <FocusTitle>
+            <FocusHighlight>{GAME_ORDER.length}</FocusHighlight> 個小遊戲
+          </FocusTitle>
+        </Focus>
         <ul className="flex stagger-rise flex-col">
           {GAME_ORDER.map((slug) => (
             <li key={slug} className="border-b border-border">

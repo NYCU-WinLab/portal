@@ -1,3 +1,9 @@
+import {
+  Focus,
+  FocusHighlight,
+  FocusLabel,
+  FocusTitle,
+} from "@/components/focus"
 import { PageHeader } from "@/components/page-header"
 import { PortalShell } from "@/components/portal-shell"
 import { requireAdminPage } from "@/lib/actions/authz"
@@ -19,6 +25,12 @@ export default async function IpUsersPage() {
     <PortalShell page={adminsPage} nav={adminsNav}>
       <div className="flex flex-col gap-8">
         <PageHeader title="IP 使用者" />
+        <Focus>
+          <FocusLabel>登記中</FocusLabel>
+          <FocusTitle>
+            <FocusHighlight>{entries.length}</FocusHighlight> 個 IP
+          </FocusTitle>
+        </Focus>
         {settings ? (
           <p className="text-muted-foreground">
             {settings.subnet}，閘道 {settings.gateway}，DNS{" "}

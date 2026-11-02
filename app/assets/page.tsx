@@ -1,3 +1,9 @@
+import {
+  Focus,
+  FocusHighlight,
+  FocusLabel,
+  FocusTitle,
+} from "@/components/focus"
 import { PageHeader } from "@/components/page-header"
 import { PortalShell } from "@/components/portal-shell"
 import { listAssets } from "@/lib/actions/assets"
@@ -30,7 +36,15 @@ export default async function AssetsPage() {
             財產系統帳號沒有設定
           </p>
         ) : (
-          <AssetList assets={result.assets} />
+          <>
+            <Focus>
+              <FocusLabel>實驗室財產</FocusLabel>
+              <FocusTitle>
+                <FocusHighlight>{result.assets.length}</FocusHighlight> 件
+              </FocusTitle>
+            </Focus>
+            <AssetList assets={result.assets} />
+          </>
         )}
       </div>
     </PortalShell>

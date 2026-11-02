@@ -1,3 +1,10 @@
+import {
+  Focus,
+  FocusHighlight,
+  FocusLabel,
+  FocusTitle,
+  FocusMeta,
+} from "@/components/focus"
 import { EmptyState } from "@/components/empty-state"
 import { PageHeader } from "@/components/page-header"
 import { PortalShell } from "@/components/portal-shell"
@@ -29,6 +36,21 @@ export default async function Played() {
     <PortalShell page={musicPage} nav={musicNav}>
       <div className="flex flex-col gap-8">
         <PageHeader title="播過的歌" />
+        <Focus>
+          <FocusLabel>上一首</FocusLabel>
+          <FocusTitle>
+            {items[0] ? (
+              <FocusHighlight>{items[0].track.title}</FocusHighlight>
+            ) : (
+              "還沒播過歌"
+            )}
+          </FocusTitle>
+          {items[0] && (
+            <FocusMeta>
+              <span>{addedLine(items[0])}</span>
+            </FocusMeta>
+          )}
+        </Focus>
         {items.length ? (
           <ol className="flex flex-col">
             {items.map((item) => {

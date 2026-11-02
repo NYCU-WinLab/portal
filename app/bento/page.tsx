@@ -11,7 +11,6 @@ import {
 } from "@/components/focus"
 import { PageHeader, SectionHeader } from "@/components/page-header"
 import { PortalShell } from "@/components/portal-shell"
-import { NumberTicker } from "@/components/ui/number-ticker"
 import { listMembers } from "@/lib/actions/admins"
 import { isAdmin } from "@/lib/actions/authz"
 import { getBentoOrder, listBentoOrders } from "@/lib/actions/bento"
@@ -101,19 +100,13 @@ export default async function BentoPage() {
                     prefetch
                     className="underline-offset-4 outline-none group-hover/focus:underline after:absolute after:inset-0 focus-visible:underline"
                   >
-                    {focus.restaurant.name}
+                    <FocusHighlight>{focus.restaurant.name}</FocusHighlight>
                   </Link>
                 </FocusTitle>
                 <FocusMeta>
                   <span>
-                    <FocusHighlight>
-                      <NumberTicker value={focus.totals.people} />
-                    </FocusHighlight>{" "}
-                    人點了{" "}
-                    <FocusHighlight>
-                      <NumberTicker value={focus.totals.dishes} />
-                    </FocusHighlight>{" "}
-                    份，共 {ntd(focus.totals.total)}
+                    {focus.totals.people} 人點了 {focus.totals.dishes} 份，共{" "}
+                    {ntd(focus.totals.total)}
                   </span>
                   {focus.people.length > 0 && (
                     <AvatarStack
@@ -153,7 +146,9 @@ export default async function BentoPage() {
         ) : (
           <Focus>
             <FocusLabel>今天</FocusLabel>
-            <FocusTitle>還沒開單</FocusTitle>
+            <FocusTitle>
+              <FocusHighlight>還沒開單</FocusHighlight>
+            </FocusTitle>
           </Focus>
         )}
         {open.length > 1 && (

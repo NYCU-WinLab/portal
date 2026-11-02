@@ -1,5 +1,11 @@
 import { notFound } from "next/navigation"
 
+import {
+  Focus,
+  FocusHighlight,
+  FocusLabel,
+  FocusTitle,
+} from "@/components/focus"
 import { PageHeader, SectionHeader } from "@/components/page-header"
 import { PortalShell } from "@/components/portal-shell"
 import { listMembers } from "@/lib/actions/admins"
@@ -61,9 +67,12 @@ export default async function GroupPage({
           title={group.name}
           actions={<AddMembers groupId={group.id} />}
         />
-        <p className="text-muted-foreground">
-          {group.email}，{members.length} 人
-        </p>
+        <Focus>
+          <FocusLabel>{group.email}</FocusLabel>
+          <FocusTitle>
+            <FocusHighlight>{members.length}</FocusHighlight> 人
+          </FocusTitle>
+        </Focus>
         <section className="flex flex-col gap-2">
           <SectionHeader title="成員" />
           <ul className="flex stagger-rise flex-col">

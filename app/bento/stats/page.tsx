@@ -1,3 +1,10 @@
+import {
+  Focus,
+  FocusHighlight,
+  FocusLabel,
+  FocusTitle,
+  FocusMeta,
+} from "@/components/focus"
 import { EmptyState } from "@/components/empty-state"
 import { PageHeader } from "@/components/page-header"
 import { PortalShell } from "@/components/portal-shell"
@@ -15,11 +22,32 @@ export const dynamic = "force-dynamic"
 export default async function BentoStatsPage() {
   const actor = await requireActor("/bento/stats")
   const { members } = await runAction(getBentoStats, actor, {})
+  const me = members.find((member) => member.userId === actor.userId)
 
   return (
     <PortalShell page={bentoPage} nav={bentoNav}>
       <div className="flex flex-col gap-12">
         <PageHeader title="統計" />
+        <Focus>
+          <FocusLabel>你</FocusLabel>
+          <FocusTitle>
+            {me ? (
+              <>
+                吃了 <FocusHighlight>{me.dishes}</FocusHighlight> 份，共{" "}
+                {ntd(me.spent)}
+              </>
+            ) : (
+              "還沒點過便當"
+            )}
+          </FocusTitle>
+          {me?.favorite && (
+            <FocusMeta>
+              <span>
+                最常點 {me.favorite.name} × {me.favorite.count}
+              </span>
+            </FocusMeta>
+          )}
+        </Focus>
         {members.length === 0 ? (
           <EmptyState noun="點餐" />
         ) : (

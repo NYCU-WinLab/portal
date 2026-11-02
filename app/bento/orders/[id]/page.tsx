@@ -2,7 +2,13 @@ import { ChevronDown } from "lucide-react"
 import { notFound } from "next/navigation"
 
 import { EmptyState } from "@/components/empty-state"
-import { Focus, FocusLabel, FocusMeta, FocusTitle } from "@/components/focus"
+import {
+  Focus,
+  FocusHighlight,
+  FocusLabel,
+  FocusMeta,
+  FocusTitle,
+} from "@/components/focus"
 import { PageHeader, SectionHeader } from "@/components/page-header"
 import { PortalShell } from "@/components/portal-shell"
 import { listMembers } from "@/lib/actions/admins"
@@ -72,7 +78,13 @@ export default async function OrderPage({
             {open ? "開放點餐" : "已關單"}
           </FocusLabel>
           <FocusTitle>
-            {mine ? mine.lines.map(dishLabel).join("、") : "你還沒點"}
+            {mine ? (
+              <FocusHighlight>
+                {mine.lines.map(dishLabel).join("、")}
+              </FocusHighlight>
+            ) : (
+              "你還沒點"
+            )}
           </FocusTitle>
           {mine && (
             <FocusMeta>

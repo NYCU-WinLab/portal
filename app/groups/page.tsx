@@ -1,5 +1,11 @@
 import Link from "next/link"
 
+import {
+  Focus,
+  FocusHighlight,
+  FocusLabel,
+  FocusTitle,
+} from "@/components/focus"
 import { EmptyState } from "@/components/empty-state"
 import { PageHeader, SectionHeader } from "@/components/page-header"
 import { PortalShell } from "@/components/portal-shell"
@@ -28,6 +34,14 @@ export default async function GroupsPage() {
     <PortalShell page={groupsPage}>
       <div className="flex flex-col gap-12">
         <PageHeader title="群組信" />
+        {mine.status === "ok" && (
+          <Focus>
+            <FocusLabel>{mine.address}</FocusLabel>
+            <FocusTitle>
+              在 <FocusHighlight>{mine.data.length}</FocusHighlight> 個群組
+            </FocusTitle>
+          </Focus>
+        )}
         {mine.status === "unconfigured" ? (
           <p className="text-muted-foreground">Google 群組整合尚未設定</p>
         ) : (

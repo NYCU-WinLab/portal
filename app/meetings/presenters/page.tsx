@@ -1,3 +1,10 @@
+import {
+  Focus,
+  FocusHighlight,
+  FocusLabel,
+  FocusTitle,
+  FocusMeta,
+} from "@/components/focus"
 import { EmptyState } from "@/components/empty-state"
 import { PageHeader, SectionHeader } from "@/components/page-header"
 import { PortalShell } from "@/components/portal-shell"
@@ -39,6 +46,8 @@ export default async function PresentersPage() {
         runAction(listLabMeetingStats, actor, {}),
       ])
     : [[], { members: [] as MemberStats[] }]
+  const rotation = presenters.filter((row) => row.inRotation)
+  const myTurn = rotation.findIndex((row) => row.userId === actor.userId)
   const listed = new Set(presenters.map((row) => row.userId))
   const statsOf = new Map(stats.members.map((row) => [row.userId, row]))
   // Grouped by year in the programme (博三, 碩二), in turn order.
@@ -66,6 +75,21 @@ export default async function PresentersPage() {
             )
           }
         />
+        <Focus>
+          <FocusLabel>你</FocusLabel>
+          <FocusTitle>
+            {myTurn >= 0 ? (
+              <>
+                排第 <FocusHighlight>{myTurn + 1}</FocusHighlight> 位
+              </>
+            ) : (
+              "不在報告順序"
+            )}
+          </FocusTitle>
+          <FocusMeta>
+            <span>{rotation.length} 人輪流報告</span>
+          </FocusMeta>
+        </Focus>
         {presenters.length === 0 ? (
           <EmptyState noun="報告人" />
         ) : (

@@ -98,17 +98,11 @@ export default async function DoorLogPage({
           <Focus>
             <FocusLabel>今天</FocusLabel>
             <FocusTitle>
-              {today.length === 0 ? (
-                "還沒有人開門"
-              ) : (
-                <>
-                  開了{" "}
-                  <FocusHighlight>
-                    <NumberTicker value={today.length} />
-                  </FocusHighlight>{" "}
-                  次門
-                </>
-              )}
+              開了{" "}
+              <FocusHighlight>
+                <NumberTicker value={today.length} />
+              </FocusHighlight>{" "}
+              次門
             </FocusTitle>
           </Focus>
         )}

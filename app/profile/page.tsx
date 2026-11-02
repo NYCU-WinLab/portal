@@ -1,3 +1,10 @@
+import {
+  Focus,
+  FocusHighlight,
+  FocusLabel,
+  FocusTitle,
+  FocusMeta,
+} from "@/components/focus"
 import { FieldList, FieldRow } from "@/components/field-list"
 import { PageHeader, SectionHeader } from "@/components/page-header"
 import { PortalShell } from "@/components/portal-shell"
@@ -73,6 +80,21 @@ export default async function ProfilePage() {
             </>
           }
         />
+        <Focus>
+          <FocusLabel>你</FocusLabel>
+          <FocusTitle>
+            <FocusHighlight>
+              {("error" in profile ? null : profile.chineseName) ?? "你"}
+            </FocusHighlight>
+          </FocusTitle>
+          {mine && (
+            <FocusMeta>
+              <span>
+                報告 {mine.presented} 次，提問 {mine.asked} 次
+              </span>
+            </FocusMeta>
+          )}
+        </Focus>
         {"error" in profile ? (
           <p className="text-muted-foreground">{profile.error}</p>
         ) : (

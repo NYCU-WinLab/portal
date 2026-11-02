@@ -1,3 +1,10 @@
+import {
+  Focus,
+  FocusHighlight,
+  FocusLabel,
+  FocusTitle,
+  FocusMeta,
+} from "@/components/focus"
 import { EmptyState } from "@/components/empty-state"
 import { ExpandRow } from "@/components/expand-row"
 import { PageHeader } from "@/components/page-header"
@@ -34,6 +41,20 @@ export default async function RestaurantsPage() {
     <PortalShell page={bentoPage} nav={bentoNav}>
       <div className="flex flex-col gap-12">
         <PageHeader title="餐廳" actions={admin && <AddRestaurant />} />
+        <Focus>
+          <FocusLabel>餐廳</FocusLabel>
+          <FocusTitle>
+            <FocusHighlight>
+              {restaurants.filter((r) => r.active).length}
+            </FocusHighlight>{" "}
+            家可以點
+          </FocusTitle>
+          {restaurants.some((r) => !r.active) && (
+            <FocusMeta>
+              <span>{restaurants.filter((r) => !r.active).length} 家停用</span>
+            </FocusMeta>
+          )}
+        </Focus>
         {restaurants.length === 0 ? (
           <EmptyState noun="餐廳" />
         ) : (

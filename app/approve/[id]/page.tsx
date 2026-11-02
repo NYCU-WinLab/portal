@@ -1,5 +1,12 @@
 import { notFound } from "next/navigation"
 
+import {
+  Focus,
+  FocusHighlight,
+  FocusLabel,
+  FocusTitle,
+  FocusMeta,
+} from "@/components/focus"
 import { PageHeader } from "@/components/page-header"
 import { PortalShell } from "@/components/portal-shell"
 import { listMembers } from "@/lib/actions/admins"
@@ -50,13 +57,30 @@ export default async function ApproveDocumentPage({
             />
           }
         />
-        <p className="text-muted-foreground">
-          {doc.creator} 建立
-          {doc.status !== "draft" &&
-            `，${signed}/${doc.signers.length} 人簽好：${doc.signers
-              .map((s) => `${s.name}${s.signedAt ? "（已簽）" : ""}`)
-              .join("、")}`}
-        </p>
+        <Focus>
+          <FocusLabel>{doc.creator} 建立</FocusLabel>
+          <FocusTitle>
+            {doc.status === "draft" ? (
+              "草稿，還沒送出"
+            ) : (
+              <>
+                <FocusHighlight>
+                  {signed}/{doc.signers.length}
+                </FocusHighlight>{" "}
+                人簽好
+              </>
+            )}
+          </FocusTitle>
+          {doc.status !== "draft" && (
+            <FocusMeta>
+              <span>
+                {doc.signers
+                  .map((s) => `${s.name}${s.signedAt ? "（已簽）" : ""}`)
+                  .join("、")}
+              </span>
+            </FocusMeta>
+          )}
+        </Focus>
         {editing ? (
           <FieldEditor
             id={doc.id}
