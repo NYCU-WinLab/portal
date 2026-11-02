@@ -35,6 +35,7 @@ export type MeetingValue = {
   includeAdvisor: boolean
   epic: string | null
   agenda: string
+  externalUrl: string
 }
 
 export const emptyMeeting: MeetingValue = {
@@ -45,6 +46,7 @@ export const emptyMeeting: MeetingValue = {
   includeAdvisor: true,
   epic: null,
   agenda: "",
+  externalUrl: "",
 }
 
 /** The value as book_meeting takes it. */
@@ -56,6 +58,7 @@ export const meetingInput = (value: MeetingValue) => ({
   include_advisor: value.includeAdvisor,
   epic: value.epic,
   agenda: value.agenda || null,
+  external_url: value.externalUrl || null,
 })
 
 const NO_GROUP = "none"
@@ -242,6 +245,16 @@ export function MeetingFields({
           {owes && <p className="text-muted-foreground">{owes}</p>}
         </div>
       )}
+      <FormField label="外部會議連結">
+        <Input
+          type="url"
+          inputMode="url"
+          placeholder="https://"
+          value={value.externalUrl}
+          maxLength={2000}
+          onChange={(event) => set({ externalUrl: event.target.value })}
+        />
+      </FormField>
       <FormField label="討論事項">
         <Textarea
           value={value.agenda}

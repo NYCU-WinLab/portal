@@ -34,6 +34,9 @@ export const roomSeries = pgTable(
     attendees: jsonb().$type<Attendee[]>().default([]).notNull(),
     includeAdvisor: boolean().default(false).notNull(),
     online: boolean().default(true).notNull(),
+    // Where the meeting really happens when it is someone else's (another
+    // company's Teams); the portal's own meeting then only records it.
+    externalUrl: text(),
     meetingPrefix: text(),
     groupName: text(),
     agenda: text(),
@@ -76,6 +79,8 @@ export const roomBookings = pgTable(
     title: text().notNull(),
     attendees: jsonb().$type<Attendee[]>().default([]).notNull(),
     online: boolean().default(true).notNull(),
+    // As on room_series: the meeting people join, when it is not ours.
+    externalUrl: text(),
     meetingPrefix: text(),
     groupName: text(),
     agenda: text(),

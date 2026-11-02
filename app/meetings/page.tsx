@@ -227,9 +227,19 @@ function BookingRow({
       }
     >
       <div className="flex flex-wrap items-center gap-x-6 gap-y-3 text-muted-foreground sm:pl-38">
+        {booking.externalUrl && (
+          <a
+            href={booking.externalUrl}
+            target="_blank"
+            rel="noreferrer"
+            className={link}
+          >
+            加入會議
+          </a>
+        )}
         {booking.meeting?.status === "success" && (
           <a href={`/rooms/join/${booking.id}`} className={link}>
-            加入會議
+            {booking.externalUrl ? "內部紀錄" : "加入會議"}
           </a>
         )}
         <span>
@@ -290,6 +300,16 @@ function SeriesRow({
           <AvatarStack people={crowd(series.attendees, people)} />
         )}
         {series.includeAdvisor && <span>邀請老師</span>}
+        {series.externalUrl && (
+          <a
+            href={series.externalUrl}
+            target="_blank"
+            rel="noreferrer"
+            className={link}
+          >
+            外部會議
+          </a>
+        )}
         {series.agenda && (
           <span className="w-full whitespace-pre-wrap">{series.agenda}</span>
         )}

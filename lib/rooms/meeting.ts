@@ -37,6 +37,30 @@ export function splitTopic(topic: string) {
     : { prefix: null, title: topic }
 }
 
+/** An external meeting link as members paste it: https only, or null. */
+export function externalMeetingUrl(value: string | null | undefined) {
+  const raw = value?.trim()
+  if (!raw) return null
+  let url: URL
+  try {
+    url = new URL(raw)
+  } catch {
+    throw new Error("外部會議連結不是網址")
+  }
+  if (url.protocol !== "https:") throw new Error("外部會議連結要是 https")
+  return url.toString()
+}
+
+/** What an external link is, as an invite names it. */
+export function externalMeetingLabel(url: string) {
+  const host = new URL(url).hostname
+  if (/(^|\.)teams\.(microsoft|live)\.com$/.test(host)) return "外部 Teams"
+  if (/(^|\.)zoom\.us$/.test(host)) return "外部 Zoom"
+  if (host === "meet.google.com") return "外部 Google Meet"
+  if (/(^|\.)webex\.com$/.test(host)) return "外部 Webex"
+  return "外部會議"
+}
+
 /** The lab's advisor; project groups list students only. */
 export const ADVISOR_USERNAME = "cctseng"
 
@@ -187,6 +211,8 @@ export function calendarInvite(event: {
   /** Asks each attendee to answer; off for a mailing list. */
   rsvp?: boolean
   joinUrl: string | null
+  /** Where the meeting really happens; joinUrl then only records it. */
+  externalUrl?: string | null
 }) {
   const lines = [
     "BEGIN:VCALENDAR",
@@ -208,12 +234,22 @@ export function calendarInvite(event: {
         `ATTENDEE;CN=${icsParam(a.name)};ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=${event.rsvp === false ? "FALSE" : "TRUE"}:mailto:${a.email}`
     ),
     `STATUS:${event.method === "CANCEL" ? "CANCELLED" : "CONFIRMED"}`,
-    ...(event.joinUrl
+    ...(event.externalUrl
       ? [
-          `DESCRIPTION:${icsText(`線上會議：${event.joinUrl}`)}`,
-          `URL:${event.joinUrl}`,
+          `DESCRIPTION:${icsText(
+            [
+              `會議連結：${event.externalUrl}`,
+              ...(event.joinUrl ? [`內部紀錄：${event.joinUrl}`] : []),
+            ].join("\n")
+          )}`,
+          `URL:${event.externalUrl}`,
         ]
-      : []),
+      : event.joinUrl
+        ? [
+            `DESCRIPTION:${icsText(`線上會議：${event.joinUrl}`)}`,
+            `URL:${event.joinUrl}`,
+          ]
+        : []),
     "END:VEVENT",
     "END:VCALENDAR",
   ]

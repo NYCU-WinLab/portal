@@ -53,6 +53,8 @@ import {
   composeTopic,
   deliverablesOf,
   epicIid,
+  externalMeetingLabel,
+  externalMeetingUrl,
   mergeAttendees,
   splitTopic,
   topicPrefix,
@@ -140,6 +142,7 @@ async function bookingsBetween(from: string, to: string) {
       endTime: roomBookings.endTime,
       room: roomBookings.room,
       online: roomBookings.online,
+      externalUrl: roomBookings.externalUrl,
       status: roomBookings.status,
       title: roomBookings.title,
       agenda: roomBookings.agenda,
@@ -351,13 +354,17 @@ export function bookingCalendar(
   organizer: { name: string; email: string },
   method: "REQUEST" | "CANCEL"
 ) {
+  const external = method === "REQUEST" ? booking.externalUrl : null
   return {
     ics: calendarInvite({
       uid: `rooms-${booking.id}@portal.winlab.tw`,
       method,
       sequence: booking.inviteSequence,
       title: booking.title,
-      location: booking.room || booking.place ? placeOf(booking) : "線上會議",
+      location:
+        booking.room || booking.place
+          ? placeOf(booking)
+          : (external ?? "線上會議"),
       start: taipeiIso(booking.date, booking.startTime),
       end: taipeiIso(booking.date, booking.endTime),
       organizer,
@@ -367,6 +374,7 @@ export function bookingCalendar(
       rsvp: !booking.meetingId,
       joinUrl:
         booking.online && method === "REQUEST" ? joinUrl(booking.id) : null,
+      externalUrl: external,
     }),
     icsMethod: method,
   }
@@ -382,6 +390,8 @@ function inviteMail(
   const when = `${dayLabel(booking.date)} ${booking.startTime} 到 ${booking.endTime}`
   const link =
     booking.online && method === "REQUEST" ? joinUrl(booking.id) : null
+  // Someone else's meeting: people join it, and ours only records it.
+  const external = method === "REQUEST" ? booking.externalUrl : null
   const to = mergeAttendees(
     [{ name: organizer.name, email: organizer.email }],
     booking.attendees
@@ -404,9 +414,21 @@ function inviteMail(
               ],
             ]
           : []),
+        ...(external
+          ? ([
+              ["會議", externalMeetingLabel(external)],
+              ...(link ? [["紀錄", "WinLab Meet 錄影與摘要"]] : []),
+            ] as [string, string][])
+          : []),
       ],
       paragraphs: booking.agenda ? [booking.agenda] : [],
-      action: link ? { label: "加入會議", url: link } : undefined,
+      action: external
+        ? { label: "加入會議", url: external }
+        : link
+          ? { label: "加入會議", url: link }
+          : undefined,
+      links:
+        external && link ? [{ label: "開啟內部紀錄", url: link }] : undefined,
     }),
     ...bookingCalendar(booking, organizer, method),
   }
@@ -422,6 +444,8 @@ export type NewBooking = {
   attendees: Attendee[]
   organizer: { id: string; name: string; email: string }
   online: boolean
+  /** The meeting people join when it is not ours; ours then records it. */
+  externalUrl?: string | null
   meetingPrefix: string | null
   groupName: string | null
   agenda: string | null
@@ -509,6 +533,7 @@ export async function placeBooking(input: NewBooking) {
             title: input.title,
             attendees: input.attendees,
             online: input.online,
+            externalUrl: input.externalUrl ?? null,
             meetingPrefix: input.meetingPrefix,
             groupName: input.groupName,
             agenda: input.agenda,
@@ -635,10 +660,19 @@ export const bookMeeting = defineAction({
     invite_group_members: z.boolean().default(true),
     include_advisor: z.boolean(),
     agenda: z.string().trim().max(2000).nullish(),
+    external_url: z
+      .string()
+      .trim()
+      .max(2000)
+      .nullish()
+      .describe(
+        "the meeting people really join when it is someone else's, such as another company's Teams link (https); the invite then leads with it and keeps the meet room as the internal record"
+      ),
     epic: z.string().trim().min(1).nullish(),
     repeat: z.enum(["none", "weekly", "biweekly"]).default("none"),
   }),
   run: async (actor, input) => {
+    const externalUrl = externalMeetingUrl(input.external_url)
     const online = input.online_only && input.repeat === "none"
     const problem = online
       ? onlineSpanProblem(input.start_time, input.end_time)
@@ -666,6 +700,7 @@ export const bookMeeting = defineAction({
           invite_group_members: input.invite_group_members,
           include_advisor: input.include_advisor,
           agenda: input.agenda,
+          external_url: externalUrl,
           epic: input.epic,
         })
       )
@@ -748,6 +783,7 @@ export const bookMeeting = defineAction({
           organizer,
           // Every portal meeting gets a recording to look back at.
           online: true,
+          externalUrl,
           meetingPrefix: prefix,
           groupName: group,
           agenda: input.agenda || null,
