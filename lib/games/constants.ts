@@ -1,3 +1,4 @@
+import { MAX_BLACK_MOVES } from "./gomoku"
 import type { GameMeta, GameType } from "./types"
 
 export const GAME_META: Record<GameType, GameMeta> = {
@@ -49,6 +50,14 @@ export const GAME_META: Record<GameType, GameMeta> = {
     scoreLabel: (score) => `${score} 分`,
     timeLabel: "存活時間",
   },
+  gomoku: {
+    slug: "gomoku",
+    title: "五子棋",
+    description: "和電腦對弈，先連成 5 子就贏！",
+    icon: "⚫",
+    scoreLabel: (score) => `${MAX_BLACK_MOVES - score} 手獲勝`,
+    timeLabel: "完成時間",
+  },
 }
 
 export const GAME_ORDER: GameType[] = [
@@ -58,6 +67,7 @@ export const GAME_ORDER: GameType[] = [
   "memory",
   "typing",
   "snake",
+  "gomoku",
 ]
 
 export function formatTime(ms: number): string {

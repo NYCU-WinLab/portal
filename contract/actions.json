@@ -6012,10 +6012,10 @@
   {
     "name": "list_game_leaderboard",
     "title": "遊戲排行榜",
-    "description": "The top 20 members of one game on /games (2048, memory, typing, snake, pipes, queens), each by their best score (higher first, then faster finish_time_ms); level narrows typing (0 to 5), pipes and queens (1 to 100) to one level.",
+    "description": "The top 20 members of one game on /games (2048, memory, typing, snake, pipes, queens, gomoku), each by their best score (higher first, then faster finish_time_ms); level narrows typing (0 to 5), pipes and queens (1 to 100) to one level.",
     "kind": "query",
     "app": "games",
-    "hash": "0414e7910664f6e7",
+    "hash": "964df66777297fcc",
     "input": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
@@ -6026,7 +6026,8 @@
             "typing",
             "snake",
             "pipes",
-            "queens"
+            "queens",
+            "gomoku"
           ],
           "type": "string"
         },

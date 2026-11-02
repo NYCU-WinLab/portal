@@ -1,5 +1,5 @@
 export type GameType =
-  "2048" | "memory" | "typing" | "snake" | "pipes" | "queens"
+  "2048" | "memory" | "typing" | "snake" | "pipes" | "queens" | "gomoku"
 
 export interface GameScore {
   user_id: string

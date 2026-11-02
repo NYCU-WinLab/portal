@@ -4,6 +4,7 @@ import { z } from "zod"
 import { defineAction } from "@/lib/actions/define"
 import { db } from "@/lib/db"
 import { gameScores, user } from "@/lib/db/schema"
+import { MAX_BLACK_MOVES } from "@/lib/games/gomoku"
 
 // The lab's small games (/games) and their leaderboards.
 
@@ -14,6 +15,7 @@ export const games = [
   "snake",
   "pipes",
   "queens",
+  "gomoku",
 ] as const
 const game = z.enum(games)
 
@@ -21,7 +23,7 @@ export const listGameLeaderboard = defineAction({
   name: "list_game_leaderboard",
   title: "遊戲排行榜",
   description:
-    "The top 20 members of one game on /games (2048, memory, typing, snake, pipes, queens), each by their best score (higher first, then faster finish_time_ms); level narrows typing (0 to 5), pipes and queens (1 to 100) to one level.",
+    "The top 20 members of one game on /games (2048, memory, typing, snake, pipes, queens, gomoku), each by their best score (higher first, then faster finish_time_ms); level narrows typing (0 to 5), pipes and queens (1 to 100) to one level.",
   kind: "query",
   input: z.object({ game, level: z.number().int().min(0).max(100).nullish() }),
   run: async (_actor, input) => {
@@ -88,6 +90,9 @@ function impossible(g: string, score: number, level: number | null) {
       return (
         levels(1, 100) || score !== (level! <= 30 ? 5 : level! <= 60 ? 6 : 7)
       )
+    case "gomoku":
+      // A win takes 5 to MAX_BLACK_MOVES black moves.
+      return level !== null || score < 0 || score > MAX_BLACK_MOVES - 5
   }
   return true
 }

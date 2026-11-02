@@ -9,6 +9,7 @@ import type { GameResult, GameType } from "@/lib/games/types"
 
 import { submitScore } from "./actions"
 import { Game2048 } from "@/components/games/game-2048"
+import { GameGomoku } from "@/components/games/game-gomoku"
 import { GameMemory } from "@/components/games/game-memory"
 import { GamePipes } from "@/components/games/game-pipes"
 import { GameQueens } from "@/components/games/game-queens"
@@ -28,6 +29,7 @@ const boards: Record<GameType, (props: Props) => React.ReactNode> = {
   snake: ({ onComplete }) => <GameSnake onComplete={onComplete} />,
   pipes: (p) => <GamePipes {...p} />,
   queens: (p) => <GameQueens {...p} />,
+  gomoku: ({ onComplete }) => <GameGomoku onComplete={onComplete} />,
 }
 
 // A game beside its leaderboard; a finished game is recorded and the board

@@ -1,0 +1,2 @@
+ALTER TABLE "game_scores" DROP CONSTRAINT "game_scores_game";--> statement-breakpoint
+ALTER TABLE "game_scores" ADD CONSTRAINT "game_scores_game" CHECK ("game_scores"."game" in ('2048', 'memory', 'typing', 'snake', 'pipes', 'queens', 'gomoku'));

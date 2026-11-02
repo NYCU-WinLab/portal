@@ -351,6 +351,13 @@
       "when": 1793608160691,
       "tag": "0049_smiling_boom_boom",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1793615712292,
+      "tag": "0050_abnormal_marauders",
+      "breakpoints": true
     }
   ]
 }
