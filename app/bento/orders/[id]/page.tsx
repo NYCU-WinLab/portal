@@ -1,16 +1,15 @@
+import { ChevronDown } from "lucide-react"
 import { notFound } from "next/navigation"
 
 import { EmptyState } from "@/components/empty-state"
 import {
   Focus,
-  FocusHighlight,
   FocusLabel,
   FocusMeta,
   FocusTitle,
 } from "@/components/focus"
 import { PageHeader, SectionHeader } from "@/components/page-header"
 import { PortalShell } from "@/components/portal-shell"
-import { NumberTicker } from "@/components/ui/number-ticker"
 import { listMembers } from "@/lib/actions/admins"
 import { isAdmin } from "@/lib/actions/authz"
 import { getBentoOrder } from "@/lib/actions/bento"
@@ -44,6 +43,10 @@ export default async function OrderPage({
   const { order, restaurant, people, dishes, totals } = data
   const open = order.status === "open"
   const mine = people.find((person) => person.userId === actor.userId)
+  // Your own row first, then everyone else in the server's order.
+  const rows = mine
+    ? [mine, ...people.filter((person) => person !== mine)]
+    : people
 
   return (
     <PortalShell page={bentoPage} nav={bentoNav}>
@@ -74,13 +77,12 @@ export default async function OrderPage({
             {open ? "開放點餐" : "已關單"}
           </FocusLabel>
           <FocusTitle>
-            {mine ? (
-              <>
-                你點了{" "}
-                <FocusHighlight>
-                  <NumberTicker value={mine.lines.length} />
-                </FocusHighlight>{" "}
-                份，共{" "}
+            {mine ? mine.lines.map(dishLabel).join("、") : "你還沒點"}
+          </FocusTitle>
+          {mine && (
+            <FocusMeta>
+              <span>
+                {mine.lines.length} 份，共{" "}
                 <span
                   className={cn(
                     overBudget(actor.userId, mine.total) && "text-destructive"
@@ -88,14 +90,7 @@ export default async function OrderPage({
                 >
                   {ntd(mine.total)}
                 </span>
-              </>
-            ) : (
-              "你還沒點"
-            )}
-          </FocusTitle>
-          {mine && (
-            <FocusMeta>
-              <span>{mine.lines.map(dishLabel).join("、")}</span>
+              </span>
             </FocusMeta>
           )}
           <RestaurantLinks
@@ -105,9 +100,15 @@ export default async function OrderPage({
           />
         </Focus>
         {admin && dishes.length > 0 && (
-          <section className="flex flex-col gap-2">
-            <SectionHeader title="給店家" />
-            <ul className="flex stagger-rise flex-col">
+          <details className="group">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-4 [&::-webkit-details-marker]:hidden">
+              <h2 className="font-semibold">給店家</h2>
+              <span className="flex items-center gap-2 text-muted-foreground tabular-nums">
+                {dishes.length} 種
+                <ChevronDown className="size-4 transition-transform group-open:rotate-180" />
+              </span>
+            </summary>
+            <ul className="mt-2 flex stagger-rise flex-col">
               {dishes.map((dish) => (
                 <li
                   key={dish.name}
@@ -137,7 +138,7 @@ export default async function OrderPage({
                 </li>
               ))}
             </ul>
-          </section>
+          </details>
         )}
         <section className="flex flex-col gap-2">
           <SectionHeader
@@ -153,7 +154,7 @@ export default async function OrderPage({
             <EmptyState noun="人點餐" />
           ) : (
             <ul className="flex stagger-rise flex-col">
-              {people.map((person) => (
+              {rows.map((person) => (
                 <li
                   key={person.userId}
                   className="flex gap-4 border-b border-border py-2"
