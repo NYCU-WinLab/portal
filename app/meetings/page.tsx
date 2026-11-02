@@ -20,6 +20,7 @@ import { addDays, addMinutes, occurrencesBetween } from "@/lib/rooms/time"
 
 import { AdminActions } from "./admin-actions"
 import { CancelButton } from "./cancel-button"
+import { EditMeeting } from "./edit-meeting"
 import { MeetingActions } from "./meeting-actions"
 import { meetingsNav, meetingsPage } from "./nav"
 import { NewMeeting } from "./new-meeting"
@@ -400,6 +401,18 @@ export default async function MeetingsPage() {
     ),
     ...groups.map((g) => [g.name, g.label] as [string, string]),
   ])
+  // The creator or a member of the project group may edit a meeting, as
+  // update_meeting allows; the button only shows where it would work.
+  const myUsername = members.find((m) => m.id === actor.userId)?.username
+  const mayEdit = (createdBy: string, groupName: string | null) =>
+    createdBy === actor.userId ||
+    Boolean(
+      groupName &&
+      myUsername &&
+      groups
+        .find((g) => g.name === groupName)
+        ?.members.some((m) => m.username === myUsername)
+    )
   const people: People = new Map(
     members.map((m) => [m.email.toLowerCase(), { id: m.id, name: m.name }])
   )
@@ -470,12 +483,22 @@ export default async function MeetingsPage() {
         key={entry.booking.id}
         booking={entry.booking}
         actions={
-          entry.booking.requestedBy === actor.userId && (
-            <CancelButton
-              id={entry.booking.id}
-              title={topicText(entry.booking.title, owners)}
-            />
-          )
+          <>
+            {mayEdit(entry.booking.requestedBy, entry.booking.groupName) && (
+              <EditMeeting
+                target={{ booking: entry.booking.id }}
+                title={topicText(entry.booking.title, owners)}
+                externalUrl={entry.booking.externalUrl}
+                agenda={entry.booking.agenda}
+              />
+            )}
+            {entry.booking.requestedBy === actor.userId && (
+              <CancelButton
+                id={entry.booking.id}
+                title={topicText(entry.booking.title, owners)}
+              />
+            )}
+          </>
         }
       />
     )
@@ -552,13 +575,23 @@ export default async function MeetingsPage() {
                   key={s.id}
                   series={s}
                   actions={
-                    s.createdBy === actor.userId && (
-                      <SeriesButtons
-                        id={s.id}
-                        title={topicText(s.title, owners)}
-                        active={s.active}
-                      />
-                    )
+                    <>
+                      {mayEdit(s.createdBy, s.groupName) && (
+                        <EditMeeting
+                          target={{ series: s.id }}
+                          title={topicText(s.title, owners)}
+                          externalUrl={s.externalUrl}
+                          agenda={s.agenda}
+                        />
+                      )}
+                      {s.createdBy === actor.userId && (
+                        <SeriesButtons
+                          id={s.id}
+                          title={topicText(s.title, owners)}
+                          active={s.active}
+                        />
+                      )}
+                    </>
                   }
                 />
               ))}

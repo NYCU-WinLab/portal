@@ -13,6 +13,7 @@ import {
 import {
   deleteStandingMeeting,
   setStandingMeetingActive,
+  updateMeeting,
 } from "@/lib/actions/rooms-series"
 import { requireActor } from "@/lib/auth/session"
 
@@ -69,4 +70,9 @@ export async function deleteSeriesAction(id: string) {
   return attempt("/meetings", () =>
     runAction(deleteStandingMeeting, actor, { id })
   )
+}
+
+export async function updateMeetingAction(input: unknown) {
+  const actor = await requireActor("/meetings")
+  return attempt("/meetings", () => runAction(updateMeeting, actor, input))
 }

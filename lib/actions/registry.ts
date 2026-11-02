@@ -202,7 +202,7 @@ import {
 import {
   deleteStandingMeeting,
   listStandingMeetings,
-  setMeetingExternalUrl,
+  updateMeeting,
   setStandingMeetingActive,
 } from "@/lib/actions/rooms-series"
 import {
@@ -350,7 +350,7 @@ export const actionGroups: { app: ApiApp | null; actions: Action[] }[] = [
       getBookingAgenda,
       listStandingMeetings,
       setStandingMeetingActive,
-      setMeetingExternalUrl,
+      updateMeeting,
       deleteStandingMeeting,
     ],
   },
