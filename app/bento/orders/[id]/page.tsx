@@ -2,12 +2,7 @@ import { ChevronDown } from "lucide-react"
 import { notFound } from "next/navigation"
 
 import { EmptyState } from "@/components/empty-state"
-import {
-  Focus,
-  FocusLabel,
-  FocusMeta,
-  FocusTitle,
-} from "@/components/focus"
+import { Focus, FocusLabel, FocusMeta, FocusTitle } from "@/components/focus"
 import { PageHeader, SectionHeader } from "@/components/page-header"
 import { PortalShell } from "@/components/portal-shell"
 import { listMembers } from "@/lib/actions/admins"
