@@ -10,7 +10,11 @@ export type Attendee = { name: string; email: string; username?: string }
 // project's.
 const UNSAFE = /[\\/:*?"<>|[\]]/g
 
-export const DEFAULT_TOPIC = "meeting"
+export const DEFAULT_TOPIC = "Meeting"
+
+/** Whether a title is the default, including bookings made as "meeting". */
+export const isDefaultTopic = (title: string) =>
+  title.toLowerCase() === DEFAULT_TOPIC.toLowerCase()
 
 export const forFilename = (value: string) =>
   value.replace(UNSAFE, " ").replace(/\s+/g, " ").trim()

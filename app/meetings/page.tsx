@@ -15,7 +15,7 @@ import { listMeetings, listProjectGroups } from "@/lib/actions/rooms"
 import { listStandingMeetings } from "@/lib/actions/rooms-series"
 import { requireActor } from "@/lib/auth/session"
 import { dateLabel, taipeiToday } from "@/lib/leave-dates"
-import { DEFAULT_TOPIC, splitTopic } from "@/lib/rooms/meeting"
+import { isDefaultTopic, splitTopic } from "@/lib/rooms/meeting"
 import { addDays, addMinutes, occurrencesBetween } from "@/lib/rooms/time"
 
 import { AdminActions } from "./admin-actions"
@@ -160,7 +160,7 @@ function MeetingRow({
 
 // Any other meeting: who called it, who comes, and its Teams link.
 // "[cairn]-sync" as members read it: the project's or the person's name,
-// then the title, which is left out when it is only the default "meeting".
+// then the title, which is left out when it is only the default "Meeting".
 function Topic({ topic, owners }: { topic: string; owners: Owners }) {
   const { prefix, title } = splitTopic(topic)
   const owner = prefix ? (owners.get(prefix) ?? prefix) : null
@@ -169,14 +169,12 @@ function Topic({ topic, owners }: { topic: string; owners: Owners }) {
     <span className="flex min-w-0 gap-3">
       <span
         className={
-          title === DEFAULT_TOPIC
-            ? "shrink-0"
-            : "shrink-0 text-muted-foreground"
+          isDefaultTopic(title) ? "shrink-0" : "shrink-0 text-muted-foreground"
         }
       >
         {owner}
       </span>
-      {title !== DEFAULT_TOPIC && (
+      {!isDefaultTopic(title) && (
         <span className="min-w-0 truncate">{title}</span>
       )}
     </span>
@@ -198,7 +196,7 @@ function topicText(topic: string, owners: Owners) {
   const { prefix, title } = splitTopic(topic)
   const owner = prefix ? (owners.get(prefix) ?? prefix) : null
   if (!owner) return title
-  return title === DEFAULT_TOPIC ? owner : `${owner} ${title}`
+  return isDefaultTopic(title) ? owner : `${owner} ${title}`
 }
 
 function BookingRow({
