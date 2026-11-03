@@ -12,8 +12,13 @@ permissions:
   packages: write
 
 jobs:
+  # ci's smoke job builds every pull request's image and tags it by tree.
+  # A merge with the same files only gets that image retagged, in seconds;
+  # otherwise (main moved meanwhile, or a direct push) it is built here.
   image:
     runs-on: ubuntu-latest
+    env:
+      IMAGE: ghcr.io/nycu-winlab/portal
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
@@ -25,27 +30,31 @@ jobs:
       - id: build
         run: |
           echo "sha=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+          echo "tree=$(git rev-parse 'HEAD^{tree}')" >> "$GITHUB_OUTPUT"
           echo "time=$(TZ=Asia/Taipei date '+%Y-%m-%d %H:%M')" >> "$GITHUB_OUTPUT"
-      - id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ghcr.io/nycu-winlab/portal
-          tags: |
-            type=sha,prefix=sha-
-            type=raw,value=main
-      - uses: docker/build-push-action@v6
+      - id: reuse
+        name: Retag the pull request's image
+        run: |
+          tree="$IMAGE:tree-${{ steps.build.outputs.tree }}"
+          if docker buildx imagetools inspect "$tree" >/dev/null 2>&1; then
+            docker buildx imagetools create -t "$IMAGE:sha-${{ steps.build.outputs.sha }}" -t "$IMAGE:main" "$tree"
+            echo "hit=true" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.reuse.outputs.hit != 'true'
+        uses: docker/build-push-action@v6
         with:
           context: .
           platforms: linux/amd64
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
+          tags: |
+            ${{ env.IMAGE }}:sha-${{ steps.build.outputs.sha }}
+            ${{ env.IMAGE }}:main
+            ${{ env.IMAGE }}:tree-${{ steps.build.outputs.tree }}
           build-args: |
-            BUILD_SHA=${{ steps.build.outputs.sha }}
             BUILD_TIME=${{ steps.build.outputs.time }}
             BUILD_URL=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=registry,ref=${{ env.IMAGE }}:buildcache
+          cache-to: type=registry,ref=${{ env.IMAGE }}:buildcache,mode=max
 
   # Ships the new tag to portal.winlab.tw: carrel-deployd on the Carrel
   # machine runs deploy/carrel-start.sh and rolls back if web is unhealthy.
