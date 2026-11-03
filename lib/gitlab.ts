@@ -58,8 +58,11 @@ async function trigger(
   const form = new FormData()
   form.set("token", token)
   form.set("ref", "main")
+  // GitLab expands $NAME inside trigger variable values before the job
+  // sees them: measured 2026-11-03, "NT$100" arrived as "NT00" and "$$" as
+  // "$". Doubling every $ makes a title or agenda arrive as typed.
   for (const [key, value] of Object.entries(variables))
-    form.set(`variables[${key}]`, value)
+    form.set(`variables[${key}]`, value.replaceAll("$", "$$$$"))
   const response = await fetch(url, {
     method: "POST",
     body: form,
@@ -73,6 +76,50 @@ async function trigger(
   }
   const { id } = (await response.json().catch(() => ({}))) as { id?: unknown }
   return id === undefined || id === null ? null : String(id)
+}
+
+const helperProject = () =>
+  /\/projects\/([^/]+)\/trigger\//.exec(
+    process.env.GITLAB_HELPER_TRIGGER_URL ?? ""
+  )?.[1] ?? "165"
+
+/**
+ * How winlab-helper's `meeting_open` job in this pipeline ended: "done"
+ * (exit 0, or exit 1, which means the record is there and a person has
+ * something to do), "failed" (it broke, was cancelled, or the pipeline
+ * ended without it), "running", or "unknown" when GitLab cannot be read.
+ * A 201 from the trigger only says the pipeline was accepted.
+ */
+export async function helperJobOutcome(pipelineId: string) {
+  if (!epicsConfigured()) return "unknown" as const
+  try {
+    const jobs = (await get(
+      `/projects/${helperProject()}/pipelines/${encodeURIComponent(pipelineId)}/jobs?per_page=100`
+    )) as { name?: unknown; status?: unknown; allow_failure?: unknown }[]
+    const job = Array.isArray(jobs)
+      ? jobs.find((row) => row.name === "meeting_open")
+      : undefined
+    if (!job) {
+      const pipeline = (await get(
+        `/projects/${helperProject()}/pipelines/${encodeURIComponent(pipelineId)}`
+      )) as { status?: unknown }
+      return ["success", "failed", "canceled", "skipped"].includes(
+        String(pipeline.status)
+      )
+        ? ("failed" as const)
+        : ("running" as const)
+    }
+    if (job.status === "success") return "done" as const
+    if (job.status === "failed")
+      return job.allow_failure === true
+        ? ("done" as const)
+        : ("failed" as const)
+    if (job.status === "canceled" || job.status === "skipped")
+      return "failed" as const
+    return "running" as const
+  } catch {
+    return "unknown" as const
+  }
 }
 
 export const epicsConfigured = () => Boolean(process.env.GITLAB_API_TOKEN)
