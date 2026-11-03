@@ -23,91 +23,23 @@ jobs:
       - run: bun run api:check
       - run: bun run build
 
-  # The image as deployed: compose up with Postgres, migrations, then probe
-  # sign-in, OAuth discovery and the MCP challenge.
-  # The image is built here once and pushed as candidate-<tree>: the tree
-  # is the files, not the commit. publish promotes it to tree-<tree> once
-  # every job passed, and release deploys only a tree- image.
-  smoke:
-    runs-on: ubuntu-latest
+  # Builds the image once, runs deploy/smoke.sh against it and pushes it
+  # as candidate-<tree>. promote makes it tree-<tree> once every job passed,
+  # and release ships only a tree- image.
+  image:
+    uses: zyx1121/.github/.github/workflows/image.yml@main
     permissions:
       contents: read
       packages: write
-    env:
-      IMAGE: ghcr.io/nycu-winlab/portal
-      # A fork's pull request cannot push; it still builds and probes.
-      PUSH: ${{ github.event_name == 'push' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]') }}
-    steps:
-      - uses: actions/checkout@v4
-      - id: tree
-        run: |
-          echo "tree=$(git rev-parse 'HEAD^{tree}')" >> "$GITHUB_OUTPUT"
-          echo "time=$(TZ=Asia/Taipei date '+%Y-%m-%d %H:%M')" >> "$GITHUB_OUTPUT"
-      - uses: docker/setup-buildx-action@v3
-      - if: env.PUSH == 'true'
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Build the image under the tag compose uses
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          platforms: linux/amd64
-          load: true
-          push: ${{ env.PUSH == 'true' }}
-          tags: ${{ env.IMAGE }}:candidate-${{ steps.tree.outputs.tree }}
-          build-args: |
-            BUILD_TIME=${{ steps.tree.outputs.time }}
-            BUILD_URL=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          cache-from: type=registry,ref=${{ env.IMAGE }}:buildcache
-          cache-to: ${{ env.PUSH == 'true' && format('type=registry,ref={0}:buildcache,mode=max', env.IMAGE) || '' }}
-      - name: Tag it as compose expects
-        run: docker tag "$IMAGE:candidate-${{ steps.tree.outputs.tree }}" "$IMAGE:ci"
-      - name: Start the stack
-        run: |
-          cat > .env <<ENV
-          PORTAL_VERSION=ci
-          PORTAL_PORT=3000
-          POSTGRES_PASSWORD=ci-$(openssl rand -hex 8)
-          BETTER_AUTH_URL=http://localhost:3000
-          BETTER_AUTH_SECRET=$(openssl rand -base64 32)
-          KEYCLOAK_ISSUER=https://auth.winlab.tw/realms/winlab
-          KEYCLOAK_CLIENT_ID=ci
-          KEYCLOAK_CLIENT_SECRET=ci
-          ENV
-          docker compose up -d --wait
-      - name: Probe
-        run: |
-          docker compose logs migrate | grep -q "migrations applied"
-          test "$(curl -s -o /dev/null -w "%{http_code}" localhost:3000/sign-in)" = 303
-          test "$(curl -s -o /dev/null -w '%{http_code}' localhost:3000/)" = 307
-          curl -sf localhost:3000/.well-known/oauth-protected-resource/mcp | grep -q '"resource":"http://localhost:3000/mcp"'
-          curl -sf localhost:3000/.well-known/oauth-authorization-server/api/auth | grep -q '"client_id_metadata_document_supported":true'
-          test "$(curl -s -o /dev/null -w '%{http_code}' -X POST localhost:3000/mcp -H 'content-type: application/json' -d '{}')" = 401
-          curl -s -D - -o /dev/null -X POST localhost:3000/mcp -H 'content-type: application/json' -d '{}' | grep -qi 'www-authenticate: Bearer resource_metadata='
-      - if: always()
-        run: docker compose logs
+    with:
+      images: '[{"name": "ghcr.io/nycu-winlab/portal"}]'
+      smoke: bash deploy/smoke.sh
 
-  # Every check passed: the candidate is now the image release may ship.
-  publish:
-    needs: [check, smoke]
-    if: github.event_name == 'push' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]')
-    runs-on: ubuntu-latest
+  promote:
+    needs: [check, image]
+    uses: zyx1121/.github/.github/workflows/promote.yml@main
     permissions:
       contents: read
       packages: write
-    env:
-      IMAGE: ghcr.io/nycu-winlab/portal
-    steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - run: |
-          tree=$(git rev-parse 'HEAD^{tree}')
-          docker buildx imagetools create -t "$IMAGE:tree-$tree" "$IMAGE:candidate-$tree"
+    with:
+      images: '["ghcr.io/nycu-winlab/portal"]'
