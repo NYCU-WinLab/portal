@@ -90,7 +90,7 @@ export function endAfter(time: string, minutes: number) {
 }
 
 /** Minutes since midnight of an end time, "24:00" included. */
-const endMinutesOf = (time: string) =>
+export const endMinutesOf = (time: string) =>
   time === "24:00" ? 24 * 60 : minutesOf(time)
 
 /**

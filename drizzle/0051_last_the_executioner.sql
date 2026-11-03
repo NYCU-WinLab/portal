@@ -1,0 +1,1 @@
+ALTER TABLE "room_series" ADD COLUMN "online_only" boolean DEFAULT false NOT NULL;
