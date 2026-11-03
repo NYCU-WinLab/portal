@@ -3840,10 +3840,10 @@
   {
     "name": "get_member_avatar",
     "title": "成員頭像",
-    "description": "One member's avatar as base64 WebP (size small 96px or large 256px) with its version, or null when they have none. Any signed-in member may look.",
+    "description": "One member's avatar as base64 WebP (size small 96px or large 256px) with its version, or null when they have none. Name the member by portal user_id or by Keycloak username. Any signed-in member may look.",
     "kind": "query",
     "app": "profile",
-    "hash": "4ab2121dc3d6a7d7",
+    "hash": "eb3e0b771d0445e9",
     "input": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
@@ -3859,11 +3859,13 @@
           "format": "uuid",
           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
           "type": "string"
+        },
+        "username": {
+          "maxLength": 100,
+          "minLength": 1,
+          "type": "string"
         }
       },
-      "required": [
-        "user_id"
-      ],
       "type": "object"
     },
     "output": {
