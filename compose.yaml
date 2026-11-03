@@ -28,6 +28,8 @@ services:
   web:
     image: ghcr.io/nycu-winlab/portal:${PORTAL_VERSION:-main}
     restart: unless-stopped
+    # node as PID 1 ignores SIGTERM, so a stop waited the full 10 s.
+    init: true
     env_file: .env
     environment:
       DATABASE_URL: postgres://portal:${POSTGRES_PASSWORD}@postgres:5432/portal
@@ -44,6 +46,9 @@ services:
         - fetch('http://localhost:3000/.well-known/oauth-protected-resource').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))
       interval: 10s
       retries: 10
+      # Checked every second while starting, so a deploy waits ~1 s, not 10.
+      start_period: 60s
+      start_interval: 1s
 
 volumes:
   postgres:
