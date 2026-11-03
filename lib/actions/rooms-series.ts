@@ -1,6 +1,7 @@
 // Standing meetings. Each occurrence is booked a week ahead, not for the
 // whole term: rooms are first come, first served, and booking one week at a
-// time picks whatever is free by then. A daily run in the server process
+// time picks whatever is free by then. An online-only series takes no room
+// and books the same way, so every week still gets its own invite. A daily run in the server process
 // does it; a new series books its first week at once, which the daily run
 // (looking only 7 days out) would never reach.
 import { and, asc, eq, gt, gte, inArray, isNull, lt, lte } from "drizzle-orm"
@@ -52,10 +53,12 @@ import {
   addDays,
   addMinutes,
   dayLabel,
+  endAfter,
   isCalendarDay,
   nextOccurrence,
   nextWeekday,
   occurrencesBetween,
+  onlineSpanProblem,
   spanProblem,
   todayInTaipei,
   weekdayOf,
@@ -64,6 +67,14 @@ import {
 const LEAD_DAYS = 7
 
 type Series = typeof roomSeries.$inferSelect
+
+/** An online-only series may end at midnight, "24:00". */
+const seriesEnd = (
+  series: Pick<Series, "startTime" | "durationMinutes" | "onlineOnly">
+) =>
+  series.onlineOnly
+    ? endAfter(series.startTime, series.durationMinutes)
+    : addMinutes(series.startTime, series.durationMinutes)
 
 const rule = (series: Series) => ({
   weekday: series.weekday,
@@ -111,6 +122,7 @@ export const listStandingMeetings = defineAction({
           anchorDate: series.anchorDate,
           attendees: series.attendees,
           includeAdvisor: series.includeAdvisor,
+          onlineOnly: series.onlineOnly,
           groupName: series.groupName,
           agenda: series.agenda,
           externalUrl: series.externalUrl,
@@ -171,6 +183,35 @@ async function strayLabHold(
 }
 
 /**
+ * The room one occurrence takes: the one the page would pick, a paid one
+ * when no free room is open. Throws why there is none.
+ */
+async function roomForOccurrence(
+  series: Series,
+  date: string,
+  endTime: string
+) {
+  if (!bookingConfigured()) throw new Error("Portal 還沒設定系上借用帳號")
+  const slots = (await availability([date], true))[0].slots
+  // A hold of exactly this span with no portal booking may be this
+  // week's own reserve that never answered: ask the creator. A wider
+  // one (an old hold nobody released) is not free, so another room is
+  // picked; it is only logged.
+  const stray = await strayLabHold(slots, date, series.startTime, endTime)
+  if (stray?.exact)
+    throw new Error(
+      `系上已有實驗室帳號借的 ${stray.room}，portal 沒有這筆紀錄，可能是之前的預約沒收到回應；請確認後自己借或取消`
+    )
+  if (stray)
+    emitErrorLog(new Error("lab hold without a portal booking"), {
+      "room_series.id": series.id,
+      room: stray.room,
+      date,
+    })
+  return roomFor(slots, series.startTime, endTime, true)
+}
+
+/**
  * Books one occurrence: the room the page would pick (a paid one when no
  * free room is open, as the old portal did), else tells the creator when
  * notify. Skips an occurrence that has a booking, kept or cancelled, or
@@ -191,7 +232,7 @@ async function bookOccurrence(
       and(eq(roomBookings.seriesId, series.id), eq(roomBookings.date, date))
     )
   if (held) return "skipped"
-  const endTime = addMinutes(series.startTime, series.durationMinutes)!
+  const endTime = seriesEnd(series)!
   const [owner] = await db
     .select({ id: user.id, name: user.name, email: user.email })
     .from(user)
@@ -217,24 +258,9 @@ async function bookOccurrence(
           )
         )
       if (byHand) return "skipped" as const
-      if (!bookingConfigured()) throw new Error("Portal 還沒設定系上借用帳號")
-      const slots = (await availability([date], true))[0].slots
-      // A hold of exactly this span with no portal booking may be this
-      // week's own reserve that never answered: ask the creator. A wider
-      // one (an old hold nobody released) is not free, so another room is
-      // picked; it is only logged.
-      const stray = await strayLabHold(slots, date, series.startTime, endTime)
-      if (stray?.exact)
-        throw new Error(
-          `系上已有實驗室帳號借的 ${stray.room}，portal 沒有這筆紀錄，可能是之前的預約沒收到回應；請確認後自己借或取消`
-        )
-      if (stray)
-        emitErrorLog(new Error("lab hold without a portal booking"), {
-          "room_series.id": series.id,
-          room: stray.room,
-          date,
-        })
-      const room = roomFor(slots, series.startTime, endTime, true)
+      const room = series.onlineOnly
+        ? null
+        : await roomForOccurrence(series, date, endTime)
       let attendees = series.attendees
       if (series.includeAdvisor) {
         const [advisor] = await db
@@ -247,7 +273,7 @@ async function bookOccurrence(
         date,
         startTime: series.startTime,
         endTime,
-        room: room.room,
+        room: room?.room ?? null,
         title: series.title,
         attendees,
         organizer: owner,
@@ -307,6 +333,10 @@ export const standingMeetingInput = z.object({
   group: z.string().trim().min(1).nullish(),
   invite_group_members: z.boolean().default(true),
   include_advisor: z.boolean(),
+  online_only: z
+    .boolean()
+    .default(false)
+    .describe("no room, only the meet.winlab.tw meeting"),
   agenda: z.string().trim().max(2000).nullish(),
   external_url: z.string().trim().max(2000).nullish(),
   epic: z.string().trim().min(1).nullish(),
@@ -315,7 +345,7 @@ export const standingMeetingInput = z.object({
 /**
  * Creates a standing meeting: every week or every other week from
  * start_date. Each occurrence gets a room 7 days ahead (free first, else
- * paid), a recorded Teams meeting and a calendar invite; the occurrences in
+ * paid; none when online_only), a recorded Teams meeting and a calendar invite; the occurrences in
  * the coming week are booked at once, and failures are returned and mailed
  * to the member. book_meeting with repeat calls it.
  */
@@ -323,10 +353,14 @@ export async function createStandingMeeting(
   actorId: string,
   input: z.infer<typeof standingMeetingInput>
 ) {
-  const endTime = addMinutes(input.start_time, input.duration_minutes)
-  const problem = endTime
-    ? spanProblem(input.start_time, endTime)
-    : "超過當天可借的時間"
+  const endTime = input.online_only
+    ? endAfter(input.start_time, input.duration_minutes)
+    : addMinutes(input.start_time, input.duration_minutes)
+  const problem = !endTime
+    ? "超過當天可借的時間"
+    : input.online_only
+      ? onlineSpanProblem(input.start_time, endTime)
+      : spanProblem(input.start_time, endTime)
   if (problem) throw new Error(problem)
   const group = input.group ?? null
   // The advisor joins each occurrence, read fresh, not frozen here.
@@ -373,6 +407,7 @@ export async function createStandingMeeting(
       anchorDate: input.start_date ?? nextWeekday(today, input.weekday),
       attendees,
       includeAdvisor: input.include_advisor,
+      onlineOnly: input.online_only,
       meetingPrefix: prefix,
       groupName: group,
       agenda: input.agenda || null,

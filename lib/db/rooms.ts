@@ -34,6 +34,8 @@ export const roomSeries = pgTable(
     attendees: jsonb().$type<Attendee[]>().default([]).notNull(),
     includeAdvisor: boolean().default(false).notNull(),
     online: boolean().default(true).notNull(),
+    // No room: each occurrence is only a meet.winlab.tw meeting.
+    onlineOnly: boolean().default(false).notNull(),
     // Where the meeting really happens when it is someone else's (another
     // company's Teams); the portal's own meeting then only records it.
     externalUrl: text(),

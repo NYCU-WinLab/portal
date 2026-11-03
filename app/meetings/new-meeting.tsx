@@ -292,7 +292,7 @@ function MeetingDialog({
       date,
       start_time: start,
       end_time: end,
-      online_only: !repeat && online,
+      online_only: online,
       allow_paid: allowPaid,
       repeat: ["none", "weekly", "biweekly"][repeat],
       ...meetingInput(meeting),
@@ -351,30 +351,28 @@ function MeetingDialog({
           </SelectContent>
         </Select>
       </div>
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="book-repeat">重複</Label>
+        <Select
+          value={String(repeat)}
+          onValueChange={(next) => setRepeat(Number(next))}
+          items={[
+            { value: "0", label: "不重複" },
+            { value: "1", label: "每週" },
+            { value: "2", label: "隔週" },
+          ]}
+        >
+          <SelectTrigger id="book-repeat" className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="0">不重複</SelectItem>
+            <SelectItem value="1">每週</SelectItem>
+            <SelectItem value="2">隔週</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
       {!onlineOnly && (
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="book-repeat">重複</Label>
-          <Select
-            value={String(repeat)}
-            onValueChange={(next) => setRepeat(Number(next))}
-            items={[
-              { value: "0", label: "不重複" },
-              { value: "1", label: "每週" },
-              { value: "2", label: "隔週" },
-            ]}
-          >
-            <SelectTrigger id="book-repeat" className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="0">不重複</SelectItem>
-              <SelectItem value="1">每週</SelectItem>
-              <SelectItem value="2">隔週</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      )}
-      {!repeat && !onlineOnly && (
         <>
           <div className="flex items-center justify-between gap-4">
             <Label htmlFor="book-online">只開線上會議，不借教室</Label>
@@ -384,14 +382,14 @@ function MeetingDialog({
               onCheckedChange={setOnline}
             />
           </div>
-          {!online && (
+          {!repeat && !online && (
             <p className={room ? undefined : "text-destructive"}>
               {room
                 ? `會借 ${room.room}（${room.paid ? "付費" : "免費"}）`
                 : "這段時間沒有教室從頭到尾都空著"}
             </p>
           )}
-          {!online && room?.paid && (
+          {!repeat && !online && room?.paid && (
             <div className="flex items-center justify-between gap-4">
               <Label htmlFor="book-paid">同意付費</Label>
               <Switch

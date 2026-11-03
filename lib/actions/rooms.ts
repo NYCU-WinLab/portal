@@ -64,6 +64,7 @@ import {
   addDays,
   dayLabel,
   isCalendarDay,
+  endMinutesOf,
   minutesOf,
   ONLINE_AHEAD_DAYS,
   onlineSpanProblem,
@@ -646,7 +647,7 @@ export const bookMeeting = defineAction({
   name: "book_meeting",
   title: "新增會議",
   description:
-    "Books a meeting as the member, 新增會議 on /meetings: a CS department room through the lab's shared account (the room /meetings would pick: open for the whole span, free before paid; a paid room only with allow_paid true, since the department charges for it), or no room with online_only. Every booking also gets a meet.winlab.tw room, recorded automatically with a transcript and meeting notes filed in GitLab, and every attendee and the member get a calendar invite by mail. Times are Asia/Taipei HH:MM on the 30-minute grid. A room booking runs between 08:00 and 22:00 (check list_room_availability first). An online_only meeting may be at any time from today to 90 days ahead, 30 to 300 minutes, ending by 24:00, and is refused when it overlaps another meeting the member booked. attendees are portal user ids, emails or usernames; group is a project group's slug from list_project_groups, whose members are invited too unless invite_group_members is false, and which names the project the recording files under. epic (an iid from list_group_epics) needs a group linked to GitLab. include_advisor has no default because it mails the advisor. repeat weekly or biweekly makes it a standing meeting from date on instead (list_standing_meetings): each occurrence gets a room 7 days ahead, free first, else paid, so online_only is refused; epic may then only be a sync epic, and the answer is the standing meeting's id, how many occurrences were booked at once and why others were not. Never book the Monday lab meeting here; the portal books it itself. Read back the date, time, room or online, title, attendees, advisor and the recording, and get the member's yes first.",
+    "Books a meeting as the member, 新增會議 on /meetings: a CS department room through the lab's shared account (the room /meetings would pick: open for the whole span, free before paid; a paid room only with allow_paid true, since the department charges for it), or no room with online_only. Every booking also gets a meet.winlab.tw room, recorded automatically with a transcript and meeting notes filed in GitLab, and every attendee and the member get a calendar invite by mail. Times are Asia/Taipei HH:MM on the 30-minute grid. A room booking runs between 08:00 and 22:00 (check list_room_availability first). An online_only meeting may be at any time from today to 90 days ahead, 30 to 300 minutes, ending by 24:00, and is refused when it overlaps another meeting the member booked. attendees are portal user ids, emails or usernames; group is a project group's slug from list_project_groups, whose members are invited too unless invite_group_members is false, and which names the project the recording files under. epic (an iid from list_group_epics) needs a group linked to GitLab. include_advisor has no default because it mails the advisor. repeat weekly or biweekly makes it a standing meeting from date on instead (list_standing_meetings): each occurrence is booked 7 days ahead, with a room (free first, else paid) or, with online_only, only its meet.winlab.tw meeting; epic may then only be a sync epic, and the answer is the standing meeting's id, how many occurrences were booked at once and why others were not. Never book the Monday lab meeting here; the portal books it itself. Read back the date, time, room or online, title, attendees, advisor and the recording, and get the member's yes first.",
   kind: "mutation",
   input: z.object({
     date: day,
@@ -673,7 +674,7 @@ export const bookMeeting = defineAction({
   }),
   run: async (actor, input) => {
     const externalUrl = externalMeetingUrl(input.external_url)
-    const online = input.online_only && input.repeat === "none"
+    const online = input.online_only
     const problem = online
       ? onlineSpanProblem(input.start_time, input.end_time)
       : spanProblem(input.start_time, input.end_time)
@@ -682,23 +683,23 @@ export const bookMeeting = defineAction({
     if (online && input.date > addDays(todayInTaipei(), ONLINE_AHEAD_DAYS))
       throw new Error(`線上會議最多預約 ${ONLINE_AHEAD_DAYS} 天後`)
     if (input.repeat !== "none") {
-      if (input.online_only)
-        throw new Error("固定會議每場都會借教室，不能只開線上")
       const standing = await createStandingMeeting(
         actor.userId,
         standingMeetingInput.parse({
           weekday: weekdayOf(input.date),
           start_date: input.date,
           start_time: input.start_time,
-          // spanProblem passed, so both are on the grid.
+          // The span check passed, so both are on the grid; an online
+          // one may end at "24:00".
           duration_minutes:
-            minutesOf(input.end_time)! - minutesOf(input.start_time)!,
+            endMinutesOf(input.end_time)! - minutesOf(input.start_time)!,
           interval_weeks: input.repeat === "weekly" ? 1 : 2,
           title: input.title,
           attendees: input.attendees,
           group: input.group,
           invite_group_members: input.invite_group_members,
           include_advisor: input.include_advisor,
+          online_only: input.online_only,
           agenda: input.agenda,
           external_url: externalUrl,
           epic: input.epic,

@@ -16,7 +16,7 @@ import { listStandingMeetings } from "@/lib/actions/rooms-series"
 import { requireActor } from "@/lib/auth/session"
 import { dateLabel, taipeiToday } from "@/lib/leave-dates"
 import { isDefaultTopic, splitTopic } from "@/lib/rooms/meeting"
-import { addDays, addMinutes, occurrencesBetween } from "@/lib/rooms/time"
+import { addDays, endAfter, occurrencesBetween } from "@/lib/rooms/time"
 
 import { AdminActions } from "./admin-actions"
 import { CancelButton } from "./cancel-button"
@@ -292,7 +292,7 @@ function SeriesRow({
       <div className="flex flex-wrap items-center gap-x-6 gap-y-3 text-muted-foreground sm:pl-38">
         <span>
           {series.startTime} 到{" "}
-          {addMinutes(series.startTime, series.durationMinutes)}
+          {endAfter(series.startTime, series.durationMinutes)}
         </span>
         <span>建立者 {series.createdByName}</span>
         {series.attendees.length > 0 && (
@@ -344,7 +344,7 @@ function StandingRow({
       <div className="flex flex-wrap items-center gap-x-6 gap-y-3 text-muted-foreground sm:pl-38">
         <span>
           {series.startTime} 到{" "}
-          {addMinutes(series.startTime, series.durationMinutes)}
+          {endAfter(series.startTime, series.durationMinutes)}
         </span>
         <span>建立者 {series.createdByName}</span>
         {series.attendees.length > 0 && (
