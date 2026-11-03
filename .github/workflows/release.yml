@@ -1,80 +1,22 @@
 name: release
 
-# Ships only an image ci passed. A merged pull request's image is already
-# tree-<tree> (ci's publish job), so the push to main retags and deploys it
-# at once. Otherwise (main moved meanwhile, or a direct push) the push finds
-# no tree- image and waits: ci on main publishes it, and its completion runs
-# this again.
+# Ships only an image ci passed: retags tree-<tree> as sha-<commit> and main,
+# then carrel-deployd on the Carrel machine runs deploy/carrel-start.sh and
+# rolls back if web is unhealthy. When ci has not passed these files yet,
+# it waits for ci on main inside this run.
 on:
   push:
     branches: [main]
-  workflow_run:
-    workflows: [ci]
-    types: [completed]
-    branches: [main]
-
-concurrency:
-  group: release-main
-
-permissions:
-  contents: read
-  packages: write
 
 jobs:
-  # One job: a second one would wait for its own runner. The deploy steps
-  # ship the new tag to portal.winlab.tw: carrel-deployd on the Carrel
-  # machine runs deploy/carrel-start.sh and rolls back if web is unhealthy.
-  release:
-    if: github.event_name == 'push' || github.event.workflow_run.conclusion == 'success'
-    runs-on: ubuntu-latest
+  ship:
+    uses: zyx1121/.github/.github/workflows/ship.yml@main
     permissions:
       contents: read
       packages: write
+      actions: read
       id-token: write
-    env:
-      IMAGE: ghcr.io/nycu-winlab/portal
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
-      - uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - id: ship
-        name: Retag the image ci passed
-        run: |
-          commit=$(git rev-parse HEAD)
-          sha="sha-${commit::7}"
-          tree="tree-$(git rev-parse 'HEAD^{tree}')"
-          echo "sha=$sha" >> "$GITHUB_OUTPUT"
-          has() { docker buildx imagetools inspect "$IMAGE:$1" >/dev/null 2>&1; }
-          # A newer commit on main ships instead: never roll main back.
-          if [ "$commit" != "$(git ls-remote origin refs/heads/main | cut -f1)" ]; then
-            echo "main has moved past $commit; skipping"; exit 0
-          fi
-          if has "$sha"; then
-            echo "$sha is already released"; exit 0
-          fi
-          if ! has "$tree"; then
-            if [ "$GITHUB_EVENT_NAME" = push ]; then
-              echo "No image passed ci for these files yet; ci on main will ship it."
-              exit 0
-            fi
-            echo "::error::ci passed but $IMAGE:$tree is missing"; exit 1
-          fi
-          docker buildx imagetools create -t "$IMAGE:$sha" -t "$IMAGE:main" "$IMAGE:$tree"
-          echo "deploy=true" >> "$GITHUB_OUTPUT"
-      - if: steps.ship.outputs.deploy == 'true'
-        run: |
-          mkdir release
-          cp deploy/carrel-start.sh compose.yaml release/
-          echo "${{ steps.ship.outputs.sha }}" > release/VERSION
-          tar czf "$RUNNER_TEMP/portal.tar.gz" -C release .
-      - if: steps.ship.outputs.deploy == 'true'
-        uses: NYCU-WinLab/carrel-deploy@v1
-        with:
-          tenant: winfra
-          app: portal
-          artifact: ${{ runner.temp }}/portal.tar.gz
+    with:
+      images: '["ghcr.io/nycu-winlab/portal"]'
+      tenant: winfra
+      app: portal
