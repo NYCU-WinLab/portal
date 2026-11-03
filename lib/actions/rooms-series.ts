@@ -44,6 +44,7 @@ import {
   epicIid,
   externalMeetingUrl,
   mergeAttendees,
+  splitTopic,
   topicPrefix,
 } from "@/lib/rooms/meeting"
 import { emitErrorLog } from "@/lib/otel"
@@ -60,6 +61,7 @@ import {
   occurrencesBetween,
   onlineSpanProblem,
   spanProblem,
+  spansOverlap,
   todayInTaipei,
   weekdayOf,
 } from "@/lib/rooms/time"
@@ -258,6 +260,30 @@ async function bookOccurrence(
           )
         )
       if (byHand) return "skipped" as const
+      // As a one-off online meeting: not over another of the creator's.
+      if (series.onlineOnly) {
+        const mine = await db
+          .select({
+            title: roomBookings.title,
+            start: roomBookings.startTime,
+            end: roomBookings.endTime,
+          })
+          .from(roomBookings)
+          .where(
+            and(
+              eq(roomBookings.requestedBy, series.createdBy),
+              eq(roomBookings.date, date),
+              eq(roomBookings.status, "booked")
+            )
+          )
+        const clash = mine.find((row) =>
+          spansOverlap(row, { start: series.startTime, end: endTime })
+        )
+        if (clash)
+          throw new Error(
+            `你 ${clash.start} 到 ${clash.end} 已有「${splitTopic(clash.title).title}」`
+          )
+      }
       const room = series.onlineOnly
         ? null
         : await roomForOccurrence(series, date, endTime)
@@ -294,16 +320,22 @@ async function bookOccurrence(
     if (notify)
       await queueMail(db, {
         to: [owner.email],
-        subject: `[WinLab 會議] 固定會議沒訂到教室：${series.title}`,
+        subject: series.onlineOnly
+          ? `[WinLab 會議] 固定會議這週沒建成：${series.title}`
+          : `[WinLab 會議] 固定會議沒訂到教室：${series.title}`,
         ...mailBody({
           title: series.title,
           rows: [
             ["時間", `${dayLabel(date)} ${series.startTime} 到 ${endTime}`],
             ["原因", reason],
           ],
-          paragraphs: ["請自己借教室，或改成線上。"],
+          paragraphs: [
+            series.onlineOnly
+              ? "請自己開這週的線上會議。"
+              : "請自己借教室，或改成線上。",
+          ],
           action: {
-            label: "借教室",
+            label: series.onlineOnly ? "開會議" : "借教室",
             url: `${process.env.BETTER_AUTH_URL}/meetings`,
           },
         }),
