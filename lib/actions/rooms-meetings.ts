@@ -14,6 +14,7 @@ import {
   isNotNull,
   isNull,
   lt,
+  ne,
   notInArray,
   or,
   sql,
@@ -239,8 +240,28 @@ async function askMeet(
  * job ended. A no-op without the trigger token. Never throws: the meet
  * request it follows has already succeeded.
  */
-async function notifyHelper(requestId: string) {
+async function notifyHelper(requestId: string, triesSeen?: number) {
   if (!helperConfigured()) return
+  // The try is counted and stamped before the trigger, and a retry claims
+  // it only if nobody else did since it looked: two overlapping runs send
+  // one, and the stamp keeps a later run off it during the grace.
+  const [claimed] = await db
+    .update(roomMeetingRequests)
+    .set({
+      helperTries: sql`${roomMeetingRequests.helperTries} + 1`,
+      helperAskedAt: sql`now()`,
+    })
+    .where(
+      and(
+        eq(roomMeetingRequests.requestId, requestId),
+        triesSeen === undefined
+          ? undefined
+          : eq(roomMeetingRequests.helperTries, triesSeen)
+      )
+    )
+    .returning({ id: roomMeetingRequests.id })
+    .catch(() => [])
+  if (!claimed) return
   try {
     await tellHelper(requestId)
   } catch (error) {
@@ -248,7 +269,6 @@ async function notifyHelper(requestId: string) {
       .update(roomMeetingRequests)
       .set({
         helperError: error instanceof Error ? error.message : String(error),
-        helperTries: sql`${roomMeetingRequests.helperTries} + 1`,
       })
       .where(eq(roomMeetingRequests.requestId, requestId))
       .catch(() => {})
@@ -309,7 +329,6 @@ async function tellHelper(requestId: string) {
     .set({
       helperPipelineId: pipelineId,
       helperError: null,
-      helperTries: sql`${roomMeetingRequests.helperTries} + 1`,
       helperSettledAt: pipelineId ? null : sql`now()`,
     })
     .where(eq(roomMeetingRequests.requestId, requestId))
@@ -823,7 +842,9 @@ export async function reconcileTeams() {
       and(
         isNotNull(roomMeetingRequests.helperPipelineId),
         isNull(roomMeetingRequests.helperError),
-        isNull(roomMeetingRequests.helperSettledAt)
+        isNull(roomMeetingRequests.helperSettledAt),
+        // A pipeline GitLab lost or never ran is not polled forever.
+        sql`${roomMeetingRequests.bookingId} in (select ${roomBookings.id} from ${roomBookings} where ${roomBookings.date} >= ${today}::date - 2)`
       )
     )
   for (const { requestId, pipelineId } of unsettled) {
@@ -850,7 +871,10 @@ export async function reconcileTeams() {
   // still ahead. Opening or updating one stops once the booking is cancelled.
   // A fresh ask is left a moment for its own notifyHelper.
   const untold = await db
-    .select({ requestId: roomMeetingRequests.requestId })
+    .select({
+      requestId: roomMeetingRequests.requestId,
+      tries: roomMeetingRequests.helperTries,
+    })
     .from(roomMeetingRequests)
     .innerJoin(roomBookings, eq(roomBookings.id, roomMeetingRequests.bookingId))
     .where(
@@ -858,7 +882,7 @@ export async function reconcileTeams() {
         isNotNull(roomMeetingRequests.helperError),
         lt(roomMeetingRequests.helperTries, HELPER_TRIES),
         lt(
-          roomMeetingRequests.completedAt,
+          sql`coalesce(${roomMeetingRequests.helperAskedAt}, ${roomMeetingRequests.completedAt})`,
           sql`now() - make_interval(mins => ${HELPER_GRACE_MINUTES})`
         ),
         ahead,
@@ -868,7 +892,8 @@ export async function reconcileTeams() {
         )
       )
     )
-  for (const { requestId } of untold) await notifyHelper(requestId)
+  for (const { requestId, tries } of untold)
+    await notifyHelper(requestId, tries)
   for (const booking of cancelled) {
     const { failed } = await cancelsOf(db, booking.id)
     if (failed >= CANCEL_TRIES) continue
@@ -1046,6 +1071,32 @@ async function mailUntoldRecords(today: string) {
     await db.transaction(async (tx) => {
       const [first] = group
       const cancel = first.kind === "cancel"
+      // Locked, so a second sweep waits and then sees what this one mailed.
+      await tx
+        .select({ id: roomBookings.id })
+        .from(roomBookings)
+        .where(eq(roomBookings.id, first.bookingId))
+        .for("update")
+      // Another request on this side is still being retried: mail when it
+      // has settled, unless the meeting is already over.
+      if (first.date >= today) {
+        const [retrying] = await tx
+          .select({ id: roomMeetingRequests.id })
+          .from(roomMeetingRequests)
+          .where(
+            and(
+              eq(roomMeetingRequests.bookingId, first.bookingId),
+              cancel
+                ? eq(roomMeetingRequests.kind, "cancel")
+                : ne(roomMeetingRequests.kind, "cancel"),
+              isNotNull(roomMeetingRequests.helperError),
+              lt(roomMeetingRequests.helperTries, HELPER_TRIES),
+              isNull(roomMeetingRequests.helperNotifiedAt)
+            )
+          )
+          .limit(1)
+        if (retrying) return
+      }
       const claimed = await tx
         .update(roomMeetingRequests)
         .set({ helperNotifiedAt: sql`now()` })
@@ -1059,6 +1110,7 @@ async function mailUntoldRecords(today: string) {
           )
         )
         .returning({
+          id: roomMeetingRequests.id,
           kind: roomMeetingRequests.kind,
           helperError: roomMeetingRequests.helperError,
         })
@@ -1076,7 +1128,7 @@ async function mailUntoldRecords(today: string) {
             eq(roomMeetingRequests.bookingId, first.bookingId),
             notInArray(
               roomMeetingRequests.id,
-              group.map((row) => row.id)
+              claimed.map((row) => row.id)
             )
           )
         )
@@ -1109,7 +1161,11 @@ async function mailUntoldRecords(today: string) {
               "時間",
               `${dayLabel(first.date)} ${first.startTime} 到 ${first.endTime}`,
             ],
-            ["原因", claimed.at(-1)?.helperError ?? ""],
+            [
+              "原因",
+              (claimed.find((row) => row.kind === "create") ?? claimed[0])
+                .helperError ?? "",
+            ],
           ],
           paragraphs: [
             cancel

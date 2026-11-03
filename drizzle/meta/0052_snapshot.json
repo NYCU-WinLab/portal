@@ -1,5 +1,5 @@
 {
-  "id": "a92e190c-2f58-4506-beaa-654a792bb259",
+  "id": "6c1966d3-931e-4cba-b111-8a6166e089d9",
   "prevId": "bafd8c43-dd1a-4b39-b2a6-757b2c82f666",
   "version": "7",
   "dialect": "postgresql",
@@ -5186,6 +5186,12 @@
         },
         "helper_settled_at": {
           "name": "helper_settled_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "helper_asked_at": {
+          "name": "helper_asked_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false

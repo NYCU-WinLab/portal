@@ -164,12 +164,14 @@ export const roomMeetingRequests = pgTable(
     // by reconcileTeams up to 3 times, then mailed once). helperError is
     // also set before the trigger, so a crash in between is retried, and
     // when the pipeline's meeting_open job fails. helperSettledAt is when
-    // that job was seen to finish.
+    // that job was seen to finish. helperAskedAt is when the last try
+    // started, so overlapping runs do not send it twice.
     helperPipelineId: text(),
     helperError: text(),
     helperTries: integer().default(0).notNull(),
     helperNotifiedAt: timestamp({ withTimezone: true }),
     helperSettledAt: timestamp({ withTimezone: true }),
+    helperAskedAt: timestamp({ withTimezone: true }),
     createdAt: timestamp({ withTimezone: true }).defaultNow().notNull(),
     completedAt: timestamp({ withTimezone: true }),
     notifiedAt: timestamp({ withTimezone: true }),
