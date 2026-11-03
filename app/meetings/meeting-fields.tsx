@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
-import { deliverableLabel, type Epic } from "@/lib/rooms/meeting"
+import { DEFAULT_TOPIC, deliverableLabel, type Epic } from "@/lib/rooms/meeting"
 
 import { loadDeliverables, loadEpics } from "./rooms-actions"
 
@@ -39,7 +39,7 @@ export type MeetingValue = {
 }
 
 export const emptyMeeting: MeetingValue = {
-  title: "meeting",
+  title: DEFAULT_TOPIC,
   group: null,
   inviteGroup: true,
   attendees: [],
