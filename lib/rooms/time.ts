@@ -21,6 +21,23 @@ const taipeiDay = new Intl.DateTimeFormat("en-CA", {
 
 export const todayInTaipei = () => taipeiDay.format(new Date())
 
+const taipeiClock = new Intl.DateTimeFormat("en-GB", {
+  timeZone: "Asia/Taipei",
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
+})
+
+/** The first half hour from now on, Asia/Taipei: tomorrow 00:00 after 23:30. */
+export function nextSlotInTaipei(now = new Date()) {
+  const day = taipeiDay.format(now)
+  const [h, m] = taipeiClock.format(now).split(":").map(Number)
+  const next = Math.ceil((h * 60 + m) / SLOT_MINUTES) * SLOT_MINUTES
+  return next >= 24 * 60
+    ? { date: addDays(day, 1), start: "00:00" }
+    : { date: day, start: clock(next) }
+}
+
 /** These strings are calendar days already; UTC midnight keeps the
  * arithmetic on whole days. */
 const utc = (day: string) => new Date(`${day}T00:00:00Z`)

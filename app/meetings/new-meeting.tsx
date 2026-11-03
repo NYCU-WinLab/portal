@@ -35,6 +35,7 @@ import {
   ONLINE_MAX_MINUTES,
   SLOT_MINUTES,
   addDays,
+  nextSlotInTaipei,
   clock,
   dayLabel,
   endAfter,
@@ -182,8 +183,10 @@ function OnlinePicker({
   today: string
   onPick: (picked: Picked) => void
 }) {
-  const [date, setDate] = React.useState(today)
-  const [start, setStart] = React.useState("21:00")
+  // Opens on the nearest half hour still ahead.
+  const [next] = React.useState(nextSlotInTaipei)
+  const [date, setDate] = React.useState(next.date)
+  const [start, setStart] = React.useState(next.start)
   const last = addDays(today, ONLINE_AHEAD_DAYS)
   const valid = date >= today && date <= last
   return (
