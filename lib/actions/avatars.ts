@@ -118,12 +118,18 @@ export const getMemberAvatar = defineAction({
   name: "get_member_avatar",
   title: "成員頭像",
   description:
-    "One member's avatar as base64 WebP (size small 96px or large 256px) with its version, or null when they have none. Any signed-in member may look.",
+    "One member's avatar as base64 WebP (size small 96px or large 256px) with its version, or null when they have none. Name the member by portal user_id or by Keycloak username. Any signed-in member may look.",
   kind: "query",
-  input: z.object({
-    user_id: member,
-    size: z.enum(["small", "large"]).default("small"),
-  }),
+  input: z
+    .object({
+      user_id: member.optional(),
+      username: z.string().min(1).max(100).optional(),
+      size: z.enum(["small", "large"]).default("small"),
+    })
+    .refine(
+      (input) => input.user_id || input.username,
+      "要給 user_id 或 username"
+    ),
   run: async (_actor, input) => {
     const [row] = await db
       .select({
@@ -132,7 +138,12 @@ export const getMemberAvatar = defineAction({
         version: memberAvatars.version,
       })
       .from(memberAvatars)
-      .where(eq(memberAvatars.userId, input.user_id))
+      .innerJoin(user, eq(user.id, memberAvatars.userId))
+      .where(
+        input.user_id
+          ? eq(memberAvatars.userId, input.user_id)
+          : eq(user.username, input.username!)
+      )
     return row
       ? {
           contentType: "image/webp",
