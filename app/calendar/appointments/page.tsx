@@ -1,8 +1,10 @@
+import { AvatarStack } from "@/components/avatar-stack"
 import { Countdown } from "@/components/countdown"
 import {
   Focus,
   FocusHighlight,
   FocusLabel,
+  FocusMeta,
   FocusTitle,
 } from "@/components/focus"
 import { PageHeader } from "@/components/page-header"
@@ -37,6 +39,10 @@ export default async function AppointmentsPage() {
               和 <FocusHighlight>{next.with}</FocusHighlight>，
               <Countdown to={next.startsAt}>進行中</Countdown> 後
             </FocusTitle>
+            <FocusMeta>
+              <AvatarStack people={[{ id: next.withId, name: next.with }]} />
+              {next.title}
+            </FocusMeta>
           </Focus>
         )}
         <AppointmentTabs withMe={withMe} byMe={byMe} />

@@ -216,7 +216,7 @@ export const listMyAppointments = defineAction({
   name: "list_my_appointments",
   title: "我的預約",
   description:
-    "The signed-in member's upcoming appointments, soonest first, in both directions: withMe (labmates booked a meeting with them) and byMe (they booked one with a labmate). Each has the booking id (cancel it with cancel_meeting, either side may), date, start and end (Asia/Taipei), startsAt (ISO), the title and the other member's name.",
+    "The signed-in member's upcoming appointments, soonest first, in both directions: withMe (labmates booked a meeting with them) and byMe (they booked one with a labmate). Each has the booking id (cancel it with cancel_meeting, either side may), date, start and end (Asia/Taipei), startsAt (ISO), the title, and the other member's id (withId) and name (with).",
   kind: "query",
   input: z.object({}),
   run: async (actor) => {
@@ -259,6 +259,7 @@ export const listMyAppointments = defineAction({
         startsAt: taipeiIso(row.date, row.start),
         title: splitTopic(row.title).title,
         mine: row.ownerId === actor.userId,
+        withId: row.ownerId === actor.userId ? row.bookedBy : row.ownerId,
         with: row.ownerId === actor.userId ? row.bookerName : row.ownerName,
       }))
     return {

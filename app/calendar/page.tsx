@@ -1,12 +1,15 @@
 import Link from "next/link"
 
+import { AvatarStack } from "@/components/avatar-stack"
 import { EmptyState } from "@/components/empty-state"
 import {
   Focus,
   FocusHighlight,
   FocusLabel,
+  FocusMeta,
   FocusTitle,
 } from "@/components/focus"
+import { MemberAvatar } from "@/components/member-avatar"
 import { PageHeader } from "@/components/page-header"
 import { PortalShell } from "@/components/portal-shell"
 import { Badge } from "@/components/ui/badge"
@@ -26,7 +29,7 @@ export default async function CalendarPage() {
     runAction(getMyCalendar, actor, {}),
     runAction(listCalendars, actor, {}),
   ])
-  const free = calendars.filter((row) => !row.busyNow).length
+  const free = calendars.filter((row) => !row.busyNow)
 
   return (
     <PortalShell page={calendarPage} nav={calendarNav}>
@@ -50,10 +53,20 @@ export default async function CalendarPage() {
             <FocusLabel>現在</FocusLabel>
             <FocusTitle>
               <FocusHighlight>
-                <NumberTicker value={free} />
+                <NumberTicker value={free.length} />
               </FocusHighlight>{" "}
-              人有空，{calendars.length - free} 人忙碌
+              人有空，{calendars.length - free.length} 人忙碌
             </FocusTitle>
+            {free.length > 0 && (
+              <FocusMeta>
+                <AvatarStack
+                  people={free.map((row) => ({
+                    id: row.userId,
+                    name: row.name,
+                  }))}
+                />
+              </FocusMeta>
+            )}
           </Focus>
         )}
         {calendars.length === 0 ? (
@@ -67,6 +80,7 @@ export default async function CalendarPage() {
                   href={`/calendar/${row.userId}`}
                   className="flex min-h-14 items-center gap-4 border-b border-border py-2 transition-colors duration-state hover:bg-muted/50"
                 >
+                  <MemberAvatar id={row.userId} name={row.name} />
                   <span className="min-w-0 flex-1 truncate font-medium">
                     {row.name}
                   </span>
