@@ -31,10 +31,6 @@ export function FeedLink({ url }: { url: string }) {
         />
         <Button onClick={copy}>複製</Button>
       </div>
-      <p className="text-muted-foreground">
-        貼到 Google、Outlook 或 Apple
-        行事曆的「從網址訂閱」。這個連結只屬於你，不要分享。
-      </p>
       <ConfirmDialog
         trigger={
           <Button variant="ghost" className="self-start">

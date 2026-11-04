@@ -40,14 +40,7 @@ export function MyCalendar({
         />
       </div>
       <label className="flex min-h-14 items-center gap-4 border-b border-border py-2">
-        <span className="min-w-0 flex-1">
-          <span className="block font-medium">公開詳細內容</span>
-          <span className="block text-muted-foreground">
-            {link.visibility === "public"
-              ? "大家看得到標題和地點"
-              : "大家只看得到忙碌時段"}
-          </span>
-        </span>
+        <span className="min-w-0 flex-1 font-medium">公開詳細內容</span>
         <Switch
           checked={link.visibility === "public"}
           aria-label="公開詳細內容"
