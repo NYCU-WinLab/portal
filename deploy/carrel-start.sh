@@ -21,4 +21,12 @@ mv "$tmp" .env
 docker compose pull --quiet migrate web
 docker compose up -d --wait web
 systemd-notify --ready
+# Each deploy leaves its image behind; 11-04 they filled the disk and
+# Postgres stopped. Keep this one and the 2 newest others for a rollback.
+docker images ghcr.io/nycu-winlab/portal --format '{{.Tag}}' |
+  grep -vx -e "$version" -e main | tail -n +3 |
+  while read -r tag; do
+    docker rmi "ghcr.io/nycu-winlab/portal:$tag" >/dev/null 2>&1 || true
+  done
+docker image prune -f >/dev/null 2>&1 || true
 exec docker compose logs -f --since 1s web
