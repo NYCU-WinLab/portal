@@ -1,3 +1,5 @@
+import { AsyncLocalStorage } from "node:async_hooks"
+
 import { and, asc, eq, gte, inArray, isNotNull, lte, sql } from "drizzle-orm"
 import { z } from "zod"
 
@@ -18,6 +20,7 @@ import type { Mail } from "@/lib/mail"
 import { mailBody } from "@/lib/mail-body"
 import { db } from "@/lib/db"
 import {
+  appointments,
   bookingLeases,
   roomBookings,
   roomMeetingRequests,
@@ -170,7 +173,7 @@ export const listMeetings = defineAction({
   name: "list_meetings",
   title: "會議",
   description:
-    "Every meeting booked through the portal from date (default today, Asia/Taipei) for days days, the lab meeting's weekly Teams meeting included (lab_meeting_id set; its program is in list_lab_meetings): room (null for an online-only meeting), date, start and end, status booked or cancelled (cancelled rows stay), title, agenda, project group, attendees, who booked it, and the Teams meeting's state (pending, success with join_url, or failed with the reason). Every member sees every booking; only the member who booked one can cancel it with cancel_meeting.",
+    "Every meeting booked through the portal from date (default today, Asia/Taipei) for days days, the lab meeting's weekly Teams meeting included (lab_meeting_id set; its program is in list_lab_meetings): room (null for an online-only meeting), date, start and end, status booked or cancelled (cancelled rows stay), title, agenda, project group, attendees, who booked it, and the Teams meeting's state (pending, success with join_url, or failed with the reason). Every member sees every booking; only the member who booked one (or the member it was booked with through book_appointment) can cancel it with cancel_meeting.",
   kind: "query",
   input: z.object({
     date: day.optional(),
@@ -570,13 +573,22 @@ export async function placeBooking(input: NewBooking) {
   return booking
 }
 
+const heldLeases = new AsyncLocalStorage<Set<string>>()
+
 /**
  * Runs fn holding the lease named key: taken by inserting a row (or
  * taking over one that ran out), so a caller that waits holds no
  * connection. Waits up to a minute; the lease runs out after 3 minutes if
  * its holder dies, longer than any reserve takes.
  */
-export async function withLease<T>(key: string, fn: () => Promise<T>) {
+export async function withLease<T>(
+  key: string,
+  fn: () => Promise<T>
+): Promise<T> {
+  // Re-entrant: a caller already holding key (book_appointment holds both
+  // members' locks before it books) runs fn straight away.
+  const held = heldLeases.getStore()
+  if (held?.has(key)) return fn()
   const token = crypto.randomUUID()
   for (let attempt = 0; ; attempt++) {
     const taken = await db
@@ -594,7 +606,7 @@ export async function withLease<T>(key: string, fn: () => Promise<T>) {
     await new Promise((resolve) => setTimeout(resolve, 500))
   }
   try {
-    return await fn()
+    return await heldLeases.run(new Set([...(held ?? []), key]), fn)
   } finally {
     await db
       .delete(bookingLeases)
@@ -849,7 +861,7 @@ export const cancelMeeting = defineAction({
   name: "cancel_meeting",
   title: "取消會議",
   description:
-    "Cancels one of the member's own bookings (by id from list_meetings): releases the department room, takes down its Teams meeting and mails everyone the cancellation. Only the member who booked it; fails on someone else's or one already cancelled. teams_error is set when the Teams meeting could not be taken down: it will still start and record unless someone deletes it in Teams.",
+    "Cancels one of the member's own bookings (by id from list_meetings), or a meeting a labmate booked with them through book_appointment: releases the department room, takes down its Teams meeting and mails everyone the cancellation. Only the member who booked it or, for an appointment, the member booked; fails on someone else's or one already cancelled. teams_error is set when the Teams meeting could not be taken down: it will still start and record unless someone deletes it in Teams.",
   kind: "mutation",
   input: z.object({ id: z.uuid("id 是預約的 id") }),
   run: async (actor, { id }) => {
@@ -858,8 +870,15 @@ export const cancelMeeting = defineAction({
       .from(roomBookings)
       .where(and(eq(roomBookings.id, id), eq(roomBookings.status, "booked")))
     if (!booking) throw new Error("找不到這筆預約，或已經取消")
-    if (booking.requestedBy !== actor.userId)
-      throw new Error("只能取消自己的預約")
+    if (booking.requestedBy !== actor.userId) {
+      // The member booked through their appointment schedule may cancel too.
+      const [appointment] = await db
+        .select({ ownerId: appointments.ownerId })
+        .from(appointments)
+        .where(eq(appointments.bookingId, booking.id))
+      if (appointment?.ownerId !== actor.userId)
+        throw new Error("只能取消自己的預約")
+    }
     if (booking.meetingId)
       throw new Error("這是週一 Lab Meeting 的會議，請到 /meetings 請管理員改")
     return cancelBooking(booking, actor.userId)
