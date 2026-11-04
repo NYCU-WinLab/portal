@@ -1,4 +1,6 @@
 import { and, asc, eq, gt, lt, sql } from "drizzle-orm"
+import { createHash } from "node:crypto"
+
 import { z } from "zod"
 
 import { defineAction } from "@/lib/actions/define"
@@ -96,16 +98,37 @@ async function syncOne(userId: string) {
     })
   } catch (error) {
     const revoked = error instanceof GrantRevoked
-    // Events from a calendar the portal can no longer read would mislead.
-    if (revoked)
-      await db.delete(calendarEvents).where(eq(calendarEvents.userId, userId))
-    await db
+    // A relink while this sync ran replaced the token: its answer is stale.
+    const same = and(
+      eq(calendarLinks.userId, userId),
+      eq(calendarLinks.refreshToken, link.refreshToken)
+    )
+    const [still] = await db
       .update(calendarLinks)
       .set({
         syncError: revoked ? error.message : "同步失敗，5 分鐘後再試",
       })
-      .where(eq(calendarLinks.userId, userId))
+      .where(same)
+      .returning({ userId: calendarLinks.userId })
+    // Events from a calendar the portal can no longer read would mislead.
+    if (revoked && still)
+      await db.delete(calendarEvents).where(eq(calendarEvents.userId, userId))
     if (!revoked) emitErrorLog(error, { "calendar.user_id": userId })
+  }
+}
+
+/** A member who left the lab: their calendar stops showing and Google
+ * drops the portal's access. */
+async function dropLink(userId: string) {
+  const [removed] = await db
+    .delete(calendarLinks)
+    .where(eq(calendarLinks.userId, userId))
+    .returning({ refreshToken: calendarLinks.refreshToken })
+  if (!removed) return
+  try {
+    await revoke(open(removed.refreshToken))
+  } catch {
+    // Gone from the portal either way.
   }
 }
 
@@ -120,7 +143,11 @@ export function startCalendarSync() {
       const links = await db
         .select({ userId: calendarLinks.userId })
         .from(calendarLinks)
-      for (const { userId } of links) await syncOne(userId)
+      for (const { userId } of links) {
+        const member = await isLabMember(userId).catch(() => null)
+        if (member === false) await dropLink(userId)
+        else if (member) await syncOne(userId)
+      }
     })()
       .catch((error: unknown) => emitErrorLog(error, {}))
       .finally(() => (running = false))
@@ -141,7 +168,10 @@ export const linkGoogleCalendar = defineAction({
   run: async (actor, { code, verifier }) => {
     const granted = await exchangeCode(code, verifier)
     const [old] = await db
-      .select({ refreshToken: calendarLinks.refreshToken })
+      .select({
+        refreshToken: calendarLinks.refreshToken,
+        googleEmail: calendarLinks.googleEmail,
+      })
       .from(calendarLinks)
       .where(eq(calendarLinks.userId, actor.userId))
     await db
@@ -360,6 +390,11 @@ export const rotateCalendarFeeds = defineAction({
   },
 })
 
+// Stays the same across syncs (rows are replaced each time), so calendar
+// apps keep their reminders on an unchanged event.
+const eventUid = (row: Row) =>
+  `${createHash("sha256").update(`${row.userId}:${row.googleId}`).digest("hex").slice(0, 32)}@portal.winlab.tw`
+
 const icsDate = (date: Date) => todayInTaipeiOf(date).replace(/-/g, "")
 const todayInTaipeiOf = (date: Date) =>
   new Intl.DateTimeFormat("en-CA", {
@@ -415,7 +450,7 @@ export async function calendarFeed(
       const event = shown(row, full)
       return [
         "BEGIN:VEVENT",
-        `UID:${row.id}@portal.winlab.tw`,
+        `UID:${eventUid(row)}`,
         `DTSTAMP:${stamp}`,
         ...(row.allDay
           ? [

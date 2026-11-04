@@ -13,8 +13,19 @@ const SCOPES = [
 ]
 const timeout = () => AbortSignal.timeout(10_000)
 
-/** Holds state, PKCE verifier and member id between /connect and /callback. */
-export const CONSENT_COOKIE = "calendar_consent"
+/** Holds state, PKCE verifier and member id between /connect and /callback.
+ * __Host-: no other *.winlab.tw site can plant one. */
+export const CONSENT_COOKIE = "__Host-calendar_consent"
+
+/** Failures the callback may name on /calendar; anything else shows as a
+ * generic failure, so the address bar cannot put words on the page. */
+export const LINK_FAILURES = {
+  "not-configured": "行事曆沒有設定 Google 登入",
+  state: "連結逾時或來源不符，請再試一次",
+  denied: "Google 沒有授權",
+  scope: "要勾選「查看行事曆活動」才能連結",
+  failed: "連結失敗，請再試一次",
+} as const
 
 export const googleCalendarConfigured = () =>
   Boolean(
@@ -81,6 +92,12 @@ async function token(body: Record<string, string>): Promise<TokenAnswer> {
   return (await response.json()) as TokenAnswer
 }
 
+export class MissingScope extends Error {
+  constructor() {
+    super("要勾選「查看行事曆活動」才能連結")
+  }
+}
+
 /** The member took back the portal's access in their Google account. */
 export class GrantRevoked extends Error {
   constructor() {
@@ -97,8 +114,7 @@ export async function exchangeCode(code: string, verifier: string) {
     redirect_uri: redirectUri(),
   })
   if (!answer.refresh_token) throw new Error("Google 沒有給 refresh token")
-  if (!answer.scope?.split(" ").includes(SCOPES[2]))
-    throw new Error("要勾選「查看行事曆活動」才能連結")
+  if (!answer.scope?.split(" ").includes(SCOPES[2])) throw new MissingScope()
   // The id token came straight from Google's token endpoint over TLS, so its
   // claims are read without checking the signature (OpenID Connect 3.1.3.7).
   const claims = JSON.parse(

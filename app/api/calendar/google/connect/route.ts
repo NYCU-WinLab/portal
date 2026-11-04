@@ -22,9 +22,9 @@ export async function GET() {
     `${state}.${verifier}.${session.user.id}`,
     {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
+      secure: true,
       sameSite: "lax",
-      path: "/api/calendar/google",
+      path: "/",
       maxAge: 600,
     }
   )

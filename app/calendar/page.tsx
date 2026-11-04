@@ -13,17 +13,12 @@ import { PortalShell } from "@/components/portal-shell"
 import { getMyCalendar, listCalendars } from "@/lib/actions/calendar"
 import { runAction } from "@/lib/actions/define"
 import { requireActor } from "@/lib/auth/session"
+import { LINK_FAILURES } from "@/lib/google-calendar"
 
 import { MyCalendar } from "./my-calendar"
 import { calendarPage } from "./nav"
 
 export const dynamic = "force-dynamic"
-
-const problems: Record<string, string> = {
-  "not-configured": "行事曆沒有設定 Google 登入",
-  state: "連結逾時或來源不符，請再試一次",
-  denied: "Google 沒有授權",
-}
 
 export default async function CalendarPage({
   searchParams,
@@ -54,7 +49,11 @@ export default async function CalendarPage({
         <section className="flex flex-col gap-2">
           <SectionHeader title="我的行事曆" />
           {error && (
-            <p className="text-destructive">{problems[error] ?? error}</p>
+            <p className="text-destructive">
+              {Object.hasOwn(LINK_FAILURES, error)
+                ? LINK_FAILURES[error as keyof typeof LINK_FAILURES]
+                : LINK_FAILURES.failed}
+            </p>
           )}
           {mine.configured || mine.link ? (
             <MyCalendar link={mine.link} />
