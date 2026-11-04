@@ -163,7 +163,7 @@ export function epicIid(ref: string, groupPath: string) {
 
 // RFC 5545: escape TEXT, fold lines at 75 octets without splitting a
 // character (titles are mostly Chinese, 3 bytes each).
-const icsText = (value: string) =>
+export const icsText = (value: string) =>
   value
     .replace(/\\/g, "\\\\")
     .replace(/;/g, "\\;")
@@ -173,7 +173,7 @@ const icsText = (value: string) =>
 // A parameter value is quoted, and may hold no quote or line break.
 const icsParam = (value: string) => `"${value.replace(/["\r\n]/g, " ")}"`
 
-function fold(line: string) {
+export function fold(line: string) {
   const bytes = new TextEncoder().encode(line)
   const decode = (from: number, to: number) =>
     new TextDecoder().decode(bytes.subarray(from, to))
@@ -191,7 +191,7 @@ function fold(line: string) {
   return parts.join("\r\n ")
 }
 
-const icsTime = (iso: string) =>
+export const icsTime = (iso: string) =>
   new Date(iso)
     .toISOString()
     .replace(/[-:]/g, "")

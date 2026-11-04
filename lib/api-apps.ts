@@ -8,6 +8,7 @@ export const apiApps = {
   members: "成員",
   bulletin: "公告",
   leave: "請假",
+  calendar: "行事曆",
   meetings: "會議",
   door: "開門",
   greetings: "門口問候",

@@ -33,6 +33,13 @@ export const serviceGroups: { title: string; apps: Service[] }[] = [
         emoji: "📢",
         href: "/bulletin",
       },
+      {
+        key: "calendar",
+        label: "Calendar",
+        name: "行事曆",
+        emoji: "📅",
+        href: "/calendar",
+      },
       { key: "door", label: "Door", name: "門禁", emoji: "🚪", href: "/door" },
       {
         key: "gallery",

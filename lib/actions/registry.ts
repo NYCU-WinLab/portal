@@ -222,6 +222,15 @@ import {
   skipSong,
 } from "@/lib/actions/music"
 import { listAssets } from "@/lib/actions/assets"
+import {
+  getMemberCalendar,
+  getMyCalendar,
+  linkGoogleCalendar,
+  listCalendars,
+  rotateCalendarFeeds,
+  setCalendarVisibility,
+  unlinkGoogleCalendar,
+} from "@/lib/actions/calendar"
 import { listLabMembers } from "@/lib/actions/members"
 import { listLabMeetingStats } from "@/lib/actions/stats"
 import { whoami } from "@/lib/actions/users"
@@ -256,6 +265,18 @@ export const actionGroups: { app: ApiApp | null; actions: Action[] }[] = [
   {
     app: "leave",
     actions: [listLeaves, createLeave, deleteLeave],
+  },
+  {
+    app: "calendar",
+    actions: [
+      listCalendars,
+      getMemberCalendar,
+      getMyCalendar,
+      setCalendarVisibility,
+      rotateCalendarFeeds,
+      linkGoogleCalendar,
+      unlinkGoogleCalendar,
+    ],
   },
   {
     app: "bulletin",
