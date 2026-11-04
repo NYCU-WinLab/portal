@@ -231,6 +231,12 @@ import {
   setCalendarVisibility,
   unlinkGoogleCalendar,
 } from "@/lib/actions/calendar"
+import {
+  bookAppointment,
+  getMyAppointmentSchedule,
+  listAppointmentSlots,
+  setAppointmentSchedule,
+} from "@/lib/actions/appointments"
 import { listLabMembers } from "@/lib/actions/members"
 import { listLabMeetingStats } from "@/lib/actions/stats"
 import { whoami } from "@/lib/actions/users"
@@ -276,6 +282,10 @@ export const actionGroups: { app: ApiApp | null; actions: Action[] }[] = [
       rotateCalendarFeeds,
       linkGoogleCalendar,
       unlinkGoogleCalendar,
+      getMyAppointmentSchedule,
+      setAppointmentSchedule,
+      listAppointmentSlots,
+      bookAppointment,
     ],
   },
   {

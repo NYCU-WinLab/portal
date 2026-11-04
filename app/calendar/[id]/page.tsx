@@ -3,6 +3,7 @@ import Link from "next/link"
 import { PageHeader, SectionHeader } from "@/components/page-header"
 import { PortalShell } from "@/components/portal-shell"
 import { buttonVariants } from "@/components/ui/button"
+import { listAppointmentSlots } from "@/lib/actions/appointments"
 import { getMemberCalendar } from "@/lib/actions/calendar"
 import { runAction } from "@/lib/actions/define"
 import { requireActor } from "@/lib/auth/session"
@@ -14,6 +15,7 @@ import {
 } from "@/lib/rooms/time"
 
 import { FeedLink } from "../feed-link"
+import { BookSlots } from "./book-slot"
 import { calendarPage } from "../nav"
 
 export const dynamic = "force-dynamic"
@@ -43,11 +45,11 @@ export default async function MemberCalendarPage({
   const actor = await requireActor(`/calendar/${id}`)
   const from =
     query.from && isCalendarDay(query.from) ? query.from : todayInTaipei()
-  const calendar = await runAction(getMemberCalendar, actor, {
-    user_id: id,
-    from,
-    days: DAYS,
-  })
+  const [calendar, slots] = await Promise.all([
+    runAction(getMemberCalendar, actor, { user_id: id, from, days: DAYS }),
+    runAction(listAppointmentSlots, actor, { user_id: id }),
+  ])
+  const bookable = slots.schedule && id !== actor.userId
   const days = Array.from({ length: DAYS }, (_, i) => addDays(from, i))
   const eventsOn = (day: string) => {
     const start = new Date(`${day}T00:00:00+08:00`).getTime()
@@ -88,6 +90,17 @@ export default async function MemberCalendarPage({
           {calendar.syncedAt &&
             `，${synced.format(new Date(calendar.syncedAt))} 同步`}
         </p>
+        {bookable && (
+          <section className="flex flex-col gap-2">
+            <SectionHeader title={`預約 ${calendar.name}`} />
+            <BookSlots
+              userId={id}
+              name={calendar.name}
+              slotMinutes={slots.slotMinutes}
+              days={slots.days}
+            />
+          </section>
+        )}
         {days.map((day) => {
           const events = eventsOn(day)
           return (

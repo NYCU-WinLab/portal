@@ -10,11 +10,13 @@ import {
 import { NumberTicker } from "@/components/ui/number-ticker"
 import { PageHeader, SectionHeader } from "@/components/page-header"
 import { PortalShell } from "@/components/portal-shell"
+import { getMyAppointmentSchedule } from "@/lib/actions/appointments"
 import { getMyCalendar, listCalendars } from "@/lib/actions/calendar"
 import { runAction } from "@/lib/actions/define"
 import { requireActor } from "@/lib/auth/session"
 import { LINK_FAILURES } from "@/lib/google-calendar"
 
+import { AppointmentSchedule } from "./appointment-schedule"
 import { MyCalendar } from "./my-calendar"
 import { calendarPage } from "./nav"
 
@@ -26,10 +28,11 @@ export default async function CalendarPage({
   searchParams: Promise<{ error?: string }>
 }) {
   const actor = await requireActor("/calendar")
-  const [{ error }, mine, { calendars }] = await Promise.all([
+  const [{ error }, mine, { calendars }, appointments] = await Promise.all([
     searchParams,
     runAction(getMyCalendar, actor, {}),
     runAction(listCalendars, actor, {}),
+    runAction(getMyAppointmentSchedule, actor, {}),
   ])
   const free = calendars.filter((row) => !row.busyNow).length
 
@@ -61,6 +64,15 @@ export default async function CalendarPage({
             <p className="text-muted-foreground">行事曆沒有設定 Google 登入</p>
           )}
         </section>
+        {appointments.linked && (
+          <section className="flex flex-col gap-2">
+            <SectionHeader title="開放大家預約我" />
+            <AppointmentSchedule
+              schedule={appointments.schedule}
+              appointments={appointments.appointments}
+            />
+          </section>
+        )}
         <section className="flex flex-col gap-2">
           <SectionHeader title="大家的行事曆" />
           {calendars.length === 0 ? (
@@ -77,6 +89,9 @@ export default async function CalendarPage({
                     <span className="min-w-0 flex-1 truncate font-medium">
                       {row.name}
                     </span>
+                    {row.bookable && (
+                      <span className="shrink-0 text-primary">可預約</span>
+                    )}
                     <span className="shrink-0 text-muted-foreground">
                       {row.visibility === "public" ? "公開" : "只顯示忙碌"}
                     </span>

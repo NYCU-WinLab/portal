@@ -8,6 +8,7 @@ import { isLabMember } from "@/lib/auth/member"
 import { feedKey, open, sameKey, seal } from "@/lib/calendar-crypto"
 import { db } from "@/lib/db"
 import {
+  appointmentSchedules,
   calendarEvents,
   calendarFeeds,
   calendarLinks,
@@ -281,7 +282,7 @@ export const listCalendars = defineAction({
   name: "list_calendars",
   title: "行事曆列表",
   description:
-    "Members who linked a Google Calendar, with each one's visibility (private or public) and whether they are busy right now. Open one with get_member_calendar.",
+    "Members who linked a Google Calendar, with each one's visibility (private or public), whether they are busy right now, and bookable when they take appointments (list_appointment_slots). Open one with get_member_calendar.",
   kind: "query",
   input: z.object({}),
   run: async () => {
@@ -293,9 +294,14 @@ export const listCalendars = defineAction({
           name: user.name,
           visibility: calendarLinks.visibility,
           syncedAt: calendarLinks.syncedAt,
+          bookable: sql<boolean>`${appointmentSchedules.userId} is not null`,
         })
         .from(calendarLinks)
         .innerJoin(user, eq(user.id, calendarLinks.userId))
+        .leftJoin(
+          appointmentSchedules,
+          eq(appointmentSchedules.userId, calendarLinks.userId)
+        )
         .orderBy(asc(user.name)),
       db
         .selectDistinct({ userId: calendarEvents.userId })
