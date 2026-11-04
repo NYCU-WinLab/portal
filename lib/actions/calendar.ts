@@ -189,7 +189,10 @@ export const linkGoogleCalendar = defineAction({
           syncError: null,
         },
       })
-    if (old) {
+    // Google keeps one grant per account: revoking the old token of the
+    // same account would end the new one too. Only a switch to another
+    // Google account drops the old grant.
+    if (old && old.googleEmail !== granted.email) {
       const previous = (() => {
         try {
           return open(old.refreshToken)
@@ -197,7 +200,7 @@ export const linkGoogleCalendar = defineAction({
           return null
         }
       })()
-      if (previous && previous !== granted.refreshToken) await revoke(previous)
+      if (previous) await revoke(previous)
     }
     await syncOne(actor.userId)
     return { email: granted.email }
