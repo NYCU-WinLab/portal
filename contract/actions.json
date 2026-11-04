@@ -3897,6 +3897,206 @@
     }
   },
   {
+    "name": "get_member_calendar",
+    "title": "查看行事曆",
+    "description": "One member's linked calendar for `days` days from `from` (YYYY-MM-DD in Taipei, default today): each event's start and end (ISO), allDay, and title and location when the owner made it public (else title is 忙碌 and busyOnly is true). Also the subscription link (ICS) the signed-in member can add to their own calendar app; it is theirs alone, so never share it.",
+    "kind": "query",
+    "app": "calendar",
+    "hash": "a3750bf8ee9c9a69",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "days": {
+          "default": 7,
+          "maximum": 31,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "from": {
+          "type": "string"
+        },
+        "user_id": {
+          "format": "uuid",
+          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "user_id"
+      ],
+      "type": "object"
+    },
+    "output": {
+      "additionalProperties": false,
+      "properties": {
+        "days": {
+          "type": "number"
+        },
+        "events": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "allDay": {
+                "type": "boolean"
+              },
+              "busyOnly": {
+                "type": "boolean"
+              },
+              "end": {
+                "type": "string"
+              },
+              "location": {
+                "type": "string"
+              },
+              "start": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "start",
+              "end",
+              "allDay",
+              "title",
+              "location",
+              "busyOnly"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "feedUrl": {
+          "type": "string"
+        },
+        "from": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "syncedAt": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "syncError": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "userId": {
+          "type": "string"
+        },
+        "visibility": {
+          "enum": [
+            "private",
+            "public"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "userId",
+        "name",
+        "visibility",
+        "syncedAt",
+        "syncError",
+        "from",
+        "days",
+        "events",
+        "feedUrl"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "get_my_calendar",
+    "title": "我的行事曆設定",
+    "description": "Whether the signed-in member has linked a Google Calendar: the Google address, visibility (private: others see busy blocks only; public: others also see titles and locations), when it last synced and any sync problem.",
+    "kind": "query",
+    "app": "calendar",
+    "hash": "dab0e496133f7b57",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {},
+      "type": "object"
+    },
+    "output": {
+      "additionalProperties": false,
+      "properties": {
+        "configured": {
+          "type": "boolean"
+        },
+        "link": {
+          "anyOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "googleEmail": {
+                  "type": "string"
+                },
+                "syncedAt": {
+                  "anyOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "type": "string"
+                    }
+                  ]
+                },
+                "syncError": {
+                  "anyOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "type": "string"
+                    }
+                  ]
+                },
+                "visibility": {
+                  "enum": [
+                    "private",
+                    "public"
+                  ],
+                  "type": "string"
+                }
+              },
+              "required": [
+                "visibility",
+                "syncedAt",
+                "googleEmail",
+                "syncError"
+              ],
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "configured",
+        "link"
+      ],
+      "type": "object"
+    }
+  },
+  {
     "name": "get_my_door_greeting",
     "title": "我的門口歡迎",
     "description": "How the lab door greets the signed-in member: suffix (shown after their name on the LED panel, null for the default ！！), speak_name (whether the door says \"Hi <given name>\" before the sound) and their playlist, the pool sounds the door picks from at random (empty plays one of the lab's defaults).",
@@ -5469,6 +5669,70 @@
       },
       "required": [
         "restaurants"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "list_calendars",
+    "title": "行事曆列表",
+    "description": "Members who linked a Google Calendar, with each one's visibility (private or public) and whether they are busy right now. Open one with get_member_calendar.",
+    "kind": "query",
+    "app": "calendar",
+    "hash": "d9846dc4060a1457",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {},
+      "type": "object"
+    },
+    "output": {
+      "additionalProperties": false,
+      "properties": {
+        "calendars": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "busyNow": {
+                "type": "boolean"
+              },
+              "name": {
+                "type": "string"
+              },
+              "syncedAt": {
+                "anyOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              },
+              "userId": {
+                "type": "string"
+              },
+              "visibility": {
+                "enum": [
+                  "private",
+                  "public"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "visibility",
+              "syncedAt",
+              "busyNow",
+              "userId",
+              "name"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "calendars"
       ],
       "type": "object"
     }
@@ -9793,6 +10057,31 @@
     }
   },
   {
+    "name": "rotate_calendar_feeds",
+    "title": "重設訂閱連結",
+    "description": "Ends every calendar subscription link the signed-in member has (for example after one leaked) and makes new ones; calendar apps subscribed with the old links stop updating.",
+    "kind": "mutation",
+    "app": "calendar",
+    "hash": "04137d614736d8bf",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {},
+      "type": "object"
+    },
+    "output": {
+      "additionalProperties": false,
+      "properties": {
+        "version": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "version"
+      ],
+      "type": "object"
+    }
+  },
+  {
     "name": "search_music",
     "title": "搜尋歌曲",
     "description": "Search YouTube Music for songs, or resolve a pasted link: YouTube / YouTube Music, a Bilibili video (bilibili.com, b23.tv) or a live Twitch channel (twitch.tv). A song link returns that song; a playlist link returns the playlist (id, title, song count) and its first songs. Add results with add_song or add_playlist.",
@@ -10331,6 +10620,46 @@
       "required": [
         "restaurantId",
         "groups"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "set_calendar_visibility",
+    "title": "行事曆公開範圍",
+    "description": "Sets who sees what on the signed-in member's linked calendar: private shows others only busy blocks, public also shows each event's title and location. Events the member marked private in Google stay busy blocks either way. Confirm with the member before making a calendar public.",
+    "kind": "mutation",
+    "app": "calendar",
+    "hash": "079cbc38822f33f4",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "visibility": {
+          "enum": [
+            "private",
+            "public"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "visibility"
+      ],
+      "type": "object"
+    },
+    "output": {
+      "additionalProperties": false,
+      "properties": {
+        "visibility": {
+          "enum": [
+            "private",
+            "public"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "visibility"
       ],
       "type": "object"
     }
@@ -10962,6 +11291,31 @@
       "required": [
         "first",
         "second"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "unlink_google_calendar",
+    "title": "取消連結行事曆",
+    "description": "Unlinks the signed-in member's Google Calendar: tells Google to drop the portal's access and deletes every copied event, so nobody sees it any more.",
+    "kind": "mutation",
+    "app": "calendar",
+    "hash": "054b429a01377af0",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {},
+      "type": "object"
+    },
+    "output": {
+      "additionalProperties": false,
+      "properties": {
+        "unlinked": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "unlinked"
       ],
       "type": "object"
     }
