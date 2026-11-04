@@ -7633,10 +7633,10 @@
   {
     "name": "list_my_appointments",
     "title": "我的預約",
-    "description": "The signed-in member's upcoming appointments, soonest first, in both directions: withMe (labmates booked a meeting with them) and byMe (they booked one with a labmate). Each has the booking id (cancel it with cancel_meeting, either side may), date, start and end (Asia/Taipei), startsAt (ISO), the title and the other member's name.",
+    "description": "The signed-in member's upcoming appointments, soonest first, in both directions: withMe (labmates booked a meeting with them) and byMe (they booked one with a labmate). Each has the booking id (cancel it with cancel_meeting, either side may), date, start and end (Asia/Taipei), startsAt (ISO), the title, and the other member's id (withId) and name (with).",
     "kind": "query",
     "app": "calendar",
-    "hash": "8bd6e610fb5f7af6",
+    "hash": "601f0c209d27079f",
     "input": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {},
@@ -7669,6 +7669,9 @@
               },
               "with": {
                 "type": "string"
+              },
+              "withId": {
+                "type": "string"
               }
             },
             "required": [
@@ -7677,7 +7680,8 @@
               "start",
               "startsAt",
               "end",
-              "with"
+              "with",
+              "withId"
             ],
             "type": "object"
           },
@@ -7707,6 +7711,9 @@
               },
               "with": {
                 "type": "string"
+              },
+              "withId": {
+                "type": "string"
               }
             },
             "required": [
@@ -7715,7 +7722,8 @@
               "start",
               "startsAt",
               "end",
-              "with"
+              "with",
+              "withId"
             ],
             "type": "object"
           },

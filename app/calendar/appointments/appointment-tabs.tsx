@@ -4,6 +4,7 @@ import { XIcon } from "lucide-react"
 
 import { ConfirmDialog } from "@/components/confirm-dialog"
 import { EmptyState } from "@/components/empty-state"
+import { MemberAvatar } from "@/components/member-avatar"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
@@ -22,6 +23,7 @@ type Row = {
   start: string
   end: string
   title: string
+  withId: string
   with: string
 }
 
@@ -40,7 +42,10 @@ function List({ rows }: { rows: Row[] }) {
           <span className="min-w-0 flex-1 truncate font-medium">
             {row.title}
           </span>
-          <span className="shrink-0 text-muted-foreground">{row.with}</span>
+          <span className="flex shrink-0 items-center gap-3 text-muted-foreground">
+            <MemberAvatar id={row.withId} name={row.with} />
+            {row.with}
+          </span>
           <Tooltip>
             <ConfirmDialog
               trigger={
