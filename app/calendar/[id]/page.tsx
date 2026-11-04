@@ -129,7 +129,7 @@ export default async function MemberCalendarPage({
           )
         })}
         <section className="flex flex-col gap-2">
-          <SectionHeader title="訂閱" />
+          <SectionHeader title="我的專屬訂閱連結" />
           <FeedLink url={calendar.feedUrl} />
         </section>
       </div>

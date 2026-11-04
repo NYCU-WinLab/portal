@@ -40,14 +40,14 @@ export function MyCalendar({
         />
       </div>
       <label className="flex min-h-14 items-center gap-4 border-b border-border py-2">
-        <span className="min-w-0 flex-1 font-medium">公開詳細內容</span>
+        <span className="min-w-0 flex-1 font-medium">公開標題與地點</span>
         <Switch
           checked={link.visibility === "public"}
-          aria-label="公開詳細內容"
+          aria-label="公開標題與地點"
           onCheckedChange={(checked) =>
             report(
               setVisibilityAction(checked ? "public" : "private"),
-              checked ? "已公開詳細內容" : "只顯示忙碌"
+              checked ? "已公開標題與地點" : "只顯示忙碌"
             ).catch(() => {})
           }
         />
