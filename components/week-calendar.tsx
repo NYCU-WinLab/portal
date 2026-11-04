@@ -1,6 +1,11 @@
 import * as React from "react"
 
 import { cn } from "@/lib/utils"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 
 export type WeekEvent = {
   /** Unique within the week; defaults to start, end and title. */
@@ -36,12 +41,13 @@ type Block = {
   event: Placed
   from: number
   to: number
-  lane: number
-  lanes: number
+  /** How many earlier events it sits on; each one indents it 1rem. */
+  depth: number
 }
 
-// The timed events of one day, cut to the day, side by side where they
-// overlap: each cluster of overlapping events shares the column in lanes.
+// The timed events of one day, cut to the day. Where events overlap, the
+// later one sits on top of the earlier, indented by one step, the way
+// Calendar stacks them, so each keeps most of the column's width.
 function blocks(day: string, events: Placed[]): Block[] {
   const items = events
     .filter((e) => !e.allDay && e.first <= day && e.last >= day)
@@ -49,34 +55,21 @@ function blocks(day: string, events: Placed[]): Block[] {
       event,
       from: event.first === day ? event.startMinute : 0,
       to: event.last === day ? event.endMinute : FULL,
-      lane: 0,
-      lanes: 1,
+      depth: 0,
     }))
     .sort((a, b) => a.from - b.from || b.to - a.to)
-  let cluster: typeof items = []
-  let clusterEnd = -1
-  const close = () => {
-    const lanes = Math.max(...cluster.map((item) => item.lane)) + 1
-    for (const item of cluster) item.lanes = lanes
-  }
-  for (const item of items) {
-    if (item.from >= clusterEnd && cluster.length) {
-      close()
-      cluster = []
-    }
-    const taken = new Set(
-      cluster.filter((other) => other.to > item.from).map((o) => o.lane)
-    )
-    while (taken.has(item.lane)) item.lane++
-    cluster.push(item)
-    clusterEnd = Math.max(clusterEnd, item.to)
-  }
-  if (cluster.length) close()
+  items.forEach((item, index) => {
+    const under = items.slice(0, index).filter((other) => other.to > item.from)
+    item.depth = under.length
+      ? Math.max(...under.map((other) => other.depth)) + 1
+      : 0
+  })
   return items
 }
 
 // One week the way the week view of Calendar draws it: days in columns,
-// hours down the side, each timed event a block from its start to its end,
+// hours down the side, each timed event a block from its start to its end
+// (overlaps stack, indented), the whole title and time in its tip,
 // all-day events as pills above the hours. The hours run 08:00 to 20:00 and
 // stretch to fit any event outside them. Today's date sits in a primary
 // circle. Below md the columns fold into one row per day, listing events.
@@ -154,7 +147,7 @@ function WeekCalendar({
     .flatMap(({ timed }, d) =>
       timed.map(
         (b, i) =>
-          `[data-week-scope=${scope}] [data-block="${d}-${i}"] { --top: ${percent(b.from - startHour * 60)}; --height: ${percent(b.to - b.from)}; --left: ${((b.lane / b.lanes) * 100).toFixed(3)}%; --width: ${(100 / b.lanes).toFixed(3)}%; }`
+          `[data-week-scope=${scope}] [data-block="${d}-${i}"] { --top: ${percent(b.from - startHour * 60)}; --height: ${percent(b.to - b.from)}; --left: ${b.depth}rem; --width: calc(100% - ${b.depth}rem); }`
       )
     )
     .join("\n")
@@ -177,15 +170,23 @@ function WeekCalendar({
     </span>
   )
   const pill = (event: Placed) => (
-    <li
-      key={event.key}
-      title={event.title}
-      className={cn(
-        "truncate rounded-full bg-muted px-2",
-        event.quiet && "text-muted-foreground"
-      )}
-    >
-      {event.title}
+    <li key={event.key} className="min-w-0">
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <button
+              type="button"
+              className={cn(
+                "w-full truncate rounded-full bg-muted px-2 text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
+                event.quiet && "text-muted-foreground"
+              )}
+            />
+          }
+        >
+          {event.title}
+        </TooltipTrigger>
+        <TooltipContent>{event.title}</TooltipContent>
+      </Tooltip>
     </li>
   )
 
@@ -252,29 +253,52 @@ function WeekCalendar({
                   <li
                     key={b.event.key}
                     data-block={`${d}-${i}`}
-                    title={`${b.event.title}，${b.event.span}`}
-                    className="absolute top-(--top) left-(--left) h-(--height) w-(--width) p-px"
+                    className="absolute top-(--top) left-(--left) h-(--height) w-(--width) bg-background pb-px"
                   >
-                    <div
-                      className={cn(
-                        "flex size-full min-h-6 flex-col overflow-hidden border-l-2 px-2",
-                        b.event.quiet
-                          ? "border-muted-foreground bg-muted text-muted-foreground"
-                          : "border-primary bg-primary/10"
-                      )}
-                    >
-                      <span
-                        className={cn(
-                          "truncate",
-                          !b.event.quiet && "font-medium"
-                        )}
+                    <Tooltip>
+                      <TooltipTrigger
+                        render={
+                          <button
+                            type="button"
+                            className={cn(
+                              "flex size-full min-h-6 flex-col overflow-hidden border-l-2 px-2 text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
+                              b.depth > 0 && "border-t border-t-background",
+                              b.event.quiet
+                                ? "border-l-muted-foreground bg-muted text-muted-foreground"
+                                : "border-l-primary bg-primary/10"
+                            )}
+                          />
+                        }
                       >
-                        {b.event.title}
-                      </span>
-                      <span className="truncate text-muted-foreground tabular-nums">
-                        {clock(b.event.startMinute)}
-                      </span>
-                    </div>
+                        <span
+                          className={cn(
+                            "break-words",
+                            !b.event.quiet && "font-medium"
+                          )}
+                        >
+                          {b.event.title}
+                        </span>
+                        {/* A short block has room for the start only;
+                            the tip has the whole span. */}
+                        <span className="text-muted-foreground tabular-nums">
+                          {b.to - b.from < 90 ? (
+                            clock(b.from)
+                          ) : (
+                            <>
+                              <span className="whitespace-nowrap">
+                                {clock(b.from)} 到
+                              </span>{" "}
+                              <span className="whitespace-nowrap">
+                                {clock(b.to % FULL)}
+                              </span>
+                            </>
+                          )}
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        {b.event.title}，{b.event.span}
+                      </TooltipContent>
+                    </Tooltip>
                   </li>
                 ))}
               </ul>
