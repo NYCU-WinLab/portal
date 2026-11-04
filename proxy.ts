@@ -33,9 +33,9 @@ export const config = {
   // MCP endpoints (they answer with OAuth errors, not redirects), Keycloak's
   // back-channel logout (a signed token), the card
   // reader's bridge (its own secret), calendar subscription links (a key in
-  // the path), discovery documents and static files,
+  // the path), the privacy page Google links to, discovery documents and static files,
   // including the door's home-screen manifest and icons.
   matcher: [
-    "/((?!(?:sign-in|consent|api/auth|api/keycloak/backchannel-logout|api/door/(?:events|greetings|meeting|sounds|voice|open)|api/rooms|api/actions|api/calendar/feed|api/music/player|api/developers|rooms/join|mcp|\\.well-known|_next/static|_next/image)(?:/|$)|icon\\.png$|apple-icon\\.png$|door/(?:manifest\\.webmanifest|[\\w-]+\\.png)$).*)",
+    "/((?!(?:sign-in|consent|privacy|api/auth|api/keycloak/backchannel-logout|api/door/(?:events|greetings|meeting|sounds|voice|open)|api/rooms|api/actions|api/calendar/feed|api/music/player|api/developers|rooms/join|mcp|\\.well-known|_next/static|_next/image)(?:/|$)|icon\\.png$|apple-icon\\.png$|door/(?:manifest\\.webmanifest|[\\w-]+\\.png)$).*)",
   ],
 }
