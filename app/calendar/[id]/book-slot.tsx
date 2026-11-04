@@ -2,6 +2,8 @@
 
 import * as React from "react"
 
+import { EmptyState } from "@/components/empty-state"
+import { ExpandRow } from "@/components/expand-row"
 import { FormDialog, FormField } from "@/components/form-dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -44,44 +46,56 @@ export function BookSlots({
     setPicked(null)
   }
 
-  if (!days.length)
-    return <p className="text-muted-foreground">目前沒有可預約的時段</p>
+  if (!days.length) return <EmptyState noun="可預約的時段" />
 
   return (
     <>
-      <ul className="flex flex-col">
-        {days.map((day) => (
-          <li
+      <ul className="flex stagger-rise flex-col">
+        {days.map((day, i) => (
+          <ExpandRow
             key={day.date}
-            className="flex min-h-14 flex-wrap items-center gap-2 border-b border-border py-2"
+            defaultOpen={i === 0}
+            summary={
+              <span className="flex items-center gap-4">
+                <span className="font-medium">{dayLabel(day.date)}</span>
+                <span className="text-muted-foreground">
+                  {day.starts.length} 個空檔
+                </span>
+              </span>
+            }
           >
-            <span className="w-28 shrink-0 text-muted-foreground">
-              {dayLabel(day.date)}
-            </span>
-            {day.starts.map((start) => (
-              <Button
-                key={start}
-                variant="outline"
-                className="tabular-nums"
-                onClick={() => setPicked({ date: day.date, start })}
-              >
-                {start}
-              </Button>
-            ))}
-          </li>
+            <div className="flex flex-wrap gap-2">
+              {day.starts.map((start) => (
+                <Button
+                  key={start}
+                  variant="outline"
+                  className="tabular-nums"
+                  onClick={() => setPicked({ date: day.date, start })}
+                >
+                  {start}
+                </Button>
+              ))}
+            </div>
+          </ExpandRow>
         ))}
       </ul>
       <FormDialog
         open={picked !== null}
         onOpenChange={(open) => !open && setPicked(null)}
-        title={
-          picked
-            ? `預約 ${name}：${dayLabel(picked.date)} ${picked.start}，${slotMinutes} 分鐘`
-            : ""
-        }
+        title={`預約 ${name}`}
         submitLabel="預約"
         onSubmit={submit}
       >
+        <FormField label="時間">
+          <Input
+            readOnly
+            value={
+              picked
+                ? `${dayLabel(picked.date)} ${picked.start}，${slotMinutes} 分鐘`
+                : ""
+            }
+          />
+        </FormField>
         <FormField label="標題" required>
           <Input name="title" maxLength={80} required />
         </FormField>

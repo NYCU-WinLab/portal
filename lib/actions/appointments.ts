@@ -1,4 +1,5 @@
 import { and, asc, eq, gt, gte, lt, lte, or, sql } from "drizzle-orm"
+import { alias } from "drizzle-orm/pg-core"
 import { z } from "zod"
 
 import { defineAction } from "@/lib/actions/define"
@@ -18,6 +19,7 @@ import {
   user,
   type AppointmentWindow,
 } from "@/lib/db/schema"
+import { splitTopic } from "@/lib/rooms/meeting"
 import {
   addDays,
   clock,
@@ -184,7 +186,7 @@ export const getMyAppointmentSchedule = defineAction({
   name: "get_my_appointment_schedule",
   title: "我的預約時段",
   description:
-    "The signed-in member's appointment schedule: weekly windows (weekday 0 = Sunday, Asia/Taipei HH:MM), slot length in minutes and how many days ahead labmates may book, or null when they take no appointments. Also their upcoming appointments: meetings labmates booked with them (booking id for cancel_meeting, date, start, end, title, who booked). linked is false when they have not linked a Google Calendar, which a schedule needs.",
+    "The signed-in member's appointment schedule: weekly windows (weekday 0 = Sunday, Asia/Taipei HH:MM), slot length in minutes and how many days ahead labmates may book, or null when they take no appointments. linked is false when they have not linked a Google Calendar, which a schedule needs. Their booked appointments are in list_my_appointments.",
   kind: "query",
   input: z.object({}),
   run: async (actor) => {
@@ -193,26 +195,6 @@ export const getMyAppointmentSchedule = defineAction({
       .from(calendarLinks)
       .where(eq(calendarLinks.userId, actor.userId))
     const schedule = await scheduleOf(actor.userId)
-    const booked = await db
-      .select({
-        id: roomBookings.id,
-        date: roomBookings.date,
-        start: roomBookings.startTime,
-        end: roomBookings.endTime,
-        title: roomBookings.title,
-        bookedBy: user.name,
-      })
-      .from(appointments)
-      .innerJoin(roomBookings, eq(roomBookings.id, appointments.bookingId))
-      .innerJoin(user, eq(user.id, roomBookings.requestedBy))
-      .where(
-        and(
-          eq(appointments.ownerId, actor.userId),
-          eq(roomBookings.status, "booked"),
-          gte(roomBookings.date, todayInTaipei())
-        )
-      )
-      .orderBy(asc(roomBookings.date), asc(roomBookings.startTime))
     return {
       linked: !!link,
       schedule: schedule && {
@@ -220,7 +202,68 @@ export const getMyAppointmentSchedule = defineAction({
         slotMinutes: schedule.slotMinutes,
         aheadDays: schedule.aheadDays,
       },
-      appointments: booked,
+    }
+  },
+})
+
+const withoutMine = <T extends { mine: boolean }>(row: T): Omit<T, "mine"> => {
+  const { mine, ...rest } = row
+  void mine
+  return rest
+}
+
+export const listMyAppointments = defineAction({
+  name: "list_my_appointments",
+  title: "我的預約",
+  description:
+    "The signed-in member's upcoming appointments, soonest first, in both directions: withMe (labmates booked a meeting with them) and byMe (they booked one with a labmate). Each has the booking id (cancel it with cancel_meeting, either side may), date, start and end (Asia/Taipei), startsAt (ISO), the title and the other member's name.",
+  kind: "query",
+  input: z.object({}),
+  run: async (actor) => {
+    const other = alias(user, "other")
+    const rows = await db
+      .select({
+        id: roomBookings.id,
+        date: roomBookings.date,
+        start: roomBookings.startTime,
+        end: roomBookings.endTime,
+        title: roomBookings.title,
+        ownerId: appointments.ownerId,
+        ownerName: other.name,
+        bookedBy: roomBookings.requestedBy,
+        bookerName: user.name,
+      })
+      .from(appointments)
+      .innerJoin(roomBookings, eq(roomBookings.id, appointments.bookingId))
+      .innerJoin(user, eq(user.id, roomBookings.requestedBy))
+      .innerJoin(other, eq(other.id, appointments.ownerId))
+      .where(
+        and(
+          or(
+            eq(appointments.ownerId, actor.userId),
+            eq(roomBookings.requestedBy, actor.userId)
+          ),
+          eq(roomBookings.status, "booked"),
+          gte(roomBookings.date, todayInTaipei())
+        )
+      )
+      .orderBy(asc(roomBookings.date), asc(roomBookings.startTime))
+    const now = Date.now()
+    const shown = rows
+      .filter((row) => new Date(taipeiIso(row.date, row.end)).getTime() > now)
+      .map((row) => ({
+        id: row.id,
+        date: row.date,
+        start: row.start,
+        end: row.end,
+        startsAt: taipeiIso(row.date, row.start),
+        title: splitTopic(row.title).title,
+        mine: row.ownerId === actor.userId,
+        with: row.ownerId === actor.userId ? row.bookerName : row.ownerName,
+      }))
+    return {
+      withMe: shown.filter((row) => row.mine).map(withoutMine),
+      byMe: shown.filter((row) => !row.mine).map(withoutMine),
     }
   },
 })

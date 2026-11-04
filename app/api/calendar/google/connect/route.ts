@@ -14,8 +14,9 @@ import {
 
 export async function GET() {
   const session = await getSession()
-  if (!session) redirect("/sign-in?next=/calendar")
-  if (!googleCalendarConfigured()) redirect("/calendar?error=not-configured")
+  if (!session) redirect("/sign-in?next=/calendar/settings")
+  if (!googleCalendarConfigured())
+    redirect("/calendar/settings?error=not-configured")
   const { state, verifier, challenge } = newConsent()
   ;(await cookies()).set(
     CONSENT_COOKIE,

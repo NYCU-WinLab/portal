@@ -1,5 +1,12 @@
 import Link from "next/link"
 
+import { ExpandRow } from "@/components/expand-row"
+import {
+  Focus,
+  FocusHighlight,
+  FocusLabel,
+  FocusTitle,
+} from "@/components/focus"
 import { PageHeader, SectionHeader } from "@/components/page-header"
 import { PortalShell } from "@/components/portal-shell"
 import { buttonVariants } from "@/components/ui/button"
@@ -15,8 +22,9 @@ import {
 } from "@/lib/rooms/time"
 
 import { FeedLink } from "../feed-link"
+import { calendarNav, calendarPage } from "../nav"
 import { BookSlots } from "./book-slot"
-import { calendarPage } from "../nav"
+import { CalendarTabs } from "./calendar-tabs"
 
 export const dynamic = "force-dynamic"
 
@@ -26,20 +34,13 @@ const clock = new Intl.DateTimeFormat("en-GB", {
   hour: "2-digit",
   minute: "2-digit",
 })
-const synced = new Intl.DateTimeFormat("zh-TW", {
-  timeZone: "Asia/Taipei",
-  month: "numeric",
-  day: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
-})
 
 export default async function MemberCalendarPage({
   params,
   searchParams,
 }: {
   params: Promise<{ id: string }>
-  searchParams: Promise<{ from?: string }>
+  searchParams: Promise<{ from?: string; tab?: string }>
 }) {
   const [{ id }, query] = await Promise.all([params, searchParams])
   const actor = await requireActor(`/calendar/${id}`)
@@ -60,95 +61,149 @@ export default async function MemberCalendarPage({
         new Date(event.end).getTime() > start
     )
   }
+  const soonest = slots.days[0]
 
-  return (
-    <PortalShell page={calendarPage}>
-      <div className="flex flex-col gap-12">
-        <PageHeader
-          title={calendar.name}
-          actions={
-            <div className="flex gap-2">
-              <Link
-                prefetch
-                href={`/calendar/${id}?from=${addDays(from, -DAYS)}`}
-                className={buttonVariants({ variant: "outline" })}
-              >
-                上一週
-              </Link>
-              <Link
-                prefetch
-                href={`/calendar/${id}?from=${addDays(from, DAYS)}`}
-                className={buttonVariants({ variant: "outline" })}
-              >
-                下一週
-              </Link>
-            </div>
-          }
-        />
-        <p className="text-muted-foreground">
-          {calendar.visibility === "public" ? "公開" : "只顯示忙碌"}
-          {calendar.syncedAt &&
-            `，${synced.format(new Date(calendar.syncedAt))} 同步`}
-        </p>
-        {bookable && (
-          <section className="flex flex-col gap-2">
-            <SectionHeader title={`預約 ${calendar.name}`} />
-            {slots.synced ? (
-              <BookSlots
-                userId={id}
-                name={calendar.name}
-                slotMinutes={slots.slotMinutes}
-                days={slots.days}
-              />
-            ) : (
-              <p className="text-muted-foreground">行事曆同步不了，暫停預約</p>
-            )}
-          </section>
-        )}
+  const schedule = (
+    <section className="flex flex-col gap-6">
+      <SectionHeader
+        title={`${dayLabel(from)} 起 ${DAYS} 天`}
+        actions={
+          <>
+            <Link
+              prefetch
+              href={`/calendar/${id}?tab=schedule&from=${addDays(from, -DAYS)}`}
+              className={buttonVariants({ variant: "outline" })}
+            >
+              上一週
+            </Link>
+            <Link
+              prefetch
+              href={`/calendar/${id}?tab=schedule&from=${addDays(from, DAYS)}`}
+              className={buttonVariants({ variant: "outline" })}
+            >
+              下一週
+            </Link>
+          </>
+        }
+      />
+      <ul className="flex stagger-rise flex-col">
         {days.map((day) => {
           const events = eventsOn(day)
+          if (!events.length)
+            return (
+              <li
+                key={day}
+                className="flex min-h-14 items-center gap-4 border-b border-border py-3"
+              >
+                <span className="font-medium">{dayLabel(day)}</span>
+                <span className="text-muted-foreground">整天有空</span>
+              </li>
+            )
           return (
-            <section key={day} className="flex flex-col gap-2">
-              <SectionHeader title={dayLabel(day)} />
-              {events.length === 0 ? (
-                <p className="text-muted-foreground">整天有空</p>
-              ) : (
-                <ul className="flex flex-col">
-                  {events.map((event) => (
-                    <li
-                      key={`${event.start}-${event.end}-${event.title}`}
-                      className="flex min-h-14 items-center gap-4 border-b border-border py-2"
+            <ExpandRow
+              key={day}
+              defaultOpen={day === from}
+              summary={
+                <span className="flex items-center gap-4">
+                  <span className="font-medium">{dayLabel(day)}</span>
+                  <span className="text-muted-foreground">
+                    {events.length} 個行程
+                  </span>
+                </span>
+              }
+            >
+              <ul className="flex flex-col gap-2">
+                {events.map((event) => (
+                  <li
+                    key={`${event.start}-${event.end}-${event.title}`}
+                    className="flex items-center gap-4"
+                  >
+                    <span className="w-32 shrink-0 text-muted-foreground tabular-nums">
+                      {event.allDay
+                        ? "整天"
+                        : `${clock.format(new Date(event.start))} 到 ${clock.format(new Date(event.end))}`}
+                    </span>
+                    <span
+                      className={
+                        event.busyOnly
+                          ? "min-w-0 flex-1 truncate text-muted-foreground"
+                          : "min-w-0 flex-1 truncate"
+                      }
                     >
-                      <span className="w-32 shrink-0 text-muted-foreground tabular-nums">
-                        {event.allDay
-                          ? "整天"
-                          : `${clock.format(new Date(event.start))} 到 ${clock.format(new Date(event.end))}`}
+                      {event.title}
+                    </span>
+                    {event.location && (
+                      <span className="min-w-0 shrink truncate text-muted-foreground">
+                        {event.location}
                       </span>
-                      <span
-                        className={
-                          event.busyOnly
-                            ? "min-w-0 flex-1 truncate text-muted-foreground"
-                            : "min-w-0 flex-1 truncate font-medium"
-                        }
-                      >
-                        {event.title}
-                      </span>
-                      {event.location && (
-                        <span className="min-w-0 shrink truncate text-muted-foreground">
-                          {event.location}
-                        </span>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </section>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </ExpandRow>
           )
         })}
-        <section className="flex flex-col gap-2">
-          <SectionHeader title="我的專屬訂閱連結" />
+        <ExpandRow
+          summary={<span className="font-medium">訂閱到我的行事曆 app</span>}
+        >
           <FeedLink url={calendar.feedUrl} />
-        </section>
+        </ExpandRow>
+      </ul>
+    </section>
+  )
+
+  return (
+    <PortalShell page={calendarPage} nav={calendarNav}>
+      <div className="flex flex-col gap-12">
+        <PageHeader title={calendar.name} />
+        {bookable ? (
+          <Focus>
+            <FocusLabel>最快可以約</FocusLabel>
+            <FocusTitle>
+              {!slots.synced ? (
+                "行事曆同步不了，暫停預約"
+              ) : soonest ? (
+                <FocusHighlight>
+                  {dayLabel(soonest.date)} {soonest.starts[0]}
+                </FocusHighlight>
+              ) : (
+                "近期都約滿了"
+              )}
+            </FocusTitle>
+          </Focus>
+        ) : (
+          <Focus>
+            <FocusLabel>現在</FocusLabel>
+            <FocusTitle>
+              {calendar.busyUntil ? (
+                <>
+                  <FocusHighlight>忙碌</FocusHighlight>，到{" "}
+                  {clock.format(new Date(calendar.busyUntil))}
+                </>
+              ) : (
+                <FocusHighlight>有空</FocusHighlight>
+              )}
+            </FocusTitle>
+          </Focus>
+        )}
+        {bookable ? (
+          <CalendarTabs
+            defaultTab={query.tab === "schedule" ? "schedule" : "booking"}
+            booking={
+              slots.synced ? (
+                <BookSlots
+                  userId={id}
+                  name={calendar.name}
+                  slotMinutes={slots.slotMinutes}
+                  days={slots.days}
+                />
+              ) : null
+            }
+            schedule={schedule}
+          />
+        ) : (
+          schedule
+        )}
       </div>
     </PortalShell>
   )
