@@ -36,6 +36,16 @@ const sections = [
   },
 ]
 
+const english = [
+  "WinLab Portal is the internal web app of the Wireless Internet Lab at National Yang Ming Chiao Tung University; only lab members can sign in.",
+  "Google Calendar: when a member links it, the portal reads the time, title and location of events on their primary calendar, with read-only access (calendar.events.readonly), to show the lab when they are busy.",
+  "Each member chooses who sees what: private shows other members only busy blocks; public also shows titles and locations. Events marked private in Google always show as busy.",
+  "The portal never creates, changes or deletes calendar events.",
+  "Google credentials are stored encrypted on the lab's own server. Calendar data is not shared outside the lab, sold, or used for advertising.",
+  "When a member unlinks their calendar or leaves the lab, the portal deletes their calendar data. Members can also revoke access at myaccount.google.com/permissions.",
+  "Contact: winlab@winlab.tw",
+]
+
 export default function PrivacyPage() {
   return (
     <PortalShell>
@@ -51,6 +61,14 @@ export default function PrivacyPage() {
             </ul>
           </section>
         ))}
+        <section lang="en" className="flex flex-col gap-2">
+          <SectionHeader title="Privacy (English)" />
+          <ul className="flex flex-col gap-2">
+            {english.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+        </section>
       </div>
     </PortalShell>
   )
