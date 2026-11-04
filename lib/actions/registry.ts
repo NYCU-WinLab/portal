@@ -235,6 +235,7 @@ import {
   bookAppointment,
   getMyAppointmentSchedule,
   listAppointmentSlots,
+  listMyAppointments,
   setAppointmentSchedule,
 } from "@/lib/actions/appointments"
 import { listLabMembers } from "@/lib/actions/members"
@@ -283,6 +284,7 @@ export const actionGroups: { app: ApiApp | null; actions: Action[] }[] = [
       linkGoogleCalendar,
       unlinkGoogleCalendar,
       getMyAppointmentSchedule,
+      listMyAppointments,
       setAppointmentSchedule,
       listAppointmentSlots,
       bookAppointment,

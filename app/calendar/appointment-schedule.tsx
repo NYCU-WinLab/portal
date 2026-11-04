@@ -2,7 +2,6 @@
 
 import * as React from "react"
 
-import { ConfirmDialog } from "@/components/confirm-dialog"
 import { Button } from "@/components/ui/button"
 import {
   Select,
@@ -13,9 +12,8 @@ import {
 } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import { report } from "@/lib/report"
-import { dayLabel } from "@/lib/rooms/time"
 
-import { cancelAppointmentAction, saveScheduleAction } from "./actions"
+import { saveScheduleAction } from "./actions"
 
 type Window = { weekday: number; start: string; end: string }
 
@@ -65,21 +63,12 @@ const times = TIMES.map((t) => ({ value: t, label: t }))
 
 export function AppointmentSchedule({
   schedule,
-  appointments,
 }: {
   schedule: {
     windows: Window[]
     slotMinutes: number
     aheadDays: number
   } | null
-  appointments: {
-    id: string
-    date: string
-    start: string
-    end: string
-    title: string
-    bookedBy: string
-  }[]
 }) {
   const [days, setDays] = React.useState(() =>
     WEEKDAYS.map((weekday) => {
@@ -178,35 +167,6 @@ export function AppointmentSchedule({
           {pending ? "儲存中…" : "儲存"}
         </Button>
       </div>
-      {appointments.length > 0 && (
-        <ul className="flex flex-col">
-          {appointments.map((row) => (
-            <li
-              key={row.id}
-              className="flex min-h-14 items-center gap-4 border-b border-border py-2"
-            >
-              <span className="w-48 shrink-0 text-muted-foreground tabular-nums">
-                {dayLabel(row.date)} {row.start} 到 {row.end}
-              </span>
-              <span className="min-w-0 flex-1 truncate font-medium">
-                {row.title}
-              </span>
-              <span className="shrink-0 text-muted-foreground">
-                {row.bookedBy}
-              </span>
-              <ConfirmDialog
-                trigger={<Button variant="outline">取消</Button>}
-                title={`取消 ${row.bookedBy} 的預約？`}
-                confirmLabel="取消預約"
-                variant="destructive"
-                onConfirm={() =>
-                  report(cancelAppointmentAction(row.id), "已取消，已寄信通知")
-                }
-              />
-            </li>
-          ))}
-        </ul>
-      )}
     </div>
   )
 }

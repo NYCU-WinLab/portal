@@ -20,27 +20,31 @@ export function FeedLink({ url }: { url: string }) {
   }
 
   return (
-    <div className="flex flex-col gap-2">
-      <div className="flex gap-2">
-        <Input
-          readOnly
-          value={url}
-          aria-label="訂閱連結"
-          className="min-w-0 flex-1"
-          onFocus={(event) => event.currentTarget.select()}
-        />
-        <Button onClick={copy}>複製</Button>
-      </div>
-      <ConfirmDialog
-        trigger={
-          <Button variant="ghost" className="self-start">
-            重設我的訂閱連結
-          </Button>
-        }
-        title="重設後，舊的訂閱連結都會停止更新"
-        confirmLabel="重設"
-        onConfirm={() => report(rotateFeedsAction(), "已重設")}
+    <div className="flex gap-2">
+      <Input
+        readOnly
+        value={url}
+        aria-label="訂閱連結"
+        className="min-w-0 flex-1"
+        onFocus={(event) => event.currentTarget.select()}
       />
+      <Button onClick={copy}>複製</Button>
     </div>
+  )
+}
+
+/** Ends every subscription link the member handed out, for one that leaked. */
+export function RotateFeeds() {
+  return (
+    <ConfirmDialog
+      trigger={
+        <Button variant="outline" className="self-start">
+          重設所有訂閱連結
+        </Button>
+      }
+      title="重設後，舊的訂閱連結都會停止更新"
+      confirmLabel="重設"
+      onConfirm={() => report(rotateFeedsAction(), "已重設")}
+    />
   )
 }

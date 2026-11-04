@@ -12,7 +12,7 @@ import { CONSENT_COOKIE, MissingScope } from "@/lib/google-calendar"
 
 export async function GET(request: Request) {
   const session = await getSession()
-  if (!session) redirect("/sign-in?next=/calendar")
+  if (!session) redirect("/sign-in?next=/calendar/settings")
   const jar = await cookies()
   const [state, verifier, userId] = (
     jar.get(CONSENT_COOKIE)?.value ?? ""
@@ -27,8 +27,8 @@ export async function GET(request: Request) {
     userId !== session.user.id ||
     !sameKey(given, state)
   )
-    redirect("/calendar?error=state")
-  if (!code) redirect("/calendar?error=denied")
+    redirect("/calendar/settings?error=state")
+  if (!code) redirect("/calendar/settings?error=denied")
   let failure: "scope" | "failed" | null = null
   try {
     await runAction(
@@ -39,5 +39,7 @@ export async function GET(request: Request) {
   } catch (error) {
     failure = error instanceof MissingScope ? "scope" : "failed"
   }
-  redirect(failure ? `/calendar?error=${failure}` : "/calendar")
+  redirect(
+    failure ? `/calendar/settings?error=${failure}` : "/calendar/settings"
+  )
 }

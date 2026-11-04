@@ -335,7 +335,7 @@ export const getMemberCalendar = defineAction({
   name: "get_member_calendar",
   title: "查看行事曆",
   description:
-    "One member's linked calendar for `days` days from `from` (YYYY-MM-DD in Taipei, default today): each event's start and end (ISO), allDay, and title and location when the owner made it public (else title is the literal 忙碌 (busy) and busyOnly is true). Also the subscription link (ICS) the signed-in member can add to their own calendar app; it is theirs alone, so never share it.",
+    "One member's linked calendar for `days` days from `from` (YYYY-MM-DD in Taipei, default today): each event's start and end (ISO), allDay, and title and location when the owner made it public (else title is the literal 忙碌 (busy) and busyOnly is true). busyUntil is when the event they are in right now ends (null when free now, or when from is not today). Also the subscription link (ICS) the signed-in member can add to their own calendar app; it is theirs alone, so never share it.",
   kind: "query",
   input: z.object({
     user_id: z.uuid(),
@@ -370,8 +370,16 @@ export const getMemberCalendar = defineAction({
       )
       .orderBy(asc(calendarEvents.startsAt))
     const full = seesAll(actor.userId, link)
+    const now = Date.now()
+    const current = rows.find(
+      (row) =>
+        !row.allDay &&
+        row.startsAt.getTime() <= now &&
+        row.endsAt.getTime() > now
+    )
     return {
       userId: link.userId,
+      busyUntil: current?.endsAt.toISOString() ?? null,
       name: link.name,
       visibility: link.visibility as z.infer<typeof visibility>,
       syncedAt: link.syncedAt?.toISOString() ?? null,

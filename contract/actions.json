@@ -3993,10 +3993,10 @@
   {
     "name": "get_member_calendar",
     "title": "查看行事曆",
-    "description": "One member's linked calendar for `days` days from `from` (YYYY-MM-DD in Taipei, default today): each event's start and end (ISO), allDay, and title and location when the owner made it public (else title is the literal 忙碌 (busy) and busyOnly is true). Also the subscription link (ICS) the signed-in member can add to their own calendar app; it is theirs alone, so never share it.",
+    "description": "One member's linked calendar for `days` days from `from` (YYYY-MM-DD in Taipei, default today): each event's start and end (ISO), allDay, and title and location when the owner made it public (else title is the literal 忙碌 (busy) and busyOnly is true). busyUntil is when the event they are in right now ends (null when free now, or when from is not today). Also the subscription link (ICS) the signed-in member can add to their own calendar app; it is theirs alone, so never share it.",
     "kind": "query",
     "app": "calendar",
-    "hash": "a3750bf8ee9c9a69",
+    "hash": "bd17c7780047a06b",
     "input": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
@@ -4023,6 +4023,16 @@
     "output": {
       "additionalProperties": false,
       "properties": {
+        "busyUntil": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
         "days": {
           "type": "number"
         },
@@ -4103,6 +4113,7 @@
       },
       "required": [
         "userId",
+        "busyUntil",
         "name",
         "visibility",
         "syncedAt",
@@ -4118,10 +4129,10 @@
   {
     "name": "get_my_appointment_schedule",
     "title": "我的預約時段",
-    "description": "The signed-in member's appointment schedule: weekly windows (weekday 0 = Sunday, Asia/Taipei HH:MM), slot length in minutes and how many days ahead labmates may book, or null when they take no appointments. Also their upcoming appointments: meetings labmates booked with them (booking id for cancel_meeting, date, start, end, title, who booked). linked is false when they have not linked a Google Calendar, which a schedule needs.",
+    "description": "The signed-in member's appointment schedule: weekly windows (weekday 0 = Sunday, Asia/Taipei HH:MM), slot length in minutes and how many days ahead labmates may book, or null when they take no appointments. linked is false when they have not linked a Google Calendar, which a schedule needs. Their booked appointments are in list_my_appointments.",
     "kind": "query",
     "app": "calendar",
-    "hash": "425fc08677c77d64",
+    "hash": "fb85d2b6e1206885",
     "input": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {},
@@ -4130,41 +4141,6 @@
     "output": {
       "additionalProperties": false,
       "properties": {
-        "appointments": {
-          "items": {
-            "additionalProperties": false,
-            "properties": {
-              "bookedBy": {
-                "type": "string"
-              },
-              "date": {
-                "type": "string"
-              },
-              "end": {
-                "type": "string"
-              },
-              "id": {
-                "type": "string"
-              },
-              "start": {
-                "type": "string"
-              },
-              "title": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "id",
-              "date",
-              "start",
-              "end",
-              "title",
-              "bookedBy"
-            ],
-            "type": "object"
-          },
-          "type": "array"
-        },
         "linked": {
           "type": "boolean"
         },
@@ -4218,8 +4194,7 @@
       },
       "required": [
         "linked",
-        "schedule",
-        "appointments"
+        "schedule"
       ],
       "type": "object"
     }
@@ -7651,6 +7626,105 @@
       },
       "required": [
         "bookings"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "list_my_appointments",
+    "title": "我的預約",
+    "description": "The signed-in member's upcoming appointments, soonest first, in both directions: withMe (labmates booked a meeting with them) and byMe (they booked one with a labmate). Each has the booking id (cancel it with cancel_meeting, either side may), date, start and end (Asia/Taipei), startsAt (ISO), the title and the other member's name.",
+    "kind": "query",
+    "app": "calendar",
+    "hash": "8bd6e610fb5f7af6",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {},
+      "type": "object"
+    },
+    "output": {
+      "additionalProperties": false,
+      "properties": {
+        "byMe": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "date": {
+                "type": "string"
+              },
+              "end": {
+                "type": "string"
+              },
+              "id": {
+                "type": "string"
+              },
+              "start": {
+                "type": "string"
+              },
+              "startsAt": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              },
+              "with": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "date",
+              "id",
+              "start",
+              "startsAt",
+              "end",
+              "with"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "withMe": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "date": {
+                "type": "string"
+              },
+              "end": {
+                "type": "string"
+              },
+              "id": {
+                "type": "string"
+              },
+              "start": {
+                "type": "string"
+              },
+              "startsAt": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              },
+              "with": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "date",
+              "id",
+              "start",
+              "startsAt",
+              "end",
+              "with"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "withMe",
+        "byMe"
       ],
       "type": "object"
     }
