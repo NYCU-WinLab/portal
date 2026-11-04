@@ -1,3 +1,5 @@
+import { AsyncLocalStorage } from "node:async_hooks"
+
 import { and, asc, eq, gte, inArray, isNotNull, lte, sql } from "drizzle-orm"
 import { z } from "zod"
 
@@ -571,13 +573,22 @@ export async function placeBooking(input: NewBooking) {
   return booking
 }
 
+const heldLeases = new AsyncLocalStorage<Set<string>>()
+
 /**
  * Runs fn holding the lease named key: taken by inserting a row (or
  * taking over one that ran out), so a caller that waits holds no
  * connection. Waits up to a minute; the lease runs out after 3 minutes if
  * its holder dies, longer than any reserve takes.
  */
-export async function withLease<T>(key: string, fn: () => Promise<T>) {
+export async function withLease<T>(
+  key: string,
+  fn: () => Promise<T>
+): Promise<T> {
+  // Re-entrant: a caller already holding key (book_appointment holds both
+  // members' locks before it books) runs fn straight away.
+  const held = heldLeases.getStore()
+  if (held?.has(key)) return fn()
   const token = crypto.randomUUID()
   for (let attempt = 0; ; attempt++) {
     const taken = await db
@@ -595,7 +606,7 @@ export async function withLease<T>(key: string, fn: () => Promise<T>) {
     await new Promise((resolve) => setTimeout(resolve, 500))
   }
   try {
-    return await fn()
+    return await heldLeases.run(new Set([...(held ?? []), key]), fn)
   } finally {
     await db
       .delete(bookingLeases)

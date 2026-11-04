@@ -93,12 +93,16 @@ export default async function MemberCalendarPage({
         {bookable && (
           <section className="flex flex-col gap-2">
             <SectionHeader title={`預約 ${calendar.name}`} />
-            <BookSlots
-              userId={id}
-              name={calendar.name}
-              slotMinutes={slots.slotMinutes}
-              days={slots.days}
-            />
+            {slots.synced ? (
+              <BookSlots
+                userId={id}
+                name={calendar.name}
+                slotMinutes={slots.slotMinutes}
+                days={slots.days}
+              />
+            ) : (
+              <p className="text-muted-foreground">行事曆同步不了，暫停預約</p>
+            )}
           </section>
         )}
         {days.map((day) => {

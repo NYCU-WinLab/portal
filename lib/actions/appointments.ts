@@ -2,7 +2,12 @@ import { and, asc, eq, gt, gte, lt, lte, or, sql } from "drizzle-orm"
 import { z } from "zod"
 
 import { defineAction } from "@/lib/actions/define"
-import { bookMeeting, withLease } from "@/lib/actions/rooms"
+import { syncCalendar } from "@/lib/actions/calendar"
+import {
+  bookMeeting,
+  cancelBooking,
+  withBookingLock,
+} from "@/lib/actions/rooms"
 import { db } from "@/lib/db"
 import {
   appointments,
@@ -36,6 +41,9 @@ import {
 
 /** A slot can be booked from this long before it starts. */
 const NOTICE_MINUTES = 120
+/** Slots are offered only from a calendar synced this recently (the sync
+ * runs every 5 minutes); a booking syncs the calendar again first. */
+const FRESH_MS = 15 * 60_000
 
 const gridTime = z
   .string()
@@ -153,12 +161,24 @@ async function freeSlots(
 
 async function ownerOf(userId: string) {
   const [owner] = await db
-    .select({ id: user.id, name: user.name, email: user.email })
+    .select({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      syncedAt: calendarLinks.syncedAt,
+      syncError: calendarLinks.syncError,
+    })
     .from(user)
     .innerJoin(calendarLinks, eq(calendarLinks.userId, user.id))
     .where(eq(user.id, userId))
   return owner ?? null
 }
+
+/** Whether the copy of the owner's calendar can be trusted to say free. */
+const current = (owner: { syncedAt: Date | null; syncError: string | null }) =>
+  !owner.syncError &&
+  !!owner.syncedAt &&
+  Date.now() - owner.syncedAt.getTime() < FRESH_MS
 
 export const getMyAppointmentSchedule = defineAction({
   name: "get_my_appointment_schedule",
@@ -259,7 +279,7 @@ export const listAppointmentSlots = defineAction({
   name: "list_appointment_slots",
   title: "可預約時段",
   description:
-    "The free slots a member offers for booking a meeting with them, from today to their ahead_days: per day (YYYY-MM-DD), the Asia/Taipei start times, each slot_minutes long. Free means inside their weekly windows, at least 2 hours from now, and clear of their Google Calendar events and portal meetings. schedule is false when they take no appointments. Book one with book_appointment.",
+    "The free slots a member offers for booking a meeting with them, from today to their ahead_days: per day (YYYY-MM-DD), the Asia/Taipei start times, each slot_minutes long. Free means inside their weekly windows, at least 2 hours from now, and clear of their Google Calendar events and portal meetings. schedule is false when they take no appointments; synced is false (and days empty) while their calendar has not synced in the last 15 minutes. Book one with book_appointment.",
   kind: "query",
   input: z.object({ user_id: z.uuid() }),
   run: async (_actor, input) => {
@@ -267,11 +287,27 @@ export const listAppointmentSlots = defineAction({
     if (!owner) throw new Error("這位成員沒有連結行事曆")
     const schedule = await scheduleOf(owner.id)
     if (!schedule)
-      return { name: owner.name, schedule: false, slotMinutes: 0, days: [] }
+      return {
+        name: owner.name,
+        schedule: false,
+        synced: true,
+        slotMinutes: 0,
+        days: [],
+      }
+    // A calendar the portal cannot read now would show busy times as free.
+    if (!current(owner))
+      return {
+        name: owner.name,
+        schedule: true,
+        synced: false,
+        slotMinutes: schedule.slotMinutes,
+        days: [],
+      }
     const today = todayInTaipei()
     return {
       name: owner.name,
       schedule: true,
+      synced: true,
       slotMinutes: schedule.slotMinutes,
       days: await freeSlots(
         owner,
@@ -302,44 +338,63 @@ export const bookAppointment = defineAction({
     if (input.user_id === actor.userId) throw new Error("不能預約自己")
     const owner = await ownerOf(input.user_id)
     if (!owner) throw new Error("這位成員沒有連結行事曆")
-    // One booking per owner and day at a time, so two labmates cannot both
-    // take the slot that was free when each looked.
-    return withLease(`appointment ${owner.id} ${input.date}`, async () => {
-      const schedule = await scheduleOf(owner.id)
-      if (!schedule) throw new Error(`${owner.name} 沒有開放預約`)
-      const today = todayInTaipei()
-      if (input.date > addDays(today, schedule.aheadDays))
-        throw new Error(`最多預約 ${schedule.aheadDays} 天後`)
-      const [free] = await freeSlots(owner, schedule, input.date, input.date)
-      if (!free?.starts.includes(input.start_time))
-        throw new Error("這個時段已經沒空了，換一個時段")
-      const end = clock(minutesOf(input.start_time)! + schedule.slotMinutes)
-      const booked = await bookMeeting.run(
-        actor,
-        bookMeeting.input.parse({
+    // Both members' booking locks for the day, in a fixed order: no other
+    // booking of either one (by hand, a standing meeting or another
+    // appointment, either way round) can take the slot meanwhile.
+    const [first, second] = [actor.userId, owner.id].sort()
+    return withBookingLock(first, input.date, () =>
+      withBookingLock(second, input.date, async () => {
+        // Ask Google again: an event added since the last sync must count.
+        await syncCalendar(owner.id)
+        const fresh = await ownerOf(owner.id)
+        if (!fresh || !current(fresh))
+          throw new Error(`${owner.name} 的行事曆現在同步不了，稍後再試`)
+        const schedule = await scheduleOf(owner.id)
+        if (!schedule) throw new Error(`${owner.name} 沒有開放預約`)
+        const today = todayInTaipei()
+        if (input.date > addDays(today, schedule.aheadDays))
+          throw new Error(`最多預約 ${schedule.aheadDays} 天後`)
+        const [free] = await freeSlots(owner, schedule, input.date, input.date)
+        if (!free?.starts.includes(input.start_time))
+          throw new Error("這個時段已經沒空了，換一個時段")
+        const end = clock(minutesOf(input.start_time)! + schedule.slotMinutes)
+        const booked = await bookMeeting.run(
+          actor,
+          bookMeeting.input.parse({
+            date: input.date,
+            start_time: input.start_time,
+            end_time: end,
+            online_only: input.online_only,
+            allow_paid: input.allow_paid,
+            title: input.title,
+            attendees: [owner.id],
+            include_advisor: false,
+            agenda: input.agenda,
+          })
+        )
+        if (!("id" in booked)) throw new Error("預約沒有成立")
+        try {
+          await db
+            .insert(appointments)
+            .values({ bookingId: booked.id, ownerId: owner.id })
+        } catch (error) {
+          // Without the link the member booked could not cancel it: undo it.
+          const [row] = await db
+            .select()
+            .from(roomBookings)
+            .where(eq(roomBookings.id, booked.id))
+          if (row) await cancelBooking(row, actor.userId).catch(() => {})
+          throw error
+        }
+        return {
+          id: booked.id,
+          with: owner.name,
           date: input.date,
-          start_time: input.start_time,
-          end_time: end,
-          online_only: input.online_only,
-          allow_paid: input.allow_paid,
-          title: input.title,
-          attendees: [owner.id],
-          include_advisor: false,
-          agenda: input.agenda,
-        })
-      )
-      if (!("id" in booked)) throw new Error("預約沒有成立")
-      await db
-        .insert(appointments)
-        .values({ bookingId: booked.id, ownerId: owner.id })
-      return {
-        id: booked.id,
-        with: owner.name,
-        date: input.date,
-        start: input.start_time,
-        end,
-        room: booked.room,
-      }
-    })
+          start: input.start_time,
+          end,
+          room: booked.room,
+        }
+      })
+    )
   },
 })

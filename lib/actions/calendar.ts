@@ -118,6 +118,15 @@ async function syncOne(userId: string) {
   }
 }
 
+/**
+ * Syncs one member's calendar now, as a booking with them needs a current
+ * answer; the outcome is in their link's syncedAt and syncError.
+ */
+export async function syncCalendar(userId: string) {
+  if (googleCalendarConfigured() && process.env.CALENDAR_SECRET)
+    await syncOne(userId)
+}
+
 /** A member who left the lab: their calendar stops showing and Google
  * drops the portal's access. */
 async function dropLink(userId: string) {
