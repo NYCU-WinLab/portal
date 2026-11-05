@@ -14,6 +14,7 @@ import {
   setPaused,
   setVolume,
   skipSong,
+  previousSong,
 } from "@/lib/actions/music"
 import { requireActor } from "@/lib/auth/session"
 
@@ -39,6 +40,7 @@ export const add = async (input: unknown) => call(addSong, input)
 export const addList = async (input: unknown) => call(addPlaylist, input)
 export const next = async (input: unknown) => call(playNext, input)
 export const skip = async (input: unknown) => call(skipSong, input)
+export const previous = async (input: unknown) => call(previousSong, input)
 export const remove = async (input: unknown) => call(removeSong, input)
 export const pause = async (input: unknown) => call(setPaused, input)
 export const volume = async (input: unknown) => call(setVolume, input)

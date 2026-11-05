@@ -5239,7 +5239,7 @@
     "description": "Recent actions, newest first: who added, cut in, skipped, removed, paused, resumed or changed the volume (a member's clicks within a minute show as the level they ended on), with the song title and, for playlists, how many songs.",
     "kind": "query",
     "app": "music",
-    "hash": "4252ae6ee97e3728",
+    "hash": "76f20a858d82e39c",
     "input": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
@@ -5300,6 +5300,7 @@
                   "next",
                   "pause",
                   "playlist",
+                  "previous",
                   "remove",
                   "resume",
                   "skip",
@@ -9831,6 +9832,31 @@
       },
       "required": [
         "ok"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "previous_song",
+    "title": "上一首",
+    "description": "Play the song that ended most recently and is not in the queue now. The current song goes back to the front of the queue and resumes where it was, so pressing again steps further back.",
+    "kind": "mutation",
+    "app": "music",
+    "hash": "3e9de13431109356",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {},
+      "type": "object"
+    },
+    "output": {
+      "additionalProperties": false,
+      "properties": {
+        "itemId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "itemId"
       ],
       "type": "object"
     }

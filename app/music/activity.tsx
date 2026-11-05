@@ -24,6 +24,8 @@ function sentence(entry: Entry) {
       return `加入歌單〈${entry.detail?.title ?? ""}〉${entry.detail?.count ?? 0} 首`
     case "skip":
       return `跳過${song}`
+    case "previous":
+      return `回到上一首${song}`
     case "remove":
       return `把${song}移出佇列`
     case "pause":

@@ -5,6 +5,7 @@ import {
   PauseIcon,
   PlayIcon,
   PlusIcon,
+  SkipBackIcon,
   SkipForwardIcon,
 } from "lucide-react"
 import * as React from "react"
@@ -21,7 +22,7 @@ import {
 import type { nowPlaying } from "@/lib/actions/music"
 import { cn } from "@/lib/utils"
 
-import { autoplay, pause, skip, volume } from "./actions"
+import { autoplay, pause, previous, skip, volume } from "./actions"
 import { Lyrics } from "./lyrics"
 import { ok } from "./ok"
 import { addedLine, Cover, duration } from "./song"
@@ -96,6 +97,10 @@ export function NowPlaying({ playing }: { playing: Playing }) {
         >
           {playing.paused ? <PlayIcon /> : <PauseIcon />}
           {playing.paused ? "繼續" : "暫停"}
+        </Button>
+        <Button variant="outline" onClick={async () => ok(await previous({}))}>
+          <SkipBackIcon />
+          上一首
         </Button>
         <Button
           variant="outline"
