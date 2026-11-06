@@ -24,7 +24,7 @@ type Google = {
 
 type Source = {
   id: string
-  kind: "google" | "ics" | "file"
+  kind: "portal" | "google" | "ics" | "file"
   label: string
   primary: boolean
   busyOnly: boolean
@@ -36,7 +36,12 @@ type Source = {
 }
 
 const CONNECT = "/api/calendar/google/connect"
-const KIND = { google: "Google", ics: "網址", file: "檔案" } as const
+const KIND = {
+  portal: "會議",
+  google: "Google",
+  ics: "網址",
+  file: "檔案",
+} as const
 
 export function GoogleAccount({ google }: { google: Google }) {
   if (!google)
@@ -123,7 +128,7 @@ function SourceRow({ source }: { source: Source }) {
             }
           />
         </label>
-        {source.kind !== "google" && (
+        {(source.kind === "ics" || source.kind === "file") && (
           <ConfirmDialog
             trigger={<Button variant="outline">移除</Button>}
             title={`移除「${source.label}」？`}

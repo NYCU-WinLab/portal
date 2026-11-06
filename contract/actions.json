@@ -4258,10 +4258,10 @@
   {
     "name": "get_my_calendar",
     "title": "我的行事曆設定",
-    "description": "The signed-in member's calendar setup. google is their linked Google account (null when none): its address, whether the portal may list all its calendars (canList; false means only the primary one, relink to grant more) and any sync problem. sources are the calendars that make up their portal calendar: kind google (one per calendar in the account; busyOnly when Google shares it as free/busy only), ics (an address, shown by host only) or file (an imported .ics); each has enabled, visibility (private: others see busy blocks; public: others also see titles and locations), when it last synced and any problem. Change one with set_calendar_source, add with add_calendar_source.",
+    "description": "The signed-in member's calendar setup. google is their linked Google account (null when none): its address, whether the portal may list all its calendars (canList; false means only the primary one, relink to grant more) and any sync problem. sources are the calendars that make up their portal calendar: kind google (one per calendar in the account; busyOnly when Google shares it as free/busy only), ics (an address, shown by host only), file (an imported .ics) or portal (WinLab 會議: portal meetings they booked, are invited to, of their project groups, booked with them, the weekly lab meeting, and meet rooms scheduled for their groups or by them; on and public by default); each has enabled, visibility (private: others see busy blocks; public: others also see titles and locations), when it last synced and any problem. Change one with set_calendar_source, add with add_calendar_source.",
     "kind": "query",
     "app": "calendar",
-    "hash": "03cdcfcd03756a0a",
+    "hash": "7d96d1544acc210f",
     "input": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {},
@@ -4348,7 +4348,8 @@
                 "enum": [
                   "file",
                   "google",
-                  "ics"
+                  "ics",
+                  "portal"
                 ],
                 "type": "string"
               },
@@ -10061,7 +10062,7 @@
   {
     "name": "remove_calendar_source",
     "title": "移除行事曆",
-    "description": "Removes an ICS address or imported file from the signed-in member's calendar, with its events. A Google calendar cannot be removed: turn it off with set_calendar_source, or unlink Google with unlink_google_calendar.",
+    "description": "Removes an ICS address or imported file from the signed-in member's calendar, with its events. A Google calendar or WinLab 會議 cannot be removed: turn it off with set_calendar_source (or unlink Google with unlink_google_calendar).",
     "kind": "mutation",
     "app": "calendar",
     "hash": "ee3fe2483583c864",

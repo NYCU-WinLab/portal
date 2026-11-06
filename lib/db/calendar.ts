@@ -9,6 +9,7 @@ import {
   text,
   timestamp,
   unique,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core"
 
@@ -35,7 +36,8 @@ export const calendarLinks = pgTable("calendar_links", {
 // One calendar that makes up a member's portal calendar: a Google calendar
 // of their linked account (googleCalendarId, read as events or, with only
 // free/busy access, as busy blocks), a subscribed ICS address (url, sealed:
-// such links are often secret) or an imported ICS file (content). Only
+// such links are often secret), an imported ICS file (content), or the
+// portal's own meetings they take part in (kind portal, one per member). Only
 // enabled sources count; each one's visibility says what others see:
 // private shows busy blocks, public also each event's title and location.
 export const calendarSources = pgTable(
@@ -60,12 +62,16 @@ export const calendarSources = pgTable(
   },
   (table) => [
     unique().on(table.userId, table.googleCalendarId),
+    uniqueIndex("calendar_sources_one_portal")
+      .on(table.userId)
+      .where(sql`${table.kind} = 'portal'`),
     index().on(table.userId),
     check(
       "calendar_sources_kind",
       sql`(${table.kind} = 'google' and ${table.googleCalendarId} is not null)
         or (${table.kind} = 'ics' and ${table.url} is not null)
-        or (${table.kind} = 'file' and ${table.content} is not null)`
+        or (${table.kind} = 'file' and ${table.content} is not null)
+        or ${table.kind} = 'portal'`
     ),
     check(
       "calendar_sources_visibility",
