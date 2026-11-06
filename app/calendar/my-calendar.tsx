@@ -28,6 +28,7 @@ type Source = {
   label: string
   primary: boolean
   busyOnly: boolean
+  canPublish: boolean
   host: string | null
   enabled: boolean
   visibility: "private" | "public"
@@ -112,7 +113,7 @@ function SourceRow({ source }: { source: Source }) {
           <span className="text-muted-foreground">公開標題</span>
           <Switch
             checked={source.visibility === "public"}
-            disabled={source.busyOnly}
+            disabled={!source.canPublish}
             aria-label={`公開 ${source.label} 的標題與地點`}
             onCheckedChange={(checked) =>
               set(

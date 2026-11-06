@@ -69,12 +69,18 @@ const visibility = z.enum(["private", "public"])
 type Visibility = z.infer<typeof visibility>
 type Source = typeof calendarSources.$inferSelect
 
-type Row = typeof calendarEvents.$inferSelect & { visibility: string }
+type Row = typeof calendarEvents.$inferSelect & {
+  visibility: string
+  accessRole: string | null
+}
 
 /** What the viewer may see of one event. */
 function shown(row: Row, viewerId: string) {
+  // A free/busy-only calendar never shows a title, whatever was kept.
   const visible =
-    (viewerId === row.userId || row.visibility === "public") && !row.private
+    (viewerId === row.userId || row.visibility === "public") &&
+    !row.private &&
+    row.accessRole !== "freeBusyReader"
   return {
     start: row.startsAt.toISOString(),
     end: row.endsAt.toISOString(),
@@ -100,6 +106,7 @@ function eventsOf(userId: string, from?: Date, to?: Date) {
       location: calendarEvents.location,
       private: calendarEvents.private,
       visibility: calendarSources.visibility,
+      accessRole: calendarSources.accessRole,
     })
     .from(calendarEvents)
     .innerJoin(
@@ -194,7 +201,25 @@ async function syncGoogleList(
           primary: true,
         },
       ]
-  for (const calendar of calendars)
+  for (const calendar of calendars) {
+    // A calendar shared down to free/busy keeps no title or location: drop
+    // what was copied while the member could read it.
+    if (calendar.accessRole === "freeBusyReader")
+      await db.delete(calendarEvents).where(
+        inArray(
+          calendarEvents.sourceId,
+          db
+            .select({ id: calendarSources.id })
+            .from(calendarSources)
+            .where(
+              and(
+                eq(calendarSources.userId, userId),
+                eq(calendarSources.googleCalendarId, calendar.id),
+                sql`${calendarSources.accessRole} is distinct from 'freeBusyReader'`
+              )
+            )
+        )
+      )
     await db
       .insert(calendarSources)
       .values({
@@ -216,6 +241,7 @@ async function syncGoogleList(
           primary: calendar.primary,
         },
       })
+  }
   // A calendar gone from the list (unsubscribed, deleted) goes with its
   // events. Without the list scope only the primary one is known.
   if (canList)
@@ -515,6 +541,7 @@ export const getMyCalendar = defineAction({
         label: source.label,
         primary: source.primary,
         busyOnly: source.accessRole === "freeBusyReader",
+        canPublish: source.kind !== "google" || source.accessRole === "owner",
         host: source.url
           ? (() => {
               try {
@@ -546,7 +573,7 @@ export const setCalendarSource = defineAction({
   name: "set_calendar_source",
   title: "設定行事曆來源",
   description:
-    "Changes one source of the signed-in member's calendar (ids from get_my_calendar): enabled turns it on or off (off removes its events from the portal), visibility sets what others see (private: busy blocks only; public: also each event's title and location; events marked private in the source stay busy blocks either way) and label renames it. Confirm with the member before making a source public.",
+    "Changes one source of the signed-in member's calendar (ids from get_my_calendar): enabled turns it on or off (off removes its events from the portal), visibility sets what others see (private: busy blocks only; public: also each event's title and location; events marked private in the source stay busy blocks either way) and label renames it. Only a Google calendar the member owns may be public (one others share with them stays busy blocks). Confirm with the member before making a source public.",
   kind: "mutation",
   input: z.object({
     source_id: z.uuid(),
@@ -556,6 +583,14 @@ export const setCalendarSource = defineAction({
   }),
   run: async (actor, input) => {
     const source = await ownSource(actor.userId, input.source_id)
+    // A Google calendar someone else owns and shares with the member is
+    // theirs to publish, not the member's.
+    if (
+      input.visibility === "public" &&
+      source.kind === "google" &&
+      source.accessRole !== "owner"
+    )
+      throw new Error("只有自己的 Google 日曆可以公開標題")
     const [updated] = await db
       .update(calendarSources)
       .set({

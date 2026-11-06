@@ -20,10 +20,18 @@ export class IcsError extends Error {}
 /** Bigger calendars are refused; a member's calendar is far smaller. */
 export const ICS_MAX_BYTES = 2 * 1024 * 1024
 const MAX_REDIRECTS = 3
+/** The longest one address may take, redirects included, from the first
+ * lookup to the last byte. */
+const DEADLINE_MS = Number(process.env.ICS_DEADLINE_MS) || 20_000
 const MAX_EVENTS = 5000
 /** Occurrences one recurring event may step through, so an old daily rule
  * still reaches today but a FREQ=SECONDLY one stops. */
 const MAX_STEPS = 20_000
+/** Steps the whole file may take, so a file of many such rules cannot hold
+ * the server (each step is CPU on the one event loop). */
+const FILE_STEPS = 100_000
+/** VEVENTs a file may hold; a member's calendar is far smaller. */
+const MAX_COMPONENTS = 20_000
 
 /** A calendar address as members paste it: webcal:// is https. */
 export function icsAddress(raw: string) {
@@ -86,7 +94,8 @@ const publicLookup: LookupFunction = (hostname, options, callback) => {
 }
 
 function get(
-  url: URL
+  url: URL,
+  limitMs: number
 ): Promise<{ status: number; location?: string; body: string }> {
   return new Promise((resolve, reject) => {
     if (
@@ -130,6 +139,16 @@ function get(
         response.on("error", reject)
       }
     )
+    // timeout above only catches an idle socket; this ends a response that
+    // trickles in, so one slow address cannot hold up everyone's sync.
+    const deadline = setTimeout(
+      () =>
+        req.destroy(
+          new IcsError(`行事曆網址太慢，${DEADLINE_MS / 1000} 秒內沒有讀完`)
+        ),
+      limitMs
+    )
+    req.on("close", () => clearTimeout(deadline))
     req.on("timeout", () => req.destroy(new IcsError("行事曆網址沒有回應")))
     req.on("error", reject)
     req.end()
@@ -139,8 +158,12 @@ function get(
 /** Downloads a calendar from its address, following a few redirects. */
 export async function fetchIcs(address: string) {
   let url = new URL(icsAddress(address))
+  const until = Date.now() + DEADLINE_MS
   for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
-    const answer = await get(url)
+    const left = until - Date.now()
+    if (left <= 0)
+      throw new IcsError(`行事曆網址太慢，${DEADLINE_MS / 1000} 秒內沒有讀完`)
+    const answer = await get(url, left)
     if (answer.location) {
       url = new URL(icsAddress(new URL(answer.location, url).toString()))
       continue
@@ -184,8 +207,9 @@ export function icsEvents(text: string, from: Date, to: Date): GoogleEvent[] {
     throw new IcsError("這不是 ICS 行事曆")
   }
   if (root.name !== "vcalendar") throw new IcsError("這不是 ICS 行事曆")
-  for (const zone of root.getAllSubcomponents("vtimezone"))
-    ICAL.TimezoneService.register(zone)
+  // Times resolve their TZID from this file's own VTIMEZONEs (ical.js looks
+  // them up in the component tree). Never register them in ical.js's shared
+  // TimezoneService: one member's file would then change another's times.
 
   const events: GoogleEvent[] = []
   const add = (
@@ -220,7 +244,12 @@ export function icsEvents(text: string, from: Date, to: Date): GoogleEvent[] {
     })
   }
 
-  for (const component of root.getAllSubcomponents("vevent")) {
+  const components = root.getAllSubcomponents("vevent")
+  if (components.length > MAX_COMPONENTS)
+    throw new IcsError(`行事曆超過 ${MAX_COMPONENTS} 個活動`)
+  let budget = FILE_STEPS
+  for (const component of components) {
+    if (budget <= 0) break
     if (events.length >= MAX_EVENTS) break
     const event = new ICAL.Event(component)
     if (event.isRecurrenceException()) continue
@@ -232,7 +261,7 @@ export function icsEvents(text: string, from: Date, to: Date): GoogleEvent[] {
       continue
     }
     const iterator = event.iterator()
-    for (let n = 0; n < MAX_STEPS; n++) {
+    for (let n = 0; n < MAX_STEPS && budget > 0; n++, budget--) {
       const next = iterator.next()
       if (!next) break
       if (toDate(next) >= to) break

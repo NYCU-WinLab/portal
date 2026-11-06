@@ -4261,7 +4261,7 @@
     "description": "The signed-in member's calendar setup. google is their linked Google account (null when none): its address, whether the portal may list all its calendars (canList; false means only the primary one, relink to grant more) and any sync problem. sources are the calendars that make up their portal calendar: kind google (one per calendar in the account; busyOnly when Google shares it as free/busy only), ics (an address, shown by host only) or file (an imported .ics); each has enabled, visibility (private: others see busy blocks; public: others also see titles and locations), when it last synced and any problem. Change one with set_calendar_source, add with add_calendar_source.",
     "kind": "query",
     "app": "calendar",
-    "hash": "4cc2a4c60adcb8b7",
+    "hash": "03cdcfcd03756a0a",
     "input": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {},
@@ -4323,6 +4323,9 @@
             "additionalProperties": false,
             "properties": {
               "busyOnly": {
+                "type": "boolean"
+              },
+              "canPublish": {
                 "type": "boolean"
               },
               "enabled": {
@@ -4389,6 +4392,7 @@
               "label",
               "primary",
               "busyOnly",
+              "canPublish",
               "host",
               "enabled",
               "visibility",
@@ -11341,7 +11345,7 @@
   {
     "name": "set_calendar_source",
     "title": "設定行事曆來源",
-    "description": "Changes one source of the signed-in member's calendar (ids from get_my_calendar): enabled turns it on or off (off removes its events from the portal), visibility sets what others see (private: busy blocks only; public: also each event's title and location; events marked private in the source stay busy blocks either way) and label renames it. Confirm with the member before making a source public.",
+    "description": "Changes one source of the signed-in member's calendar (ids from get_my_calendar): enabled turns it on or off (off removes its events from the portal), visibility sets what others see (private: busy blocks only; public: also each event's title and location; events marked private in the source stay busy blocks either way) and label renames it. Only a Google calendar the member owns may be public (one others share with them stays busy blocks). Confirm with the member before making a source public.",
     "kind": "mutation",
     "app": "calendar",
     "hash": "87a6b379156e001f",
