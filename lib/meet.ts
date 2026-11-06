@@ -8,6 +8,13 @@ export const meetConfigured = () => Boolean(process.env.MEET_SERVICE_KEY)
 
 const base = () => process.env.MEET_URL ?? "https://meet.winlab.tw"
 
+/**
+ * meet answered and refused the action (4xx): nothing was made, so asking
+ * again cannot double up. A timeout, network error or 5xx leaves the
+ * outcome unknown and throws a plain Error.
+ */
+export class MeetRefused extends Error {}
+
 /** Runs one of meet's actions as portal; throws meet's message. */
 export async function meetAction<T = Record<string, unknown>>(
   name: string,
@@ -25,7 +32,10 @@ export async function meetAction<T = Record<string, unknown>>(
   const body = (await response.json().catch(() => ({}))) as {
     error?: string
   } & T
-  if (!response.ok) throw new Error(body.error ?? `meet ${response.status}`)
+  const message = body.error ?? `meet ${response.status}`
+  if (response.status >= 400 && response.status < 500)
+    throw new MeetRefused(message)
+  if (!response.ok) throw new Error(message)
   return body
 }
 

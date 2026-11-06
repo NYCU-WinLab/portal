@@ -33,7 +33,7 @@ import {
   triggerHelperPipeline,
   triggerMeetingPipeline,
 } from "@/lib/gitlab"
-import { meetAction, meetConfigured, meetHost } from "@/lib/meet"
+import { MeetRefused, meetAction, meetConfigured, meetHost } from "@/lib/meet"
 import { agendaItems } from "@/lib/rooms/agenda"
 import { MEETING_FAILURES, plainTitle, teamsSubject } from "@/lib/rooms/meeting"
 import { dayLabel, taipeiOffsetIso } from "@/lib/rooms/time"
@@ -222,7 +222,8 @@ async function askMeet(
       .update(roomMeetingRequests)
       .set({
         status: "failed",
-        errorCode: "MEET_FAILED",
+        errorCode:
+          error instanceof MeetRefused ? "MEET_REFUSED" : "MEET_FAILED",
         errorMessage: message,
         completedAt: sql`now()`,
       })
@@ -602,8 +603,8 @@ export async function meetingsOf(bookingIds: string[]) {
         status: row.status as MeetingState["status"],
         joinUrl: row.joinUrl,
         error: row.errorCode
-          ? row.errorCode === "MEET_FAILED" && row.errorMessage
-            ? `${MEETING_FAILURES.MEET_FAILED}：${row.errorMessage}`
+          ? row.errorCode.startsWith("MEET_") && row.errorMessage
+            ? `${MEETING_FAILURES[row.errorCode] ?? row.errorCode}：${row.errorMessage}`
             : (MEETING_FAILURES[row.errorCode] ?? row.errorCode)
           : null,
       },
@@ -769,8 +770,9 @@ const ORPHAN_MINUTES = 10
 // A meet room that could not be made is asked for again, this many times
 // in all, so a fix on meet's side heals the booking without a rebook.
 const MEET_CREATE_TRIES = 5
-// Failures that made nothing anywhere, so asking again cannot double up.
-const RETRYABLE_CREATE = ["MEET_FAILED", "TRIGGER_FAILED"]
+// Only a refusal meet answered made nothing anywhere: a timeout or a
+// Teams trigger may have made a room or meeting, so it is not asked again.
+const RETRYABLE_CREATE = ["MEET_REFUSED"]
 
 /**
  * Every scheduler tick: asks again for what a restart or a failed call
@@ -927,9 +929,9 @@ export async function reconcileTeams() {
 
 /**
  * Asks meet again for the room of an upcoming booking whose every create
- * failed without making anything (meet refused it or was down), at most
- * MEET_CREATE_TRIES times. The earlier failures were mailed already or
- * need no mail now that a retry is coming.
+ * meet refused, at most MEET_CREATE_TRIES times. Only the last refusal is
+ * mailed (sweepMeetingRequests skips the ones a retry follows); earlier
+ * ones mailed before this ran are marked so they are not mailed again.
  */
 async function retryMeetCreates(ahead: ReturnType<typeof sql>) {
   const creates = sql`(select count(*) from ${roomMeetingRequests} where ${roomMeetingRequests.bookingId} = ${roomBookings.id} and ${roomMeetingRequests.kind} = 'create')`
@@ -991,6 +993,20 @@ async function retryMeetCreates(ahead: ReturnType<typeof sql>) {
     })
 }
 
+/** How many creates a booking has asked for. */
+async function createsOf(bookingId: string) {
+  const [row] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(roomMeetingRequests)
+    .where(
+      and(
+        eq(roomMeetingRequests.bookingId, bookingId),
+        eq(roomMeetingRequests.kind, "create")
+      )
+    )
+  return row?.n ?? 0
+}
+
 /**
  * Part of the daily run: requests with no answer after 30 minutes are
  * failures (a crashed runner never calls back), and each failure that
@@ -1045,6 +1061,16 @@ export async function sweepMeetingRequests() {
   for (const row of failed) {
     // reconcileTeams will try that take-down again: mail only the last.
     // One with no meeting ids to send cannot be retried and is mailed now.
+    // A refused meet room is asked for again: mail only the last refusal.
+    if (
+      row.kind === "create" &&
+      row.errorCode === "MEET_REFUSED" &&
+      row.bookingStatus === "booked" &&
+      row.date >= today &&
+      meetConfigured() &&
+      (await createsOf(row.bookingId)) < MEET_CREATE_TRIES
+    )
+      continue
     if (
       row.kind === "cancel" &&
       row.date >= today &&
