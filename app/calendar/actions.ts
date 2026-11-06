@@ -3,8 +3,10 @@
 import { revalidatePath } from "next/cache"
 
 import {
+  addCalendarSource,
+  removeCalendarSource,
   rotateCalendarFeeds,
-  setCalendarVisibility,
+  setCalendarSource,
   unlinkGoogleCalendar,
 } from "@/lib/actions/calendar"
 import {
@@ -30,8 +32,22 @@ async function run(
   return {}
 }
 
-export const setVisibilityAction = async (visibility: "private" | "public") =>
-  run((actor) => runAction(setCalendarVisibility, actor, { visibility }))
+export const setSourceAction = async (
+  id: string,
+  change: { enabled?: boolean; visibility?: "private" | "public" }
+) =>
+  run((actor) =>
+    runAction(setCalendarSource, actor, { source_id: id, ...change })
+  )
+
+export const addSourceAction = async (input: {
+  label: string
+  url?: string
+  content?: string
+}) => run((actor) => runAction(addCalendarSource, actor, input))
+
+export const removeSourceAction = async (id: string) =>
+  run((actor) => runAction(removeCalendarSource, actor, { source_id: id }))
 
 export const unlinkAction = async () =>
   run((actor) => runAction(unlinkGoogleCalendar, actor, {}))

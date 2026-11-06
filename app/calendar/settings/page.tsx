@@ -8,7 +8,7 @@ import { LINK_FAILURES } from "@/lib/google-calendar"
 
 import { AppointmentSchedule } from "../appointment-schedule"
 import { RotateFeeds } from "../feed-link"
-import { MyCalendar } from "../my-calendar"
+import { AddSource, CalendarSources, GoogleAccount } from "../my-calendar"
 import { calendarNav, calendarPage } from "../nav"
 
 export const dynamic = "force-dynamic"
@@ -38,11 +38,19 @@ export default async function CalendarSettingsPage({
                 : LINK_FAILURES.failed}
             </p>
           )}
-          {mine.configured || mine.link ? (
-            <MyCalendar link={mine.link} />
+          {mine.configured || mine.google ? (
+            <GoogleAccount google={mine.google} />
           ) : (
             <p className="text-muted-foreground">行事曆沒有設定 Google 登入</p>
           )}
+        </section>
+        <section className="flex flex-col gap-6">
+          <SectionHeader title="行事曆" />
+          <CalendarSources sources={mine.sources} />
+        </section>
+        <section className="flex flex-col gap-6">
+          <SectionHeader title="加入 ICS 行事曆" />
+          <AddSource />
         </section>
         {appointments.linked && (
           <section className="flex flex-col gap-6">

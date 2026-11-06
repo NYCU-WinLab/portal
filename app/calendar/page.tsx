@@ -38,7 +38,8 @@ export default async function CalendarPage() {
           title="行事曆"
           actions={
             mine.configured &&
-            !mine.link && (
+            !mine.google &&
+            mine.sources.length === 0 && (
               <a
                 href="/api/calendar/google/connect"
                 className={buttonVariants()}

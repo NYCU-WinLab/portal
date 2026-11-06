@@ -229,7 +229,9 @@ import {
   linkGoogleCalendar,
   listCalendars,
   rotateCalendarFeeds,
-  setCalendarVisibility,
+  setCalendarSource,
+  addCalendarSource,
+  removeCalendarSource,
   unlinkGoogleCalendar,
 } from "@/lib/actions/calendar"
 import {
@@ -280,7 +282,9 @@ export const actionGroups: { app: ApiApp | null; actions: Action[] }[] = [
       listCalendars,
       getMemberCalendar,
       getMyCalendar,
-      setCalendarVisibility,
+      setCalendarSource,
+      addCalendarSource,
+      removeCalendarSource,
       rotateCalendarFeeds,
       linkGoogleCalendar,
       unlinkGoogleCalendar,

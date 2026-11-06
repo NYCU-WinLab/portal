@@ -1,16 +1,20 @@
 // Google Calendar, read only: a member signs in with Google once (OAuth with
-// PKCE, offline access) and the portal reads their primary calendar with the
-// refresh token it gets back. The OAuth client lives in the WinLab Google
+// PKCE, offline access) and the portal reads the calendars they pick with the
+// refresh token it gets back: events where they may see them, busy blocks
+// (free/busy) where they may not. The OAuth client lives in the WinLab Google
 // Cloud project (GOOGLE_CALENDAR_CLIENT_ID, GOOGLE_CALENDAR_CLIENT_SECRET).
 // Never touches the database; only lib/actions/calendar.ts calls it.
 
 import { createHash, randomBytes } from "node:crypto"
 
-const SCOPES = [
-  "openid",
-  "email",
-  "https://www.googleapis.com/auth/calendar.events.readonly",
-]
+const EVENTS_SCOPE = "https://www.googleapis.com/auth/calendar.events.readonly"
+/** Lists the account's calendars; without it only the primary one is read. */
+export const LIST_SCOPE =
+  "https://www.googleapis.com/auth/calendar.calendarlist.readonly"
+/** Reads busy blocks of calendars shared as free/busy only. */
+export const FREEBUSY_SCOPE =
+  "https://www.googleapis.com/auth/calendar.events.freebusy"
+const SCOPES = ["openid", "email", EVENTS_SCOPE, LIST_SCOPE, FREEBUSY_SCOPE]
 const timeout = () => AbortSignal.timeout(10_000)
 
 /** Holds state, PKCE verifier and member id between /connect and /callback.
@@ -114,7 +118,8 @@ export async function exchangeCode(code: string, verifier: string) {
     redirect_uri: redirectUri(),
   })
   if (!answer.refresh_token) throw new Error("Google 沒有給 refresh token")
-  if (!answer.scope?.split(" ").includes(SCOPES[2])) throw new MissingScope()
+  const scopes = answer.scope?.split(" ") ?? []
+  if (!scopes.includes(EVENTS_SCOPE)) throw new MissingScope()
   // The id token came straight from Google's token endpoint over TLS, so its
   // claims are read without checking the signature (OpenID Connect 3.1.3.7).
   const claims = JSON.parse(
@@ -126,6 +131,7 @@ export async function exchangeCode(code: string, verifier: string) {
     refreshToken: answer.refresh_token,
     accessToken: answer.access_token,
     email: claims.email,
+    scopes: scopes.filter((scope) => scope.startsWith("https://")),
   }
 }
 
@@ -172,13 +178,131 @@ type RawEvent = {
 // An all-day event's date is a Taipei day: 00:00 there.
 const taipeiMidnight = (day: string) => new Date(`${day}T00:00:00+08:00`)
 
+async function google(accessToken: string, url: URL, init?: RequestInit) {
+  const response = await fetch(url, {
+    ...init,
+    headers: {
+      authorization: `Bearer ${accessToken}`,
+      ...(init?.body ? { "content-type": "application/json" } : {}),
+    },
+    cache: "no-store",
+    signal: timeout(),
+  })
+  if (response.status === 401) throw new GrantRevoked()
+  if (response.status === 404) throw new CalendarGone()
+  if (!response.ok) throw new Error(`Google Calendar ${response.status}`)
+  return response.json() as Promise<unknown>
+}
+
+/** The calendar was deleted, or the member lost access to it. */
+export class CalendarGone extends Error {
+  constructor() {
+    super("Google 找不到這個日曆，可能已刪除或不再分享給你")
+  }
+}
+
+export type GoogleCalendar = {
+  id: string
+  summary: string
+  /** owner, writer, reader or freeBusyReader. */
+  accessRole: string
+  primary: boolean
+}
+
+/** Every calendar in the account's list, hidden ones included. */
+export async function calendarList(
+  accessToken: string
+): Promise<GoogleCalendar[]> {
+  const calendars: GoogleCalendar[] = []
+  let pageToken: string | undefined
+  for (let page = 0; page < 5; page++) {
+    const url = new URL(
+      "https://www.googleapis.com/calendar/v3/users/me/calendarList"
+    )
+    url.search = new URLSearchParams({
+      showHidden: "true",
+      maxResults: "250",
+      fields:
+        "nextPageToken,items(id,summary,summaryOverride,accessRole,primary)",
+      ...(pageToken ? { pageToken } : {}),
+    }).toString()
+    const body = (await google(accessToken, url)) as {
+      items?: {
+        id: string
+        summary?: string
+        summaryOverride?: string
+        accessRole?: string
+        primary?: boolean
+      }[]
+      nextPageToken?: string
+    }
+    for (const item of body.items ?? [])
+      calendars.push({
+        id: item.id,
+        summary: (item.summaryOverride || item.summary || item.id).slice(
+          0,
+          200
+        ),
+        accessRole: item.accessRole ?? "freeBusyReader",
+        primary: item.primary === true,
+      })
+    pageToken = body.nextPageToken
+    if (!pageToken) break
+  }
+  return calendars
+}
+
 /**
- * The events on the member's primary calendar that make them busy between
+ * The busy blocks of a calendar the member may only see as free/busy. They
+ * carry no title, so they show as busy to everyone.
+ */
+export async function busyBlocks(
+  accessToken: string,
+  calendarId: string,
+  from: Date,
+  to: Date
+): Promise<GoogleEvent[]> {
+  const body = (await google(
+    accessToken,
+    new URL("https://www.googleapis.com/calendar/v3/freeBusy"),
+    {
+      method: "POST",
+      body: JSON.stringify({
+        timeMin: from.toISOString(),
+        timeMax: to.toISOString(),
+        items: [{ id: calendarId }],
+      }),
+    }
+  )) as {
+    calendars?: Record<
+      string,
+      { busy?: { start: string; end: string }[]; errors?: { reason: string }[] }
+    >
+  }
+  const calendar = body.calendars?.[calendarId]
+  if (calendar?.errors?.some((error) => error.reason === "notFound"))
+    throw new CalendarGone()
+  if (calendar?.errors?.length)
+    throw new Error(`Google free/busy ${calendar.errors[0].reason}`)
+  return (calendar?.busy ?? []).map((block) => ({
+    googleId: `busy:${block.start}`,
+    startsAt: new Date(block.start),
+    endsAt: new Date(block.end),
+    allDay: false,
+    title: "",
+    location: "",
+    private: true,
+  }))
+}
+
+/**
+ * The events on one of the member's calendars that make them busy between
  * from and to: recurring events expanded, cancelled ones, ones marked free
  * (transparent) and ones they declined left out.
  */
 export async function busyEvents(
   accessToken: string,
+  calendarId: string,
   from: Date,
   to: Date
 ): Promise<GoogleEvent[]> {
@@ -186,7 +310,7 @@ export async function busyEvents(
   let pageToken: string | undefined
   for (let page = 0; page < 10; page++) {
     const url = new URL(
-      "https://www.googleapis.com/calendar/v3/calendars/primary/events"
+      `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`
     )
     url.search = new URLSearchParams({
       timeMin: from.toISOString(),
@@ -198,14 +322,7 @@ export async function busyEvents(
         "nextPageToken,items(id,status,summary,location,visibility,transparency,start,end,attendees(self,responseStatus))",
       ...(pageToken ? { pageToken } : {}),
     }).toString()
-    const response = await fetch(url, {
-      headers: { authorization: `Bearer ${accessToken}` },
-      cache: "no-store",
-      signal: timeout(),
-    })
-    if (response.status === 401) throw new GrantRevoked()
-    if (!response.ok) throw new Error(`Google Calendar ${response.status}`)
-    const body = (await response.json()) as {
+    const body = (await google(accessToken, url)) as {
       items?: RawEvent[]
       nextPageToken?: string
     }

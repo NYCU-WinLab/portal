@@ -15,41 +15,79 @@ import {
 import { user } from "@/lib/db/auth-schema"
 import { roomBookings } from "@/lib/db/rooms"
 
-// A member's Google Calendar, linked so the lab can see when they are busy.
-// visibility private shows others only busy blocks; public shows each
-// event's title and location too. The refresh token is sealed with
-// CALENDAR_SECRET (lib/calendar-crypto.ts), never stored in the clear.
-export const calendarLinks = pgTable(
-  "calendar_links",
+// A member's Google account, linked so the portal can read the calendars
+// it holds (calendar_sources of kind google). The refresh token is sealed
+// with CALENDAR_SECRET (lib/calendar-crypto.ts), never stored in the clear.
+// scopes are the ones Google granted: without the calendar list scope only
+// the primary calendar can be read.
+export const calendarLinks = pgTable("calendar_links", {
+  userId: uuid()
+    .primaryKey()
+    .references(() => user.id, { onDelete: "cascade" }),
+  googleEmail: text().notNull(),
+  refreshToken: text().notNull(),
+  scopes: text().notNull().default(""),
+  syncedAt: timestamp({ withTimezone: true }),
+  syncError: text(),
+  createdAt: timestamp({ withTimezone: true }).defaultNow().notNull(),
+})
+
+// One calendar that makes up a member's portal calendar: a Google calendar
+// of their linked account (googleCalendarId, read as events or, with only
+// free/busy access, as busy blocks), a subscribed ICS address (url, sealed:
+// such links are often secret) or an imported ICS file (content). Only
+// enabled sources count; each one's visibility says what others see:
+// private shows busy blocks, public also each event's title and location.
+export const calendarSources = pgTable(
+  "calendar_sources",
   {
+    id: uuid().defaultRandom().primaryKey(),
     userId: uuid()
-      .primaryKey()
+      .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
-    googleEmail: text().notNull(),
-    refreshToken: text().notNull(),
+    kind: text().notNull(),
+    label: text().notNull(),
+    googleCalendarId: text(),
+    accessRole: text(),
+    primary: boolean().notNull().default(false),
+    url: text(),
+    content: text(),
+    enabled: boolean().notNull().default(false),
     visibility: text().notNull().default("private"),
     syncedAt: timestamp({ withTimezone: true }),
     syncError: text(),
     createdAt: timestamp({ withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
+    unique().on(table.userId, table.googleCalendarId),
+    index().on(table.userId),
     check(
-      "calendar_links_visibility",
+      "calendar_sources_kind",
+      sql`(${table.kind} = 'google' and ${table.googleCalendarId} is not null)
+        or (${table.kind} = 'ics' and ${table.url} is not null)
+        or (${table.kind} = 'file' and ${table.content} is not null)`
+    ),
+    check(
+      "calendar_sources_visibility",
       sql`${table.visibility} in ('private', 'public')`
     ),
   ]
 )
 
-// The linked calendar's events in the synced window, replaced on each sync.
-// private marks an event the owner set to private in Google: it shows as
-// busy even on a public calendar.
+// The events of each source in the synced window, replaced on each sync.
+// googleId is the event's id in its source (Google's event id, or an ICS
+// UID with its occurrence). private marks an event its owner set private
+// in the source: it shows as busy even from a public source.
 export const calendarEvents = pgTable(
   "calendar_events",
   {
     id: uuid().defaultRandom().primaryKey(),
     userId: uuid()
       .notNull()
-      .references(() => calendarLinks.userId, { onDelete: "cascade" }),
+      .references(() => user.id, { onDelete: "cascade" }),
+    sourceId: uuid()
+      .notNull()
+      .references(() => calendarSources.id, { onDelete: "cascade" }),
     googleId: text().notNull(),
     startsAt: timestamp({ withTimezone: true }).notNull(),
     endsAt: timestamp({ withTimezone: true }).notNull(),
@@ -59,7 +97,7 @@ export const calendarEvents = pgTable(
     private: boolean().notNull(),
   },
   (table) => [
-    unique().on(table.userId, table.googleId),
+    unique().on(table.sourceId, table.googleId),
     index().on(table.userId, table.startsAt),
   ]
 )
@@ -84,7 +122,7 @@ export const appointmentSchedules = pgTable(
   {
     userId: uuid()
       .primaryKey()
-      .references(() => calendarLinks.userId, { onDelete: "cascade" }),
+      .references(() => user.id, { onDelete: "cascade" }),
     windows: jsonb().$type<AppointmentWindow[]>().notNull(),
     slotMinutes: integer().notNull().default(30),
     aheadDays: integer().notNull().default(14),

@@ -4,6 +4,7 @@ import { db } from "@/lib/db"
 import {
   account,
   calendarLinks,
+  calendarSources,
   oauthRefreshToken,
   session,
 } from "@/lib/db/schema"
@@ -117,6 +118,7 @@ async function remember(userId: string, member: boolean) {
       await tx.delete(session).where(eq(session.userId, userId))
       // Their linked calendar stops showing to the lab with them.
       await tx.delete(calendarLinks).where(eq(calendarLinks.userId, userId))
+      await tx.delete(calendarSources).where(eq(calendarSources.userId, userId))
     })
   }
 }
