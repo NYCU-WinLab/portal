@@ -287,4 +287,5 @@ export const MEETING_FAILURES: Record<string, string> = {
   UNEXPECTED_RESPONSE: "Teams 的回應缺少必要欄位",
   NO_CALLBACK: "pipeline 沒有在時限內回報",
   TRIGGER_FAILED: "Portal 連不上 GitLab，pipeline 沒有啟動",
+  MEET_FAILED: "meet 沒有建立會議室",
 }

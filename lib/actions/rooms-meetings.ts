@@ -222,7 +222,7 @@ async function askMeet(
       .update(roomMeetingRequests)
       .set({
         status: "failed",
-        errorCode: "TRIGGER_FAILED",
+        errorCode: "MEET_FAILED",
         errorMessage: message,
         completedAt: sql`now()`,
       })
@@ -585,6 +585,7 @@ export async function meetingsOf(bookingIds: string[]) {
       status: roomMeetingRequests.status,
       joinUrl: roomMeetingRequests.joinUrl,
       errorCode: roomMeetingRequests.errorCode,
+      errorMessage: roomMeetingRequests.errorMessage,
     })
     .from(roomMeetingRequests)
     .where(
@@ -601,7 +602,9 @@ export async function meetingsOf(bookingIds: string[]) {
         status: row.status as MeetingState["status"],
         joinUrl: row.joinUrl,
         error: row.errorCode
-          ? (MEETING_FAILURES[row.errorCode] ?? row.errorCode)
+          ? row.errorCode === "MEET_FAILED" && row.errorMessage
+            ? `${MEETING_FAILURES.MEET_FAILED}：${row.errorMessage}`
+            : (MEETING_FAILURES[row.errorCode] ?? row.errorCode)
           : null,
       },
     ])
@@ -763,6 +766,11 @@ const STUCK_MINUTES = 30
 // A booking older than this with no create request lost it to a restart
 // between its commit and the ask.
 const ORPHAN_MINUTES = 10
+// A meet room that could not be made is asked for again, this many times
+// in all, so a fix on meet's side heals the booking without a rebook.
+const MEET_CREATE_TRIES = 5
+// Failures that made nothing anywhere, so asking again cannot double up.
+const RETRYABLE_CREATE = ["MEET_FAILED", "TRIGGER_FAILED"]
 
 /**
  * Every scheduler tick: asks again for what a restart or a failed call
@@ -820,6 +828,7 @@ export async function reconcileTeams() {
         )
       return existing ? null : { booking: row, variables: createVariables(row) }
     })
+  if (meetConfigured()) await retryMeetCreates(ahead)
   const cancelled = await db
     .select()
     .from(roomBookings)
@@ -914,6 +923,72 @@ export async function reconcileTeams() {
         )
     await cancelTeamsMeeting(booking)
   }
+}
+
+/**
+ * Asks meet again for the room of an upcoming booking whose every create
+ * failed without making anything (meet refused it or was down), at most
+ * MEET_CREATE_TRIES times. The earlier failures were mailed already or
+ * need no mail now that a retry is coming.
+ */
+async function retryMeetCreates(ahead: ReturnType<typeof sql>) {
+  const creates = sql`(select count(*) from ${roomMeetingRequests} where ${roomMeetingRequests.bookingId} = ${roomBookings.id} and ${roomMeetingRequests.kind} = 'create')`
+  const retryable = sql`(select count(*) from ${roomMeetingRequests} where ${roomMeetingRequests.bookingId} = ${roomBookings.id} and ${roomMeetingRequests.kind} = 'create' and ${roomMeetingRequests.status} = 'failed' and ${roomMeetingRequests.messageId} is null and ${roomMeetingRequests.errorCode} in ${RETRYABLE_CREATE} and ${roomMeetingRequests.completedAt} < now() - make_interval(mins => ${ORPHAN_MINUTES}))`
+  const failed = await db
+    .select({ id: roomBookings.id })
+    .from(roomBookings)
+    .where(
+      and(
+        eq(roomBookings.status, "booked"),
+        eq(roomBookings.online, true),
+        ahead,
+        sql`${creates} > 0`,
+        sql`${creates} = ${retryable}`,
+        sql`${creates} < ${MEET_CREATE_TRIES}`
+      )
+    )
+  for (const { id } of failed)
+    await askIf("create", async (tx) => {
+      // Locked and checked again, so two runs ask once.
+      const [row] = await tx
+        .select()
+        .from(roomBookings)
+        .where(eq(roomBookings.id, id))
+        .for("update")
+      if (!row || row.status !== "booked") return null
+      const asked = await tx
+        .select({
+          status: roomMeetingRequests.status,
+          errorCode: roomMeetingRequests.errorCode,
+          messageId: roomMeetingRequests.messageId,
+        })
+        .from(roomMeetingRequests)
+        .where(
+          and(
+            eq(roomMeetingRequests.bookingId, row.id),
+            eq(roomMeetingRequests.kind, "create")
+          )
+        )
+      const allFailed = asked.every(
+        (r) =>
+          r.status === "failed" &&
+          !r.messageId &&
+          RETRYABLE_CREATE.includes(r.errorCode ?? "")
+      )
+      if (!asked.length || !allFailed || asked.length >= MEET_CREATE_TRIES)
+        return null
+      await tx
+        .update(roomMeetingRequests)
+        .set({ notifiedAt: sql`now()` })
+        .where(
+          and(
+            eq(roomMeetingRequests.bookingId, row.id),
+            eq(roomMeetingRequests.kind, "create"),
+            isNull(roomMeetingRequests.notifiedAt)
+          )
+        )
+      return { booking: row, variables: createVariables(row) }
+    })
 }
 
 /**
