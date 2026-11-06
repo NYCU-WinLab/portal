@@ -92,6 +92,7 @@ export default async function MemberCalendarPage({
           end: event.end,
           allDay: event.allDay,
           quiet: event.busyOnly,
+          location: event.location,
         }))}
       />
     </section>

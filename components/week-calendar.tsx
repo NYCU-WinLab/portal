@@ -16,6 +16,8 @@ export type WeekEvent = {
   allDay?: boolean
   /** Shown but not the member's to read, such as a busy block. */
   quiet?: boolean
+  /** Where it happens, for the tip. */
+  location?: string
 }
 
 const WEEKDAYS = "日一二三四五六"
@@ -41,35 +43,49 @@ type Block = {
   event: Placed
   from: number
   to: number
-  /** How many earlier events it sits on; each one indents it 1rem. */
-  depth: number
+  /** Its lane among the events it overlaps, and how many lanes they use. */
+  lane: number
+  lanes: number
 }
 
-// The timed events of one day, cut to the day. Where events overlap, the
-// later one sits on top of the earlier, indented by one step, the way
-// Calendar stacks them, so each keeps most of the column's width.
+// The timed events of one day, cut to the day. Events that overlap share
+// the column side by side, each in its own lane of equal width, the way
+// Google Calendar lays them out, so none hides another's title.
 function blocks(day: string, events: Placed[]): Block[] {
-  const items = events
+  const items: Block[] = events
     .filter((e) => !e.allDay && e.first <= day && e.last >= day)
     .map((event) => ({
       event,
       from: event.first === day ? event.startMinute : 0,
       to: event.last === day ? event.endMinute : FULL,
-      depth: 0,
+      lane: 0,
+      lanes: 1,
     }))
     .sort((a, b) => a.from - b.from || b.to - a.to)
-  items.forEach((item, index) => {
-    const under = items.slice(0, index).filter((other) => other.to > item.from)
-    item.depth = under.length
-      ? Math.max(...under.map((other) => other.depth)) + 1
-      : 0
-  })
+  // A cluster is a run of events chained by overlaps; its lanes are shared.
+  let cluster: Block[] = []
+  let ends: number[] = []
+  let clusterEnd = -1
+  const close = () => {
+    for (const item of cluster) item.lanes = ends.length
+    cluster = []
+    ends = []
+  }
+  for (const item of items) {
+    if (item.from >= clusterEnd) close()
+    const lane = ends.findIndex((end) => end <= item.from)
+    item.lane = lane === -1 ? ends.length : lane
+    ends[item.lane] = item.to
+    cluster.push(item)
+    clusterEnd = Math.max(clusterEnd, item.to)
+  }
+  close()
   return items
 }
 
 // One week the way the week view of Calendar draws it: days in columns,
 // hours down the side, each timed event a block from its start to its end
-// (overlaps stack, indented), the whole title and time in its tip,
+// with its name (overlaps side by side), the time and place in its tip,
 // all-day events as pills above the hours. The hours run 08:00 to 20:00 and
 // stretch to fit any event outside them. Today's date sits in a primary
 // circle. Below md the columns fold into one row per day, listing events.
@@ -147,7 +163,7 @@ function WeekCalendar({
     .flatMap(({ timed }, d) =>
       timed.map(
         (b, i) =>
-          `[data-week-scope=${scope}] [data-block="${d}-${i}"] { --top: ${percent(b.from - startHour * 60)}; --height: ${percent(b.to - b.from)}; --left: ${b.depth}rem; --width: calc(100% - ${b.depth}rem); }`
+          `[data-week-scope=${scope}] [data-block="${d}-${i}"] { --top: ${percent(b.from - startHour * 60)}; --height: ${percent(b.to - b.from)}; --left: ${((b.lane / b.lanes) * 100).toFixed(3)}%; --width: ${(100 / b.lanes).toFixed(3)}%; }`
       )
     )
     .join("\n")
@@ -253,7 +269,7 @@ function WeekCalendar({
                   <li
                     key={b.event.key}
                     data-block={`${d}-${i}`}
-                    className="absolute top-(--top) left-(--left) h-(--height) w-(--width) bg-background pb-px"
+                    className="absolute top-(--top) left-(--left) h-(--height) w-(--width) bg-background pr-px pb-px"
                   >
                     <Tooltip>
                       <TooltipTrigger
@@ -261,8 +277,7 @@ function WeekCalendar({
                           <button
                             type="button"
                             className={cn(
-                              "flex size-full min-h-6 flex-col overflow-hidden border-l-2 px-2 text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
-                              b.depth > 0 && "border-t border-t-background",
+                              "flex size-full min-h-6 overflow-hidden border-l-2 px-2 text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
                               b.event.quiet
                                 ? "border-l-muted-foreground bg-muted text-muted-foreground"
                                 : "border-l-primary bg-primary/10"
@@ -270,33 +285,23 @@ function WeekCalendar({
                           />
                         }
                       >
+                        {/* The name only; time and place are in the tip,
+                            shown on hover or a tap. */}
                         <span
                           className={cn(
-                            "break-words",
+                            "min-w-0 break-all",
                             !b.event.quiet && "font-medium"
                           )}
                         >
                           {b.event.title}
                         </span>
-                        {/* A short block has room for the start only;
-                            the tip has the whole span. */}
-                        <span className="text-muted-foreground tabular-nums">
-                          {b.to - b.from < 90 ? (
-                            clock(b.from)
-                          ) : (
-                            <>
-                              <span className="whitespace-nowrap">
-                                {clock(b.from)} 到
-                              </span>{" "}
-                              <span className="whitespace-nowrap">
-                                {clock(b.to % FULL)}
-                              </span>
-                            </>
-                          )}
-                        </span>
                       </TooltipTrigger>
-                      <TooltipContent>
-                        {b.event.title}，{b.event.span}
+                      <TooltipContent className="flex flex-col">
+                        <span>{b.event.title}</span>
+                        <span className="tabular-nums">
+                          {b.event.span}
+                          {b.event.location ? `，${b.event.location}` : ""}
+                        </span>
                       </TooltipContent>
                     </Tooltip>
                   </li>
