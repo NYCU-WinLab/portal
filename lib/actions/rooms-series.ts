@@ -323,10 +323,10 @@ async function bookOccurrence(
       await queueMail(db, {
         to: [owner.email],
         subject: series.onlineOnly
-          ? `[WinLab 會議] 固定會議這週沒建成：${series.title}`
-          : `[WinLab 會議] 固定會議沒訂到教室：${series.title}`,
+          ? `[WinLab 會議] 固定會議這週沒建成：${plainTitle(series)}`
+          : `[WinLab 會議] 固定會議沒訂到教室：${plainTitle(series)}`,
         ...mailBody({
-          title: series.title,
+          title: plainTitle(series),
           rows: [
             ["時間", `${dayLabel(date)} ${series.startTime} 到 ${endTime}`],
             ["原因", reason],

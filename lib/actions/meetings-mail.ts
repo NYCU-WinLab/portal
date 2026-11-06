@@ -48,10 +48,9 @@ import {
 const ANNOUNCE = { name: "WinLab", email: "announce@winlab.tw" }
 // 15:30 to 18:00, as the old calendar event ran.
 const MEETING_MINUTES = 150
-// The lab-meeting GitLab group. winlab-helper files a `[lab-meeting]-`
-// recording into its Recordings folder, and keeps the meeting's epic there
-// only when the booking names the group: without one it reads the prefix as
-// a person and opens a personal folder and epic for "lab-meeting".
+// The lab-meeting GitLab group. winlab-helper files the recording into its
+// Recordings folder, and keeps the meeting's epic there only when the
+// booking names the group: without one it opens a personal folder and epic.
 const LAB_GROUP = "lab-meeting"
 
 // The daily title reminder goes out from 9:00 Taipei time.
@@ -441,9 +440,16 @@ async function syncTeamsTopic(meeting: ScheduledMeeting) {
           await readSchedule({ fromDate: addDays(meeting.date, -1) })
         ).find((m) => m.id === meeting.id)
         if (!fresh) throw new AlreadySent()
+        const next = topicOf(fresh)
         return tx
           .update(roomBookings)
-          .set(topicOf(fresh))
+          .set({
+            ...next,
+            // A Teams-era "[lab-meeting]-title" keeps its stored form while
+            // the title stays the same, so an agenda change alone renames
+            // nothing and winlab-helper keeps its old SUBJECT.
+            title: plainTitle(held) === next.title ? held.title : next.title,
+          })
           .where(
             and(eq(roomBookings.id, held.id), eq(roomBookings.status, "booked"))
           )

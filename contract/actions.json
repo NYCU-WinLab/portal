@@ -3278,7 +3278,7 @@
     "description": "The agenda of an online booking as meet shows it, by the meet booking id (room-booking-…, the create request's id): status booked or cancelled, title, project group, startsAt and endsAt (Asia/Taipei offset), the epic reference, and items: the booking's agenda lines (source booking), then the epic's open child issues with their url (source issue), at most 30. gitlab is unavailable when GitLab did not answer and only the booking's lines are listed. meet calls this when the room opens; any member may read it.",
     "kind": "query",
     "app": "meetings",
-    "hash": "7a9259fabbe7df7c",
+    "hash": "7873c8dd24db7390",
     "input": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
@@ -3363,6 +3363,7 @@
       "required": [
         "booking",
         "status",
+        "title",
         "group",
         "startsAt",
         "endsAt",
@@ -7410,7 +7411,7 @@
     "description": "Every meeting booked through the portal from date (default today, Asia/Taipei) for days days, the lab meeting's weekly Teams meeting included (lab_meeting_id set; its program is in list_lab_meetings): room (null for an online-only meeting), date, start and end, status booked or cancelled (cancelled rows stay), title, agenda, project group, attendees, who booked it, and the Teams meeting's state (pending, success with join_url, or failed with the reason). Every member sees every booking; only the member who booked one (or the member it was booked with through book_appointment) can cancel it with cancel_meeting.",
     "kind": "query",
     "app": "meetings",
-    "hash": "a5e4eaf7599cbb44",
+    "hash": "540b8e1449a08b98",
     "input": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
@@ -7561,6 +7562,16 @@
                   }
                 ]
               },
+              "meetingPrefix": {
+                "anyOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              },
               "online": {
                 "type": "boolean"
               },
@@ -7601,6 +7612,7 @@
               }
             },
             "required": [
+              "title",
               "meeting",
               "id",
               "date",
@@ -7610,7 +7622,7 @@
               "online",
               "externalUrl",
               "status",
-              "title",
+              "meetingPrefix",
               "agenda",
               "groupName",
               "attendees",
@@ -7637,7 +7649,7 @@
     "description": "The signed-in member's upcoming appointments, soonest first, in both directions: withMe (labmates booked a meeting with them) and byMe (they booked one with a labmate). Each has the booking id (cancel it with cancel_meeting, either side may), date, start and end (Asia/Taipei), startsAt (ISO), the title, and the other member's id (withId) and name (with).",
     "kind": "query",
     "app": "calendar",
-    "hash": "601f0c209d27079f",
+    "hash": "50789b2f15c15f45",
     "input": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {},
@@ -7678,6 +7690,7 @@
             "required": [
               "date",
               "id",
+              "title",
               "start",
               "startsAt",
               "end",
@@ -7720,6 +7733,7 @@
             "required": [
               "date",
               "id",
+              "title",
               "start",
               "startsAt",
               "end",
@@ -9175,7 +9189,7 @@
     "description": "Every standing meeting on /meetings: title, weekday (0 Sunday), start time, duration, every week or every other week (anchorDate is a day it meets on, fixing which weeks), attendees, whether the advisor is invited, whether it is active, who made it, and its next occurrence with the room already held for it (booked false until the daily run books it, 7 days ahead). Every member sees every series; only its creator can pause or delete it, and its creator or any member of its project group can edit its external link and agenda with update_meeting.",
     "kind": "query",
     "app": "meetings",
-    "hash": "88fea1fb70125486",
+    "hash": "fc48b01ee078b578",
     "input": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {},
@@ -9264,6 +9278,16 @@
               "intervalWeeks": {
                 "type": "number"
               },
+              "meetingPrefix": {
+                "anyOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              },
               "nextBooked": {
                 "type": "boolean"
               },
@@ -9303,6 +9327,7 @@
             "required": [
               "id",
               "title",
+              "meetingPrefix",
               "weekday",
               "startTime",
               "durationMinutes",
