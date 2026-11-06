@@ -36,7 +36,7 @@ import {
 import type { Mail } from "@/lib/mail"
 import { mailBody } from "@/lib/mail-body"
 import { emitErrorLog } from "@/lib/otel"
-import { composeTopic } from "@/lib/rooms/meeting"
+import { cleanTopic, plainTitle } from "@/lib/rooms/meeting"
 import {
   addDays,
   addMinutes,
@@ -75,9 +75,9 @@ function headline(meeting: ScheduledMeeting) {
 const TOPIC_TITLE_MAX = 100
 
 /**
- * "宋承叡 <paper title>": winlab-helper files the recording as
- * "[lab-meeting] 2026-10-26 宋承叡 <paper title>.mp4", adding the date itself,
- * and the file-index issue takes that name.
+ * "宋承叡 <paper title>": winlab-helper files the recording under the
+ * lab-meeting group as "2026-10-26 宋承叡 <paper title>.mp4", adding the
+ * date itself, and the file-index issue takes that name.
  */
 function recordingTopic(meeting: ScheduledMeeting) {
   const title = meeting.title?.trim()
@@ -309,7 +309,7 @@ function labBooking(
     endTime: addMinutes(meeting.startsAt, MEETING_MINUTES)!,
     room: null,
     place: meeting.location,
-    title: composeTopic(LAB_GROUP, recordingTopic(meeting)),
+    title: cleanTopic(recordingTopic(meeting)),
     attendees: [ANNOUNCE],
     organizer,
     online: true,
@@ -426,11 +426,11 @@ async function syncTeamsTopic(meeting: ScheduledMeeting) {
   const held = await heldBooking(meeting.id)
   if (!held) return
   const topicOf = (m: ScheduledMeeting) => ({
-    title: composeTopic(LAB_GROUP, recordingTopic(m)),
+    title: cleanTopic(recordingTopic(m)),
     agenda: recordAgenda(m),
   })
   const seen = topicOf(meeting)
-  if (held.title !== seen.title || held.agenda !== seen.agenda) {
+  if (plainTitle(held) !== seen.title || held.agenda !== seen.agenda) {
     const [renamed] = await db
       .transaction(async (tx) => {
         await lockCurrent(tx, meeting)

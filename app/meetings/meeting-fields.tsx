@@ -71,15 +71,12 @@ export function MeetingFields({
   onChange,
   groups,
   members,
-  username,
   syncOnly,
 }: {
   value: MeetingValue
   onChange: (value: MeetingValue) => void
   groups: RoomGroup[]
   members: (Member & { username: string | null })[]
-  /** The organizer's, which prefixes a meeting without a group. */
-  username: string | null
   /** A standing meeting may only belong to a sync epic. */
   syncOnly?: boolean
 }) {
@@ -131,16 +128,13 @@ export function MeetingFields({
   const epics = loadedEpics?.group === linked ? loadedEpics.epics : null
   const owes = loadedOwes?.key === owesKey ? loadedOwes.text : null
 
-  const prefix = value.group ?? username
   const epicItems =
     Array.isArray(epics) &&
     epics.filter((epic) => !syncOnly || epic.kind === "sync")
 
   return (
     <>
-      <FormField
-        label={prefix ? `會議名稱（前面會加 [${prefix}]-）` : "會議名稱"}
-      >
+      <FormField label="會議名稱">
         <Input
           value={value.title}
           maxLength={80}

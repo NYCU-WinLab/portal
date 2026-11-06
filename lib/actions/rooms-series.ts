@@ -39,12 +39,12 @@ import type { Slot } from "@/lib/rooms/availability"
 import {
   ADVISOR_USERNAME,
   DEFAULT_TOPIC,
-  composeTopic,
+  cleanTopic,
   deliverablesOf,
   epicIid,
   externalMeetingUrl,
   mergeAttendees,
-  splitTopic,
+  plainTitle,
   topicPrefix,
 } from "@/lib/rooms/meeting"
 import { emitErrorLog } from "@/lib/otel"
@@ -116,7 +116,8 @@ export const listStandingMeetings = defineAction({
         )
         return {
           id: series.id,
-          title: series.title,
+          title: plainTitle(series),
+          meetingPrefix: series.meetingPrefix,
           weekday: series.weekday,
           startTime: series.startTime,
           durationMinutes: series.durationMinutes,
@@ -265,6 +266,7 @@ async function bookOccurrence(
         const mine = await db
           .select({
             title: roomBookings.title,
+            meetingPrefix: roomBookings.meetingPrefix,
             start: roomBookings.startTime,
             end: roomBookings.endTime,
           })
@@ -281,7 +283,7 @@ async function bookOccurrence(
         )
         if (clash)
           throw new Error(
-            `你 ${clash.start} 到 ${clash.end} 已有「${splitTopic(clash.title).title}」`
+            `你 ${clash.start} 到 ${clash.end} 已有「${plainTitle(clash)}」`
           )
       }
       const room = series.onlineOnly
@@ -430,7 +432,7 @@ export async function createStandingMeeting(
   const [series] = await db
     .insert(roomSeries)
     .values({
-      title: composeTopic(prefix, input.title),
+      title: cleanTopic(input.title),
       weekday: input.weekday,
       startTime: input.start_time,
       durationMinutes: input.duration_minutes,

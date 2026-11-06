@@ -53,13 +53,13 @@ import {
   ADVISOR_USERNAME,
   DEFAULT_TOPIC,
   calendarInvite,
-  composeTopic,
+  cleanTopic,
   deliverablesOf,
   epicIid,
   externalMeetingLabel,
   externalMeetingUrl,
   mergeAttendees,
-  splitTopic,
+  plainTitle,
   topicPrefix,
   type Attendee,
 } from "@/lib/rooms/meeting"
@@ -128,7 +128,7 @@ export const listRoomAvailability = defineAction({
             room: b.room,
             startTime: b.startTime,
             endTime: b.endTime,
-            title: b.title,
+            title: plainTitle(b),
             requestedBy: b.requestedBy,
             requestedByName: b.requestedByName,
           })),
@@ -149,6 +149,7 @@ async function bookingsBetween(from: string, to: string) {
       externalUrl: roomBookings.externalUrl,
       status: roomBookings.status,
       title: roomBookings.title,
+      meetingPrefix: roomBookings.meetingPrefix,
       agenda: roomBookings.agenda,
       groupName: roomBookings.groupName,
       attendees: roomBookings.attendees,
@@ -165,6 +166,7 @@ async function bookingsBetween(from: string, to: string) {
   const meetings = await meetingsOf(rows.map((row) => row.id))
   return rows.map((row) => ({
     ...row,
+    title: plainTitle(row),
     meeting: row.online ? (meetings.get(row.id) ?? null) : null,
   }))
 }
@@ -364,7 +366,7 @@ export function bookingCalendar(
       uid: `rooms-${booking.id}@portal.winlab.tw`,
       method,
       sequence: booking.inviteSequence,
-      title: booking.title,
+      title: plainTitle(booking),
       location:
         booking.room || booking.place
           ? placeOf(booking)
@@ -403,9 +405,12 @@ function inviteMail(
   return {
     to,
     replyTo: organizer.email,
-    subject: `[WinLab 會議] ${method === "CANCEL" ? "已取消" : "邀請"}：${booking.title}（${when}）`,
+    subject: `[WinLab 會議] ${method === "CANCEL" ? "已取消" : "邀請"}：${plainTitle(booking)}（${when}）`,
     ...mailBody({
-      title: method === "CANCEL" ? `已取消：${booking.title}` : booking.title,
+      title:
+        method === "CANCEL"
+          ? `已取消：${plainTitle(booking)}`
+          : plainTitle(booking),
       rows: [
         ["時間", when],
         ["地點", placeOf(booking)],
@@ -754,6 +759,7 @@ export const bookMeeting = defineAction({
           const mine = await db
             .select({
               title: roomBookings.title,
+              meetingPrefix: roomBookings.meetingPrefix,
               start: roomBookings.startTime,
               end: roomBookings.endTime,
             })
@@ -773,7 +779,7 @@ export const bookMeeting = defineAction({
           )
           if (clash)
             throw new Error(
-              `你 ${clash.start} 到 ${clash.end} 已有「${splitTopic(clash.title).title}」`
+              `你 ${clash.start} 到 ${clash.end} 已有「${plainTitle(clash)}」`
             )
         }
         // Picked from a fresh read, not the grid the member clicked
@@ -791,7 +797,7 @@ export const bookMeeting = defineAction({
           startTime: input.start_time,
           endTime: input.end_time,
           room: room?.room ?? null,
-          title: composeTopic(prefix, input.title),
+          title: cleanTopic(input.title),
           attendees,
           organizer,
           // Every portal meeting gets a recording to look back at.
@@ -809,7 +815,7 @@ export const bookMeeting = defineAction({
       id: booking.id,
       room: booking.room,
       paid: room?.paid ?? false,
-      title: booking.title,
+      title: plainTitle(booking),
       attendees: attendees.length,
     }
   },
@@ -846,7 +852,7 @@ export const getBookingAgenda = defineAction({
     return {
       booking: input.booking,
       status: booking.status === "booked" ? "booked" : "cancelled",
-      title: splitTopic(booking.title).title,
+      title: plainTitle(booking),
       group: booking.groupName,
       startsAt: taipeiOffsetIso(booking.date, booking.startTime),
       endsAt: taipeiOffsetIso(booking.date, booking.endTime),
