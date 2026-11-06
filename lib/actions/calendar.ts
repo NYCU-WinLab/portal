@@ -130,7 +130,7 @@ function eventsOf(userId: string, from?: Date, to?: Date) {
 
 /**
  * How current a member's calendar is: how many enabled sources of their own
- * it has (WinLab 會議 not counted: meetings alone do not say when someone
+ * it has (the meetings source not counted: meetings alone do not say when someone
  * is free, so they cannot take appointments on it), the oldest sync among
  * all enabled sources and the first problem.
  */

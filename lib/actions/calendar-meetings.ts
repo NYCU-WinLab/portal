@@ -9,8 +9,8 @@ import { emitErrorLog } from "@/lib/otel"
 import { plainTitle } from "@/lib/rooms/meeting"
 import { taipeiIso } from "@/lib/rooms/time"
 
-// The meetings a member takes part in, as their portal calendar's "WinLab
-// 會議" source: portal bookings they made, are invited to, that belong to
+// The meetings a member takes part in, as their portal calendar's meetings
+// source (kind portal): portal bookings they made, are invited to, that belong to
 // one of their project groups, booked with them (appointments), and the
 // weekly lab meeting; plus rooms scheduled straight in meet for one of
 // their groups or by them. Every member sees every portal meeting
