@@ -98,6 +98,60 @@
     }
   },
   {
+    "name": "add_calendar_source",
+    "title": "加入行事曆",
+    "description": "Adds a calendar to the signed-in member's portal calendar: url is an ICS address (https or webcal, for example Outlook's published calendar or an iCloud public link), re-read every 5 minutes; content is the text of an .ics file, imported once. Give exactly one. label names it; visibility defaults to private (others see busy blocks only). Fails when the calendar cannot be read. Returns the source id and how many events it holds in the synced window.",
+    "kind": "mutation",
+    "app": "calendar",
+    "hash": "05beabadef69a5ea",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "content": {
+          "maxLength": 2097152,
+          "type": "string"
+        },
+        "label": {
+          "maxLength": 100,
+          "minLength": 1,
+          "type": "string"
+        },
+        "url": {
+          "maxLength": 2000,
+          "type": "string"
+        },
+        "visibility": {
+          "default": "private",
+          "enum": [
+            "private",
+            "public"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "label"
+      ],
+      "type": "object"
+    },
+    "output": {
+      "additionalProperties": false,
+      "properties": {
+        "events": {
+          "type": "number"
+        },
+        "id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "events"
+      ],
+      "type": "object"
+    }
+  },
+  {
     "name": "add_lab_meeting",
     "title": "新增一週",
     "description": "Admins only. Adds one meeting on date; its week label comes from the semester (generate_semester). kind is regular (default), thesis, speaker or holiday; holiday says why there is no meeting.",
@@ -3994,10 +4048,10 @@
   {
     "name": "get_member_calendar",
     "title": "查看行事曆",
-    "description": "One member's linked calendar for `days` days from `from` (YYYY-MM-DD in Taipei, default today): each event's start and end (ISO), allDay, and title and location when the owner made it public (else title is the literal 忙碌 (busy) and busyOnly is true). busyUntil is when the event they are in right now ends (null when free now, or when from is not today). Also the subscription link (ICS) the signed-in member can add to their own calendar app; it is theirs alone, so never share it.",
+    "description": "One member's calendar for `days` days from `from` (YYYY-MM-DD in Taipei, default today): each event's start and end (ISO), allDay, and title and location when the event's source is public (else title is the literal 忙碌 (busy) and busyOnly is true). busyUntil is when the event they are in right now ends (null when free now, or when from is not today). Also the subscription link (ICS) the signed-in member can add to their own calendar app; it is theirs alone, so never share it.",
     "kind": "query",
     "app": "calendar",
-    "hash": "bd17c7780047a06b",
+    "hash": "95fb5e7c0c5cf4ed",
     "input": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
@@ -4106,6 +4160,7 @@
         },
         "visibility": {
           "enum": [
+            "mixed",
             "private",
             "public"
           ],
@@ -4130,7 +4185,7 @@
   {
     "name": "get_my_appointment_schedule",
     "title": "我的預約時段",
-    "description": "The signed-in member's appointment schedule: weekly windows (weekday 0 = Sunday, Asia/Taipei HH:MM), slot length in minutes and how many days ahead labmates may book, or null when they take no appointments. linked is false when they have not linked a Google Calendar, which a schedule needs. Their booked appointments are in list_my_appointments.",
+    "description": "The signed-in member's appointment schedule: weekly windows (weekday 0 = Sunday, Asia/Taipei HH:MM), slot length in minutes and how many days ahead labmates may book, or null when they take no appointments. linked is false when their portal calendar has no enabled source (get_my_calendar), which a schedule needs. Their booked appointments are in list_my_appointments.",
     "kind": "query",
     "app": "calendar",
     "hash": "fb85d2b6e1206885",
@@ -4203,10 +4258,10 @@
   {
     "name": "get_my_calendar",
     "title": "我的行事曆設定",
-    "description": "Whether the signed-in member has linked a Google Calendar: the Google address, visibility (private: others see busy blocks only; public: others also see titles and locations), when it last synced and any sync problem.",
+    "description": "The signed-in member's calendar setup. google is their linked Google account (null when none): its address, whether the portal may list all its calendars (canList; false means only the primary one, relink to grant more) and any sync problem. sources are the calendars that make up their portal calendar: kind google (one per calendar in the account; busyOnly when Google shares it as free/busy only), ics (an address, shown by host only) or file (an imported .ics); each has enabled, visibility (private: others see busy blocks; public: others also see titles and locations), when it last synced and any problem. Change one with set_calendar_source, add with add_calendar_source.",
     "kind": "query",
     "app": "calendar",
-    "hash": "dab0e496133f7b57",
+    "hash": "4cc2a4c60adcb8b7",
     "input": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {},
@@ -4218,12 +4273,15 @@
         "configured": {
           "type": "boolean"
         },
-        "link": {
+        "google": {
           "anyOf": [
             {
               "additionalProperties": false,
               "properties": {
-                "googleEmail": {
+                "canList": {
+                  "type": "boolean"
+                },
+                "email": {
                   "type": "string"
                 },
                 "syncedAt": {
@@ -4245,19 +4303,12 @@
                       "type": "string"
                     }
                   ]
-                },
-                "visibility": {
-                  "enum": [
-                    "private",
-                    "public"
-                  ],
-                  "type": "string"
                 }
               },
               "required": [
-                "visibility",
+                "email",
+                "canList",
                 "syncedAt",
-                "googleEmail",
                 "syncError"
               ],
               "type": "object"
@@ -4266,11 +4317,93 @@
               "type": "null"
             }
           ]
+        },
+        "sources": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "busyOnly": {
+                "type": "boolean"
+              },
+              "enabled": {
+                "type": "boolean"
+              },
+              "host": {
+                "anyOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              },
+              "id": {
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "file",
+                  "google",
+                  "ics"
+                ],
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "primary": {
+                "type": "boolean"
+              },
+              "syncedAt": {
+                "anyOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              },
+              "syncError": {
+                "anyOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              },
+              "visibility": {
+                "enum": [
+                  "private",
+                  "public"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "kind",
+              "label",
+              "primary",
+              "busyOnly",
+              "host",
+              "enabled",
+              "visibility",
+              "syncedAt",
+              "syncError"
+            ],
+            "type": "object"
+          },
+          "type": "array"
         }
       },
       "required": [
         "configured",
-        "link"
+        "google",
+        "sources"
       ],
       "type": "object"
     }
@@ -5925,10 +6058,10 @@
   {
     "name": "list_calendars",
     "title": "行事曆列表",
-    "description": "Members who linked a Google Calendar, with each one's visibility (private or public), whether they are busy right now, and bookable when they take appointments (list_appointment_slots). Open one with get_member_calendar.",
+    "description": "Members who keep a calendar on the portal, with each one's visibility (private, public, or mixed when some of their calendars are public), when it last synced, whether they are busy right now, and bookable when they take appointments (list_appointment_slots). Open one with get_member_calendar.",
     "kind": "query",
     "app": "calendar",
-    "hash": "7fe465f517bcb90c",
+    "hash": "1243122d3958e401",
     "input": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {},
@@ -5965,6 +6098,7 @@
               },
               "visibility": {
                 "enum": [
+                  "mixed",
                   "private",
                   "public"
                 ],
@@ -5972,12 +6106,12 @@
               }
             },
             "required": [
-              "visibility",
-              "syncedAt",
-              "busyNow",
               "userId",
               "name",
-              "bookable"
+              "visibility",
+              "syncedAt",
+              "bookable",
+              "busyNow"
             ],
             "type": "object"
           },
@@ -9921,6 +10055,40 @@
     }
   },
   {
+    "name": "remove_calendar_source",
+    "title": "移除行事曆",
+    "description": "Removes an ICS address or imported file from the signed-in member's calendar, with its events. A Google calendar cannot be removed: turn it off with set_calendar_source, or unlink Google with unlink_google_calendar.",
+    "kind": "mutation",
+    "app": "calendar",
+    "hash": "ee3fe2483583c864",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "source_id": {
+          "format": "uuid",
+          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source_id"
+      ],
+      "type": "object"
+    },
+    "output": {
+      "additionalProperties": false,
+      "properties": {
+        "removed": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "removed"
+      ],
+      "type": "object"
+    }
+  },
+  {
     "name": "remove_mail_group_member",
     "title": "移出群組信",
     "description": "Removes one MEMBER address from a mailing list the member manages; owners and managers are never removed here. Same list rules as add_mail_group_members.",
@@ -11171,15 +11339,28 @@
     }
   },
   {
-    "name": "set_calendar_visibility",
-    "title": "行事曆公開範圍",
-    "description": "Sets who sees what on the signed-in member's linked calendar: private shows others only busy blocks, public also shows each event's title and location. Events the member marked private in Google stay busy blocks either way. Confirm with the member before making a calendar public.",
+    "name": "set_calendar_source",
+    "title": "設定行事曆來源",
+    "description": "Changes one source of the signed-in member's calendar (ids from get_my_calendar): enabled turns it on or off (off removes its events from the portal), visibility sets what others see (private: busy blocks only; public: also each event's title and location; events marked private in the source stay busy blocks either way) and label renames it. Confirm with the member before making a source public.",
     "kind": "mutation",
     "app": "calendar",
-    "hash": "079cbc38822f33f4",
+    "hash": "87a6b379156e001f",
     "input": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "label": {
+          "maxLength": 100,
+          "minLength": 1,
+          "type": "string"
+        },
+        "source_id": {
+          "format": "uuid",
+          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+          "type": "string"
+        },
         "visibility": {
           "enum": [
             "private",
@@ -11189,13 +11370,22 @@
         }
       },
       "required": [
-        "visibility"
+        "source_id"
       ],
       "type": "object"
     },
     "output": {
       "additionalProperties": false,
       "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "id": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
         "visibility": {
           "enum": [
             "private",
@@ -11205,7 +11395,10 @@
         }
       },
       "required": [
-        "visibility"
+        "id",
+        "enabled",
+        "visibility",
+        "label"
       ],
       "type": "object"
     }
@@ -11843,8 +12036,8 @@
   },
   {
     "name": "unlink_google_calendar",
-    "title": "取消連結行事曆",
-    "description": "Unlinks the signed-in member's Google Calendar: tells Google to drop the portal's access and deletes every copied event, so nobody sees it any more.",
+    "title": "取消連結 Google",
+    "description": "Unlinks the signed-in member's Google account: tells Google to drop the portal's access and deletes its calendars and their copied events. ICS addresses and files stay.",
     "kind": "mutation",
     "app": "calendar",
     "hash": "054b429a01377af0",

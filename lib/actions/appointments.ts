@@ -3,7 +3,7 @@ import { alias } from "drizzle-orm/pg-core"
 import { z } from "zod"
 
 import { defineAction } from "@/lib/actions/define"
-import { syncCalendar } from "@/lib/actions/calendar"
+import { calendarState, syncCalendar } from "@/lib/actions/calendar"
 import {
   bookMeeting,
   cancelBooking,
@@ -14,7 +14,6 @@ import {
   appointments,
   appointmentSchedules,
   calendarEvents,
-  calendarLinks,
   roomBookings,
   user,
   type AppointmentWindow,
@@ -163,17 +162,11 @@ async function freeSlots(
 
 async function ownerOf(userId: string) {
   const [owner] = await db
-    .select({
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      syncedAt: calendarLinks.syncedAt,
-      syncError: calendarLinks.syncError,
-    })
+    .select({ id: user.id, name: user.name, email: user.email })
     .from(user)
-    .innerJoin(calendarLinks, eq(calendarLinks.userId, user.id))
     .where(eq(user.id, userId))
-  return owner ?? null
+  const state = await calendarState(userId)
+  return owner && state.sources > 0 ? { ...owner, ...state } : null
 }
 
 /** Whether the copy of the owner's calendar can be trusted to say free. */
@@ -186,17 +179,14 @@ export const getMyAppointmentSchedule = defineAction({
   name: "get_my_appointment_schedule",
   title: "我的預約時段",
   description:
-    "The signed-in member's appointment schedule: weekly windows (weekday 0 = Sunday, Asia/Taipei HH:MM), slot length in minutes and how many days ahead labmates may book, or null when they take no appointments. linked is false when they have not linked a Google Calendar, which a schedule needs. Their booked appointments are in list_my_appointments.",
+    "The signed-in member's appointment schedule: weekly windows (weekday 0 = Sunday, Asia/Taipei HH:MM), slot length in minutes and how many days ahead labmates may book, or null when they take no appointments. linked is false when their portal calendar has no enabled source (get_my_calendar), which a schedule needs. Their booked appointments are in list_my_appointments.",
   kind: "query",
   input: z.object({}),
   run: async (actor) => {
-    const [link] = await db
-      .select({ userId: calendarLinks.userId })
-      .from(calendarLinks)
-      .where(eq(calendarLinks.userId, actor.userId))
+    const { sources } = await calendarState(actor.userId)
     const schedule = await scheduleOf(actor.userId)
     return {
-      linked: !!link,
+      linked: sources > 0,
       schedule: schedule && {
         windows: schedule.windows,
         slotMinutes: schedule.slotMinutes,
@@ -302,11 +292,8 @@ export const setAppointmentSchedule = defineAction({
       if (next && next.weekday === w.weekday && spansOverlap(w, next))
         throw new Error(`同一天的時段 ${w.start} 和 ${next.start} 重疊了`)
     }
-    const [link] = await db
-      .select({ userId: calendarLinks.userId })
-      .from(calendarLinks)
-      .where(eq(calendarLinks.userId, actor.userId))
-    if (!link) throw new Error("先連結 Google 行事曆，才能開放預約")
+    const { sources } = await calendarState(actor.userId)
+    if (sources === 0) throw new Error("先加入行事曆，才能開放預約")
     const values = {
       windows,
       slotMinutes: input.slot_minutes,
