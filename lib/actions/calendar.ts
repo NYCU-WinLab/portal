@@ -13,6 +13,8 @@ import { createHash } from "node:crypto"
 
 import { z } from "zod"
 
+import { portalMeetings } from "@/lib/actions/calendar-meetings"
+import { onChange } from "@/lib/actions/changes"
 import { defineAction } from "@/lib/actions/define"
 import { isLabMember } from "@/lib/auth/member"
 import { feedKey, open, sameKey, seal } from "@/lib/calendar-crypto"
@@ -127,9 +129,10 @@ function eventsOf(userId: string, from?: Date, to?: Date) {
 }
 
 /**
- * How current a member's calendar is: the enabled sources, the oldest sync
- * among them and the first problem. A calendar with no enabled source is
- * not shown, and cannot take appointments.
+ * How current a member's calendar is: how many enabled sources of their own
+ * it has (the meetings source not counted: meetings alone do not say when someone
+ * is free, so they cannot take appointments on it), the oldest sync among
+ * all enabled sources and the first problem.
  */
 export async function calendarState(userId: string) {
   const [link] = await db
@@ -149,7 +152,7 @@ export async function calendarState(userId: string) {
   const times = sources.map((source) => source.syncedAt?.getTime() ?? 0)
   const usesGoogle = sources.some((source) => source.kind === "google")
   return {
-    sources: sources.length,
+    sources: sources.filter((source) => source.kind !== "portal").length,
     syncedAt:
       times.length && Math.min(...times) ? new Date(Math.min(...times)) : null,
     syncError:
@@ -269,6 +272,7 @@ async function readSource(
       ? busyBlocks(accessToken, source.googleCalendarId!, from, to)
       : busyEvents(accessToken, source.googleCalendarId!, from, to)
   }
+  if (source.kind === "portal") return portalMeetings(source.userId, from, to)
   if (source.kind === "ics")
     return icsEvents(await fetchIcs(open(source.url!)), from, to)
   return icsEvents(source.content!, from, to)
@@ -322,8 +326,31 @@ async function syncSource(
   }
 }
 
+const PORTAL_LABEL = "WinLab 會議"
+
+/**
+ * Gives the member the source of their portal meetings, on and public (every
+ * member already sees every meeting in list_meetings); null when they have
+ * it already.
+ */
+async function ensurePortalSource(userId: string) {
+  const [created] = await db
+    .insert(calendarSources)
+    .values({
+      userId,
+      kind: "portal",
+      label: PORTAL_LABEL,
+      enabled: true,
+      visibility: "public",
+    })
+    .onConflictDoNothing()
+    .returning()
+  return created ?? null
+}
+
 /** Copies every enabled source of one member, replacing what was kept. */
 async function syncOne(userId: string, only?: string) {
+  if (!only) await ensurePortalSource(userId)
   const now = new Date()
   const from = new Date(now.getTime() - BACK_DAYS * 86_400_000)
   const to = new Date(now.getTime() + AHEAD_DAYS * 86_400_000)
@@ -441,6 +468,52 @@ export function startCalendarSync() {
   }
   setInterval(run, SYNC_EVERY_MS).unref()
   run()
+  // A meeting booked, moved or cancelled shows on everyone's calendar within
+  // seconds, not at the next 5-minute run.
+  let soon: ReturnType<typeof setTimeout> | null = null
+  void onChange((action) => {
+    if (!MEETING_ACTIONS.has(action) || soon) return
+    soon = setTimeout(() => {
+      soon = null
+      void syncPortalSources().catch((error: unknown) =>
+        emitErrorLog(error, {})
+      )
+    }, 2000)
+  }).catch((error: unknown) => emitErrorLog(error, {}))
+}
+
+/** Actions that change who meets when. */
+const MEETING_ACTIONS = new Set([
+  "book_meeting",
+  "update_meeting",
+  "cancel_meeting",
+  "book_appointment",
+  "add_lab_meeting",
+  "update_lab_meeting",
+  "update_my_lab_meeting",
+  "delete_lab_meeting",
+  "swap_lab_meetings",
+  "generate_semester",
+  "add_presenter",
+  "remove_presenter",
+  "move_presenter",
+  "fill_presenters",
+  "set_standing_meeting_active",
+  "delete_standing_meeting",
+])
+
+/** Re-reads every member's portal meetings source. */
+export async function syncPortalSources() {
+  const now = new Date()
+  const from = new Date(now.getTime() - BACK_DAYS * 86_400_000)
+  const to = new Date(now.getTime() + AHEAD_DAYS * 86_400_000)
+  const sources = await db
+    .select()
+    .from(calendarSources)
+    .where(
+      and(eq(calendarSources.kind, "portal"), eq(calendarSources.enabled, true))
+    )
+  for (const source of sources) await syncSource(source, null, from, to)
 }
 
 export const linkGoogleCalendar = defineAction({
@@ -497,16 +570,27 @@ export const linkGoogleCalendar = defineAction({
   },
 })
 
-type SourceKind = "google" | "ics" | "file"
+type SourceKind = "portal" | "google" | "ics" | "file"
 
 export const getMyCalendar = defineAction({
   name: "get_my_calendar",
   title: "我的行事曆設定",
   description:
-    "The signed-in member's calendar setup. google is their linked Google account (null when none): its address, whether the portal may list all its calendars (canList; false means only the primary one, relink to grant more) and any sync problem. sources are the calendars that make up their portal calendar: kind google (one per calendar in the account; busyOnly when Google shares it as free/busy only), ics (an address, shown by host only) or file (an imported .ics); each has enabled, visibility (private: others see busy blocks; public: others also see titles and locations), when it last synced and any problem. Change one with set_calendar_source, add with add_calendar_source.",
+    "The signed-in member's calendar setup. google is their linked Google account (null when none): its address, whether the portal may list all its calendars (canList; false means only the primary one, relink to grant more) and any sync problem. sources are the calendars that make up their portal calendar: kind google (one per calendar in the account; busyOnly when Google shares it as free/busy only), ics (an address, shown by host only), file (an imported .ics) or portal (WinLab 會議: portal meetings they booked, are invited to, of their project groups, booked with them, the weekly lab meeting, and meet rooms scheduled for their groups or by them; on and public by default); each has enabled, visibility (private: others see busy blocks; public: others also see titles and locations), when it last synced and any problem. Change one with set_calendar_source, add with add_calendar_source.",
   kind: "query",
   input: z.object({}),
   run: async (actor) => {
+    // Every member who opens their calendar gets their meetings on it.
+    const created = await ensurePortalSource(actor.userId)
+    if (created) {
+      const now = Date.now()
+      await syncSource(
+        created,
+        null,
+        new Date(now - BACK_DAYS * 86_400_000),
+        new Date(now + AHEAD_DAYS * 86_400_000)
+      )
+    }
     const [link] = await db
       .select({
         googleEmail: calendarLinks.googleEmail,
@@ -521,6 +605,7 @@ export const getMyCalendar = defineAction({
       .from(calendarSources)
       .where(eq(calendarSources.userId, actor.userId))
       .orderBy(
+        sql`${calendarSources.kind} = 'portal' desc`,
         asc(calendarSources.kind),
         sql`${calendarSources.primary} desc`,
         asc(calendarSources.label)
@@ -687,13 +772,14 @@ export const removeCalendarSource = defineAction({
   name: "remove_calendar_source",
   title: "移除行事曆",
   description:
-    "Removes an ICS address or imported file from the signed-in member's calendar, with its events. A Google calendar cannot be removed: turn it off with set_calendar_source, or unlink Google with unlink_google_calendar.",
+    "Removes an ICS address or imported file from the signed-in member's calendar, with its events. A Google calendar or WinLab 會議 cannot be removed: turn it off with set_calendar_source (or unlink Google with unlink_google_calendar).",
   kind: "mutation",
   input: z.object({ source_id: z.uuid() }),
   run: async (actor, input) => {
     const source = await ownSource(actor.userId, input.source_id)
     if (source.kind === "google")
       throw new Error("Google 日曆用開關關閉，或取消連結 Google")
+    if (source.kind === "portal") throw new Error("WinLab 會議用開關關閉")
     await db.delete(calendarSources).where(eq(calendarSources.id, source.id))
     return { removed: true }
   },
