@@ -74,6 +74,42 @@ type Source = typeof calendarSources.$inferSelect
 type Row = typeof calendarEvents.$inferSelect & {
   visibility: string
   accessRole: string | null
+  kind: string
+}
+
+// "[nycu-robotics]-確認工作事項" is how Teams and mailed invites name a
+// portal meeting; the portal itself says "確認工作事項".
+const plainName = (title: string) =>
+  title
+    .replace(/^\[[^\]]*\]-/, "")
+    .trim()
+    .toLowerCase()
+const place = (location: string) => location.replace(/\s+/g, "").toLowerCase()
+
+/**
+ * Drops the copies of a portal meeting that came in through another source
+ * (the invite the member accepted into Google, an ICS of the same): same
+ * start, and the same name or the same room. The portal's own copy stays.
+ */
+function withoutCopies<T extends Row>(rows: T[]) {
+  const meetings = rows.filter((row) => row.kind === "portal")
+  if (meetings.length === 0) return rows
+  return rows.filter(
+    (row) =>
+      row.kind === "portal" ||
+      !meetings.some((meeting) => {
+        if (meeting.startsAt.getTime() !== row.startsAt.getTime()) return false
+        if (plainName(meeting.title) === plainName(row.title)) return true
+        const a = place(meeting.location)
+        const b = place(row.location)
+        return (
+          a !== "" &&
+          a !== "線上" &&
+          b !== "" &&
+          (a.includes(b) || b.includes(a))
+        )
+      })
+  )
 }
 
 /** What the viewer may see of one event. */
@@ -109,6 +145,7 @@ function eventsOf(userId: string, from?: Date, to?: Date) {
       private: calendarEvents.private,
       visibility: calendarSources.visibility,
       accessRole: calendarSources.accessRole,
+      kind: calendarSources.kind,
     })
     .from(calendarEvents)
     .innerJoin(
@@ -921,7 +958,7 @@ export const getMemberCalendar = defineAction({
     const from = input.from ?? todayInTaipei()
     const start = new Date(`${from}T00:00:00+08:00`)
     const end = new Date(`${addDays(from, input.days)}T00:00:00+08:00`)
-    const rows = await eventsOf(owner.userId, start, end)
+    const rows = withoutCopies(await eventsOf(owner.userId, start, end))
     const now = Date.now()
     const current = rows.find(
       (row) =>
@@ -999,7 +1036,7 @@ export async function calendarFeed(
   if (!(await isLabMember(viewerId))) return null
   const owner = await ownerOf(ownerId)
   if (!owner) return null
-  const rows = await eventsOf(ownerId)
+  const rows = withoutCopies(await eventsOf(ownerId))
   const stamp = icsTime(new Date().toISOString())
   const lines = [
     "BEGIN:VCALENDAR",
