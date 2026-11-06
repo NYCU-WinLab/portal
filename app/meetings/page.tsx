@@ -15,7 +15,7 @@ import { listMeetings, listProjectGroups } from "@/lib/actions/rooms"
 import { listStandingMeetings } from "@/lib/actions/rooms-series"
 import { requireActor } from "@/lib/auth/session"
 import { dateLabel, taipeiToday } from "@/lib/leave-dates"
-import { isDefaultTopic, splitTopic } from "@/lib/rooms/meeting"
+import { isDefaultTopic } from "@/lib/rooms/meeting"
 import { addDays, endAfter, occurrencesBetween } from "@/lib/rooms/time"
 
 import { AdminActions } from "./admin-actions"
@@ -159,10 +159,12 @@ function MeetingRow({
 }
 
 // Any other meeting: who called it, who comes, and its Teams link.
-// "[cairn]-sync" as members read it: the project's or the person's name,
+// A topic as members read it: the project's or the person's name,
 // then the title, which is left out when it is only the default "Meeting".
-function Topic({ topic, owners }: { topic: string; owners: Owners }) {
-  const { prefix, title } = splitTopic(topic)
+type Titled = { title: string; meetingPrefix: string | null }
+
+function Topic({ topic, owners }: { topic: Titled; owners: Owners }) {
+  const { meetingPrefix: prefix, title } = topic
   const owner = prefix ? (owners.get(prefix) ?? prefix) : null
   if (!owner) return <span className="min-w-0 truncate">{title}</span>
   return (
@@ -192,8 +194,8 @@ const crowd = (attendees: { name: string; email: string }[], people: People) =>
   )
 
 /** Topic as plain text, for confirm dialogs. */
-function topicText(topic: string, owners: Owners) {
-  const { prefix, title } = splitTopic(topic)
+function topicText(topic: Titled, owners: Owners) {
+  const { meetingPrefix: prefix, title } = topic
   const owner = prefix ? (owners.get(prefix) ?? prefix) : null
   if (!owner) return title
   return isDefaultTopic(title) ? owner : `${owner} ${title}`
@@ -217,7 +219,7 @@ function BookingRow({
         <span className="flex flex-col gap-1 sm:flex-row sm:gap-4">
           <When date={booking.date} aside={booking.startTime} />
           <span className="flex min-w-0 flex-1 gap-3">
-            <Topic topic={booking.title} owners={owners} />
+            <Topic topic={booking} owners={owners} />
             <span className="ml-auto shrink-0 text-muted-foreground">
               {booking.room ?? "線上"}
             </span>
@@ -279,7 +281,7 @@ function SeriesRow({
             {weekdays[series.weekday]} {series.startTime}
           </span>
           <span className="flex min-w-0 flex-1 gap-3">
-            <Topic topic={series.title} owners={owners} />
+            <Topic topic={series} owners={owners} />
             {!series.active && (
               <span className="ml-auto shrink-0 text-muted-foreground">
                 暫停
@@ -335,7 +337,7 @@ function StandingRow({
         <span className="flex flex-col gap-1 text-muted-foreground sm:flex-row sm:gap-4">
           <When date={date} aside={series.startTime} />
           <span className="flex min-w-0 flex-1 gap-3">
-            <Topic topic={series.title} owners={owners} />
+            <Topic topic={series} owners={owners} />
             <span className="ml-auto shrink-0">未訂</span>
           </span>
         </span>
@@ -485,7 +487,7 @@ export default async function MeetingsPage() {
             {mayEdit(entry.booking.requestedBy, entry.booking.groupName) && (
               <EditMeeting
                 target={{ booking: entry.booking.id }}
-                title={topicText(entry.booking.title, owners)}
+                title={topicText(entry.booking, owners)}
                 externalUrl={entry.booking.externalUrl}
                 agenda={entry.booking.agenda}
               />
@@ -493,7 +495,7 @@ export default async function MeetingsPage() {
             {entry.booking.requestedBy === actor.userId && (
               <CancelButton
                 id={entry.booking.id}
-                title={topicText(entry.booking.title, owners)}
+                title={topicText(entry.booking, owners)}
               />
             )}
           </>
@@ -508,14 +510,7 @@ export default async function MeetingsPage() {
           title="會議"
           actions={
             <>
-              <NewMeeting
-                today={today}
-                groups={groups}
-                members={members}
-                username={
-                  members.find((m) => m.id === actor.userId)?.username ?? null
-                }
-              />
+              <NewMeeting today={today} groups={groups} members={members} />
               {admin && (
                 <AdminActions
                   dates={meetings
@@ -577,7 +572,7 @@ export default async function MeetingsPage() {
                       {mayEdit(s.createdBy, s.groupName) && (
                         <EditMeeting
                           target={{ series: s.id }}
-                          title={topicText(s.title, owners)}
+                          title={topicText(s, owners)}
                           externalUrl={s.externalUrl}
                           agenda={s.agenda}
                         />
@@ -585,7 +580,7 @@ export default async function MeetingsPage() {
                       {s.createdBy === actor.userId && (
                         <SeriesButtons
                           id={s.id}
-                          title={topicText(s.title, owners)}
+                          title={topicText(s, owners)}
                           active={s.active}
                         />
                       )}

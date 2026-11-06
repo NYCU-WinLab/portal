@@ -35,7 +35,7 @@ import {
 } from "@/lib/gitlab"
 import { meetAction, meetConfigured, meetHost } from "@/lib/meet"
 import { agendaItems } from "@/lib/rooms/agenda"
-import { MEETING_FAILURES, splitTopic } from "@/lib/rooms/meeting"
+import { MEETING_FAILURES, plainTitle, teamsSubject } from "@/lib/rooms/meeting"
 import { dayLabel, taipeiOffsetIso } from "@/lib/rooms/time"
 
 const sha256 = (value: string) =>
@@ -97,7 +97,7 @@ async function askIf(
       REQUEST_ID: requestId,
       CALLBACK_TOKEN: callbackToken,
       ACTION: kind,
-      SUBJECT: booking.title,
+      SUBJECT: teamsSubject(booking),
       ...(booking.groupName ? { GROUP_NAME: booking.groupName } : {}),
       ...(booking.issueRefs.length
         ? { ISSUE_REFS: booking.issueRefs.join(",") }
@@ -171,7 +171,7 @@ async function askMeet(
         {
           agenda: items,
           // meet files by group and opener; the [prefix]- is for Teams.
-          title: splitTopic(booking.title).title,
+          title: plainTitle(booking),
           group: booking.groupName ?? undefined,
           booking: target,
           startsAt: taipeiOffsetIso(booking.date, booking.startTime),
@@ -188,7 +188,7 @@ async function askMeet(
         {
           agenda: items,
           booking: target,
-          title: splitTopic(booking.title).title,
+          title: plainTitle(booking),
           group: booking.groupName ?? undefined,
           startsAt: taipeiOffsetIso(booking.date, booking.startTime),
           endsAt: taipeiOffsetIso(booking.date, booking.endTime),
@@ -312,6 +312,8 @@ async function tellHelper(requestId: string) {
   const pipelineId = await triggerHelperPipeline({
     REQUEST_ID: created.requestId,
     KIND: request.kind,
+    // As stored: plain for new bookings, "[prefix]-title" for Teams-era
+    // ones, which winlab-helper still files under their old names.
     SUBJECT: booking.title,
     ...(request.kind === "cancel" ? {} : createVariables(booking)),
     ...(request.kind === "cancel"
@@ -950,6 +952,7 @@ export async function sweepMeetingRequests() {
       pipelineUrl: roomMeetingRequests.pipelineUrl,
       bookingStatus: roomBookings.status,
       title: roomBookings.title,
+      meetingPrefix: roomBookings.meetingPrefix,
       date: roomBookings.date,
       startTime: roomBookings.startTime,
       endTime: roomBookings.endTime,
@@ -994,12 +997,12 @@ export async function sweepMeetingRequests() {
           to: [row.email],
           subject:
             row.kind === "cancel"
-              ? `[WinLab 會議] Teams 會議沒有取消：${row.title}`
+              ? `[WinLab 會議] Teams 會議沒有取消：${plainTitle(row)}`
               : row.kind === "update"
-                ? `[WinLab 會議] Teams 會議名稱沒有更新：${row.title}`
-                : `[WinLab 會議] 會議連結建立失敗：${row.title}`,
+                ? `[WinLab 會議] Teams 會議名稱沒有更新：${plainTitle(row)}`
+                : `[WinLab 會議] 會議連結建立失敗：${plainTitle(row)}`,
           ...mailBody({
-            title: row.title,
+            title: plainTitle(row),
             rows: [
               [
                 "時間",
@@ -1042,6 +1045,7 @@ async function mailUntoldRecords(today: string) {
       kind: roomMeetingRequests.kind,
       helperError: roomMeetingRequests.helperError,
       title: roomBookings.title,
+      meetingPrefix: roomBookings.meetingPrefix,
       date: roomBookings.date,
       startTime: roomBookings.startTime,
       endTime: roomBookings.endTime,
@@ -1150,12 +1154,12 @@ async function mailUntoldRecords(today: string) {
       await queueMail(tx, {
         to: [first.email],
         subject: cancel
-          ? `[WinLab 會議] GitLab 會議紀錄沒有關閉：${first.title}`
+          ? `[WinLab 會議] GitLab 會議紀錄沒有關閉：${plainTitle(first)}`
           : created
-            ? `[WinLab 會議] GitLab 會議紀錄沒有更新：${first.title}`
-            : `[WinLab 會議] GitLab 會議紀錄沒有建立：${first.title}`,
+            ? `[WinLab 會議] GitLab 會議紀錄沒有更新：${plainTitle(first)}`
+            : `[WinLab 會議] GitLab 會議紀錄沒有建立：${plainTitle(first)}`,
         ...mailBody({
-          title: first.title,
+          title: plainTitle(first),
           rows: [
             [
               "時間",

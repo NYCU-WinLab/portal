@@ -19,8 +19,8 @@ import { meetings } from "@/lib/db/meetings"
 import type { Attendee } from "@/lib/rooms/meeting"
 
 // Standing meetings: the scheduler books each occurrence a week ahead.
-// title is already the full Teams topic ([prefix]-suffix), frozen with
-// the prefix, group and epics when the series is made.
+// title is the plain topic (Teams-era series hold "[prefix]-suffix"),
+// frozen with the prefix, group and epics when the series is made.
 export const roomSeries = pgTable(
   "room_series",
   {

@@ -19,7 +19,7 @@ import {
   user,
   type AppointmentWindow,
 } from "@/lib/db/schema"
-import { splitTopic } from "@/lib/rooms/meeting"
+import { plainTitle } from "@/lib/rooms/meeting"
 import {
   addDays,
   clock,
@@ -228,6 +228,7 @@ export const listMyAppointments = defineAction({
         start: roomBookings.startTime,
         end: roomBookings.endTime,
         title: roomBookings.title,
+        meetingPrefix: roomBookings.meetingPrefix,
         ownerId: appointments.ownerId,
         ownerName: other.name,
         bookedBy: roomBookings.requestedBy,
@@ -257,7 +258,7 @@ export const listMyAppointments = defineAction({
         start: row.start,
         end: row.end,
         startsAt: taipeiIso(row.date, row.start),
-        title: splitTopic(row.title).title,
+        title: plainTitle(row),
         mine: row.ownerId === actor.userId,
         withId: row.ownerId === actor.userId ? row.bookedBy : row.ownerId,
         with: row.ownerId === actor.userId ? row.bookerName : row.ownerName,

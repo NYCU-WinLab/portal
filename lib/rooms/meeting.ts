@@ -4,10 +4,9 @@
 /** Who an invite goes to; Keycloak group members need no portal account. */
 export type Attendee = { name: string; email: string; username?: string }
 
-// The topic names the recording file, which is later sorted into Nextcloud
-// by its [prefix]: an ASCII id (the group's slug, or the organizer's
-// username), joined here only, so typed text can never pose as another
-// project's.
+// The title names the recording file. Which project it belongs to travels
+// apart from it, in meetingPrefix and the group: an ASCII id (the group's
+// slug, or the organizer's username) that typed text can never pose as.
 const UNSAFE = /[\\/:*?"<>|[\]]/g
 
 export const DEFAULT_TOPIC = "Meeting"
@@ -28,17 +27,32 @@ export function topicPrefix(
   return (raw && forFilename(raw)) || null
 }
 
-export function composeTopic(prefix: string | null, suffix: string) {
-  const clean = forFilename(suffix) || DEFAULT_TOPIC
-  return prefix ? `[${prefix}]-${clean}` : clean
+/**
+ * A typed title as a booking stores it: safe in a file name, so it never
+ * holds "[" or "]", and "Meeting" when empty. The project or person goes
+ * in meetingPrefix, apart from it.
+ */
+export const cleanTopic = (title: string) => forFilename(title) || DEFAULT_TOPIC
+
+type Titled = { title: string; meetingPrefix: string | null }
+
+/**
+ * The title members read. Teams-era rows stored "[prefix]-title"; a clean
+ * title never starts with "[", so only a row whose title starts with its
+ * own meetingPrefix in brackets is one of those.
+ */
+export function plainTitle({ title, meetingPrefix }: Titled) {
+  const head = meetingPrefix ? `[${meetingPrefix}]-` : null
+  return head && title.startsWith(head) ? title.slice(head.length) : title
 }
 
-/** A topic split back into its [prefix] and the title after it. */
-export function splitTopic(topic: string) {
-  const match = /^\[([^\]]+)\]-(.*)$/.exec(topic)
-  return match
-    ? { prefix: match[1], title: match[2] }
-    : { prefix: null, title: topic }
+/**
+ * The subject the Teams pipeline gets: "[prefix]-title", the name its
+ * recordings are filed by. Only that transport joins them.
+ */
+export function teamsSubject(row: Titled) {
+  const title = plainTitle(row)
+  return row.meetingPrefix ? `[${row.meetingPrefix}]-${title}` : title
 }
 
 /** An external meeting link as members paste it: https only, or null. */

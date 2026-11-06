@@ -62,13 +62,10 @@ export function NewMeeting({
   today,
   groups,
   members,
-  username,
 }: {
   today: string
   groups: RoomGroup[]
   members: People
-  /** The member's own, which prefixes a meeting without a group. */
-  username: string | null
 }) {
   const [open, setOpen] = React.useState(false)
   const [days, setDays] = React.useState<Day[] | string | null>(null)
@@ -155,7 +152,6 @@ export function NewMeeting({
           picked={picked}
           groups={groups}
           members={members}
-          username={username}
           onClose={() => setPicked(null)}
         />
       )}
@@ -250,13 +246,11 @@ function MeetingDialog({
   picked,
   groups,
   members,
-  username,
   onClose,
 }: {
   picked: Picked
   groups: RoomGroup[]
   members: People
-  username: string | null
   onClose: () => void
 }) {
   const { date, start, left, slots } = picked
@@ -406,7 +400,6 @@ function MeetingDialog({
         onChange={setMeeting}
         groups={groups}
         members={members}
-        username={username}
         syncOnly={repeat > 0}
       />
     </FormDialog>
