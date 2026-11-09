@@ -47,6 +47,7 @@ import {
 import type { Action } from "@/lib/actions/define"
 import type { ApiApp } from "@/lib/api-apps"
 import { listHomePins, setHomePin } from "@/lib/actions/home"
+import { sendInvitation } from "@/lib/actions/invitations"
 import { getDoorStatus, listDoorEvents, openDoor } from "@/lib/actions/door"
 import { listMyDoorCards, listMyDoorEvents } from "@/lib/actions/door-mine"
 import {
@@ -472,6 +473,10 @@ export const actionGroups: { app: ApiApp | null; actions: Action[] }[] = [
       signApproveDocument,
       deleteApproveDocument,
     ],
+  },
+  {
+    app: "invitations",
+    actions: [sendInvitation],
   },
   {
     app: "groups",

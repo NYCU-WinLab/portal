@@ -38,3 +38,20 @@ export const mailOutbox = pgTable(
       .where(sql`${table.sentAt} is null`),
   ]
 )
+
+// Invitations other lab services send through the portal's mail, such as
+// a viewer.winlab.tw guest link: who sent it (the API key's owner), for
+// whom, to where. Kept for the record and for the hourly limit.
+export const invitations = pgTable(
+  "invitations",
+  {
+    id: uuid().defaultRandom().primaryKey(),
+    /** The member whose API key sent it. */
+    senderId: uuid().notNull(),
+    to: text().notNull(),
+    url: text().notNull(),
+    outboxId: uuid(),
+    createdAt: timestamp({ withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [index().on(table.senderId, table.createdAt)]
+)

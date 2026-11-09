@@ -242,6 +242,13 @@ export const serviceGroups: { title: string; apps: Service[] }[] = [
         href: "https://video.winlab.tw",
       },
       {
+        key: "viewer",
+        label: "Viewer",
+        name: "文件共讀",
+        emoji: "📄",
+        href: "https://viewer.winlab.tw",
+      },
+      {
         key: "wiki",
         label: "Wiki",
         name: "文件庫",
