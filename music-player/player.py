@@ -36,8 +36,9 @@ import pyatv
 import pyatv.protocols.raop as raop
 from aiohttp import web
 from pyatv.const import DeviceState
-from pyatv.interface import MediaMetadata
+from pyatv.interface import DeviceListener, MediaMetadata
 from pyatv.protocols.raop.audio_source import AudioSource
+from pyatv.support import shield
 
 MUSIC_URL = os.environ["MUSIC_URL"].rstrip("/")
 FALLBACK_URL = os.environ.get("FALLBACK_URL", "").rstrip("/")
@@ -457,14 +458,38 @@ async def open_source(source, sample_rate, channels, sample_size):
 raop.open_source = open_source
 
 
+class Forget(DeviceListener):
+    """Forgets a connection once pyatv reports it lost or closed."""
+
+    def __init__(self, homepod, atv):
+        self.homepod, self.atv = homepod, atv
+
+    def connection_lost(self, exception):
+        log.info("HomePod connection lost: %s", exception)
+        self.homepod.forget(self.atv)
+
+    def connection_closed(self):
+        self.homepod.forget(self.atv)
+
+
 class HomePod:
     """One pyatv connection, made again whenever it drops."""
 
     def __init__(self):
         self.atv = None
+        self.listener = None
         self.host = HOMEPOD_HOST
 
+    def forget(self, atv):
+        if self.atv is atv:
+            self.atv = None
+
     async def connect(self):
+        # pyatv closes a connection on its own at times (the HomePod hangs up); a closed one
+        # raises "audio is blocked" on every call, so it never counts as connected.
+        if self.atv is not None and shield.is_blocking(self.atv):
+            log.info("HomePod connection was closed, connecting again")
+            self.atv = None
         if self.atv is not None:
             return self.atv
         loop = asyncio.get_running_loop()
@@ -477,6 +502,9 @@ class HomePod:
                 raise RuntimeError(f"HomePod {HOMEPOD_NAME} not found")
             self.host = str(confs[0].address)
         self.atv = await pyatv.connect(confs[0], loop)
+        # pyatv holds a listener weakly, so the HomePod keeps it.
+        self.listener = Forget(self, self.atv)
+        self.atv.listener = self.listener
         return self.atv
 
     def drop(self):
@@ -724,10 +752,11 @@ class Player:
             self.mixer = mixer
             try:
                 atv = await self.homepod.connect()
-                mixer.volume = float(atv.audio.volume)
                 try:
+                    mixer.volume = float(atv.audio.volume)
                     await atv.stream.stream_file(mixer, metadata=MediaMetadata(title="門口", artist="WinLab"))
                 except Exception:
+                    # Whatever failed, the next clip starts on a fresh connection.
                     self.homepod.drop()
                     raise
                 # The stream returns when the last frame is sent; the room hears it BUFFER_S later.
