@@ -121,7 +121,12 @@ export async function readInput(
   let size = 0
   const reader = request.body?.getReader()
   while (reader) {
-    const { done, value } = await reader.read()
+    // A client that hangs up mid-body (a poller closing, a laptop
+    // sleeping) makes read() throw "aborted". Nobody is left to answer, so
+    // it ends as 499, not as a server error.
+    const chunk = await reader.read().catch(() => null)
+    if (!chunk) return apiError(499, "client closed the request")
+    const { done, value } = chunk
     if (done) break
     size += value.byteLength
     if (size > MAX_BODY_BYTES) {
