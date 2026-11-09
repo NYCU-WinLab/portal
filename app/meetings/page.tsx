@@ -15,11 +15,12 @@ import { listMeetings, listProjectGroups } from "@/lib/actions/rooms"
 import { listStandingMeetings } from "@/lib/actions/rooms-series"
 import { requireActor } from "@/lib/auth/session"
 import { dateLabel, taipeiToday } from "@/lib/leave-dates"
-import { DEFAULT_TOPIC, splitTopic } from "@/lib/rooms/meeting"
-import { addDays, addMinutes, occurrencesBetween } from "@/lib/rooms/time"
+import { isDefaultTopic } from "@/lib/rooms/meeting"
+import { addDays, endAfter, occurrencesBetween } from "@/lib/rooms/time"
 
 import { AdminActions } from "./admin-actions"
 import { CancelButton } from "./cancel-button"
+import { EditMeeting } from "./edit-meeting"
 import { MeetingActions } from "./meeting-actions"
 import { meetingsNav, meetingsPage } from "./nav"
 import { NewMeeting } from "./new-meeting"
@@ -51,8 +52,8 @@ function When({ date, aside }: { date: string; aside: React.ReactNode }) {
 const teamsText = (booking: Booking) => {
   if (!booking.meeting) return null
   if (booking.meeting.status === "success") return null
-  if (booking.meeting.status === "pending") return "Teams 會議建立中"
-  return `Teams 會議沒有建成：${booking.meeting.error ?? "原因不明"}`
+  if (booking.meeting.status === "pending") return "線上會議建立中"
+  return `線上會議沒有建成：${booking.meeting.error ?? "原因不明"}`
 }
 
 const link = "underline-offset-4 hover:underline"
@@ -158,24 +159,24 @@ function MeetingRow({
 }
 
 // Any other meeting: who called it, who comes, and its Teams link.
-// "[cairn]-sync" as members read it: the project's or the person's name,
-// then the title, which is left out when it is only the default "meeting".
-function Topic({ topic, owners }: { topic: string; owners: Owners }) {
-  const { prefix, title } = splitTopic(topic)
+// A topic as members read it: the project's or the person's name,
+// then the title, which is left out when it is only the default "Meeting".
+type Titled = { title: string; meetingPrefix: string | null }
+
+function Topic({ topic, owners }: { topic: Titled; owners: Owners }) {
+  const { meetingPrefix: prefix, title } = topic
   const owner = prefix ? (owners.get(prefix) ?? prefix) : null
   if (!owner) return <span className="min-w-0 truncate">{title}</span>
   return (
     <span className="flex min-w-0 gap-3">
       <span
         className={
-          title === DEFAULT_TOPIC
-            ? "shrink-0"
-            : "shrink-0 text-muted-foreground"
+          isDefaultTopic(title) ? "shrink-0" : "shrink-0 text-muted-foreground"
         }
       >
         {owner}
       </span>
-      {title !== DEFAULT_TOPIC && (
+      {!isDefaultTopic(title) && (
         <span className="min-w-0 truncate">{title}</span>
       )}
     </span>
@@ -193,11 +194,11 @@ const crowd = (attendees: { name: string; email: string }[], people: People) =>
   )
 
 /** Topic as plain text, for confirm dialogs. */
-function topicText(topic: string, owners: Owners) {
-  const { prefix, title } = splitTopic(topic)
+function topicText(topic: Titled, owners: Owners) {
+  const { meetingPrefix: prefix, title } = topic
   const owner = prefix ? (owners.get(prefix) ?? prefix) : null
   if (!owner) return title
-  return title === DEFAULT_TOPIC ? owner : `${owner} ${title}`
+  return isDefaultTopic(title) ? owner : `${owner} ${title}`
 }
 
 function BookingRow({
@@ -218,7 +219,7 @@ function BookingRow({
         <span className="flex flex-col gap-1 sm:flex-row sm:gap-4">
           <When date={booking.date} aside={booking.startTime} />
           <span className="flex min-w-0 flex-1 gap-3">
-            <Topic topic={booking.title} owners={owners} />
+            <Topic topic={booking} owners={owners} />
             <span className="ml-auto shrink-0 text-muted-foreground">
               {booking.room ?? "線上"}
             </span>
@@ -227,9 +228,19 @@ function BookingRow({
       }
     >
       <div className="flex flex-wrap items-center gap-x-6 gap-y-3 text-muted-foreground sm:pl-38">
+        {booking.externalUrl && (
+          <a
+            href={booking.externalUrl}
+            target="_blank"
+            rel="noreferrer"
+            className={link}
+          >
+            加入會議
+          </a>
+        )}
         {booking.meeting?.status === "success" && (
           <a href={`/rooms/join/${booking.id}`} className={link}>
-            加入會議
+            {booking.externalUrl ? "內部紀錄" : "加入會議"}
           </a>
         )}
         <span>
@@ -270,7 +281,7 @@ function SeriesRow({
             {weekdays[series.weekday]} {series.startTime}
           </span>
           <span className="flex min-w-0 flex-1 gap-3">
-            <Topic topic={series.title} owners={owners} />
+            <Topic topic={series} owners={owners} />
             {!series.active && (
               <span className="ml-auto shrink-0 text-muted-foreground">
                 暫停
@@ -283,13 +294,23 @@ function SeriesRow({
       <div className="flex flex-wrap items-center gap-x-6 gap-y-3 text-muted-foreground sm:pl-38">
         <span>
           {series.startTime} 到{" "}
-          {addMinutes(series.startTime, series.durationMinutes)}
+          {endAfter(series.startTime, series.durationMinutes)}
         </span>
         <span>建立者 {series.createdByName}</span>
         {series.attendees.length > 0 && (
           <AvatarStack people={crowd(series.attendees, people)} />
         )}
         {series.includeAdvisor && <span>邀請老師</span>}
+        {series.externalUrl && (
+          <a
+            href={series.externalUrl}
+            target="_blank"
+            rel="noreferrer"
+            className={link}
+          >
+            外部會議
+          </a>
+        )}
         {series.agenda && (
           <span className="w-full whitespace-pre-wrap">{series.agenda}</span>
         )}
@@ -316,7 +337,7 @@ function StandingRow({
         <span className="flex flex-col gap-1 text-muted-foreground sm:flex-row sm:gap-4">
           <When date={date} aside={series.startTime} />
           <span className="flex min-w-0 flex-1 gap-3">
-            <Topic topic={series.title} owners={owners} />
+            <Topic topic={series} owners={owners} />
             <span className="ml-auto shrink-0">未訂</span>
           </span>
         </span>
@@ -325,7 +346,7 @@ function StandingRow({
       <div className="flex flex-wrap items-center gap-x-6 gap-y-3 text-muted-foreground sm:pl-38">
         <span>
           {series.startTime} 到{" "}
-          {addMinutes(series.startTime, series.durationMinutes)}
+          {endAfter(series.startTime, series.durationMinutes)}
         </span>
         <span>建立者 {series.createdByName}</span>
         {series.attendees.length > 0 && (
@@ -380,6 +401,18 @@ export default async function MeetingsPage() {
     ),
     ...groups.map((g) => [g.name, g.label] as [string, string]),
   ])
+  // The creator or a member of the project group may edit a meeting, as
+  // update_meeting allows; the button only shows where it would work.
+  const myUsername = members.find((m) => m.id === actor.userId)?.username
+  const mayEdit = (createdBy: string, groupName: string | null) =>
+    createdBy === actor.userId ||
+    Boolean(
+      groupName &&
+      myUsername &&
+      groups
+        .find((g) => g.name === groupName)
+        ?.members.some((m) => m.username === myUsername)
+    )
   const people: People = new Map(
     members.map((m) => [m.email.toLowerCase(), { id: m.id, name: m.name }])
   )
@@ -450,12 +483,22 @@ export default async function MeetingsPage() {
         key={entry.booking.id}
         booking={entry.booking}
         actions={
-          entry.booking.requestedBy === actor.userId && (
-            <CancelButton
-              id={entry.booking.id}
-              title={topicText(entry.booking.title, owners)}
-            />
-          )
+          <>
+            {mayEdit(entry.booking.requestedBy, entry.booking.groupName) && (
+              <EditMeeting
+                target={{ booking: entry.booking.id }}
+                title={topicText(entry.booking, owners)}
+                externalUrl={entry.booking.externalUrl}
+                agenda={entry.booking.agenda}
+              />
+            )}
+            {entry.booking.requestedBy === actor.userId && (
+              <CancelButton
+                id={entry.booking.id}
+                title={topicText(entry.booking, owners)}
+              />
+            )}
+          </>
         }
       />
     )
@@ -525,13 +568,23 @@ export default async function MeetingsPage() {
                   key={s.id}
                   series={s}
                   actions={
-                    s.createdBy === actor.userId && (
-                      <SeriesButtons
-                        id={s.id}
-                        title={topicText(s.title, owners)}
-                        active={s.active}
-                      />
-                    )
+                    <>
+                      {mayEdit(s.createdBy, s.groupName) && (
+                        <EditMeeting
+                          target={{ series: s.id }}
+                          title={topicText(s, owners)}
+                          externalUrl={s.externalUrl}
+                          agenda={s.agenda}
+                        />
+                      )}
+                      {s.createdBy === actor.userId && (
+                        <SeriesButtons
+                          id={s.id}
+                          title={topicText(s, owners)}
+                          active={s.active}
+                        />
+                      )}
+                    </>
                   }
                 />
               ))}

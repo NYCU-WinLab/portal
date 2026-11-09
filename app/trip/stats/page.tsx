@@ -1,3 +1,10 @@
+import {
+  Focus,
+  FocusHighlight,
+  FocusLabel,
+  FocusTitle,
+  FocusMeta,
+} from "@/components/focus"
 import { EmptyState } from "@/components/empty-state"
 import { PageHeader } from "@/components/page-header"
 import { PortalShell } from "@/components/portal-shell"
@@ -16,11 +23,25 @@ const megabytes = (bytes: number) =>
 export default async function TripStatsPage() {
   const actor = await requireActor("/trip/stats")
   const { members } = await runAction(getTripStats, actor, {})
+  const me = members.find((row) => row.userId === actor.userId)
 
   return (
     <PortalShell page={tripPage} nav={tripNav}>
       <div className="flex flex-col gap-12">
         <PageHeader title="統計" />
+        <Focus>
+          <FocusLabel>你</FocusLabel>
+          <FocusTitle>
+            上傳了 <FocusHighlight>{me?.files ?? 0}</FocusHighlight> 份
+          </FocusTitle>
+          {me && (
+            <FocusMeta>
+              <span>
+                {me.trips} 趟，{megabytes(me.bytes)}
+              </span>
+            </FocusMeta>
+          )}
+        </Focus>
         {members.length === 0 ? (
           <EmptyState noun="上傳" />
         ) : (

@@ -32,7 +32,7 @@ export const gameScores = pgTable(
     index().on(table.userId, table.createdAt),
     check(
       "game_scores_game",
-      sql`${table.game} in ('2048', 'memory', 'typing', 'snake', 'pipes', 'queens')`
+      sql`${table.game} in ('2048', 'memory', 'typing', 'snake', 'pipes', 'queens', 'gomoku')`
     ),
   ]
 )

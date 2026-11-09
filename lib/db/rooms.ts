@@ -19,8 +19,8 @@ import { meetings } from "@/lib/db/meetings"
 import type { Attendee } from "@/lib/rooms/meeting"
 
 // Standing meetings: the scheduler books each occurrence a week ahead.
-// title is already the full Teams topic ([prefix]-suffix), frozen with
-// the prefix, group and epics when the series is made.
+// title is the plain topic (Teams-era series hold "[prefix]-suffix"),
+// frozen with the prefix, group and epics when the series is made.
 export const roomSeries = pgTable(
   "room_series",
   {
@@ -34,6 +34,11 @@ export const roomSeries = pgTable(
     attendees: jsonb().$type<Attendee[]>().default([]).notNull(),
     includeAdvisor: boolean().default(false).notNull(),
     online: boolean().default(true).notNull(),
+    // No room: each occurrence is only a meet.winlab.tw meeting.
+    onlineOnly: boolean().default(false).notNull(),
+    // Where the meeting really happens when it is someone else's (another
+    // company's Teams); the portal's own meeting then only records it.
+    externalUrl: text(),
     meetingPrefix: text(),
     groupName: text(),
     agenda: text(),
@@ -76,6 +81,8 @@ export const roomBookings = pgTable(
     title: text().notNull(),
     attendees: jsonb().$type<Attendee[]>().default([]).notNull(),
     online: boolean().default(true).notNull(),
+    // As on room_series: the meeting people join, when it is not ours.
+    externalUrl: text(),
     meetingPrefix: text(),
     groupName: text(),
     agenda: text(),
@@ -152,6 +159,19 @@ export const roomMeetingRequests = pgTable(
     errorMessage: text(),
     pipelineId: text(),
     pipelineUrl: text(),
+    // A meet booking's record epic, asked of winlab-helper after meet
+    // answered: the pipeline it started, or why the trigger failed (retried
+    // by reconcileTeams up to 3 times, then mailed once). helperError is
+    // also set before the trigger, so a crash in between is retried, and
+    // when the pipeline's meeting_open job fails. helperSettledAt is when
+    // that job was seen to finish. helperAskedAt is when the last try
+    // started, so overlapping runs do not send it twice.
+    helperPipelineId: text(),
+    helperError: text(),
+    helperTries: integer().default(0).notNull(),
+    helperNotifiedAt: timestamp({ withTimezone: true }),
+    helperSettledAt: timestamp({ withTimezone: true }),
+    helperAskedAt: timestamp({ withTimezone: true }),
     createdAt: timestamp({ withTimezone: true }).defaultNow().notNull(),
     completedAt: timestamp({ withTimezone: true }),
     notifiedAt: timestamp({ withTimezone: true }),

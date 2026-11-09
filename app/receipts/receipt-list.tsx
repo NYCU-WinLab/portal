@@ -23,7 +23,10 @@ import {
 } from "@/components/ui/table"
 import type { Receipt } from "@/lib/actions/receipts"
 import { depositAccounts, receiptStatuses } from "@/lib/receipts"
+import { report } from "@/lib/report"
 
+import { edit } from "./actions"
+import { ProjectCombobox } from "./project-combobox"
 import { ReceiptActions } from "./receipt-forms"
 
 // The value the project select uses for "every project".
@@ -146,7 +149,21 @@ export function ReceiptList({
                     />
                   </a>
                 </TableCell>
-                <TableCell>{receipt.project}</TableCell>
+                <TableCell>
+                  <ProjectCombobox
+                    projects={projects}
+                    value={receipt.project}
+                    onValueChange={(next) =>
+                      report(
+                        edit({ id: receipt.id, project: next }),
+                        "已儲存"
+                      ).catch(() => {})
+                    }
+                    placeholder="未填"
+                    aria-label={`${receipt.name} 的計畫`}
+                    className="-mx-3 w-40 border-transparent hover:border-input dark:bg-transparent"
+                  />
+                </TableCell>
                 <TableCell>
                   {receipt.depositAccount &&
                     depositAccounts[receipt.depositAccount]}

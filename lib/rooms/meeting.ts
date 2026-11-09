@@ -4,36 +4,79 @@
 /** Who an invite goes to; Keycloak group members need no portal account. */
 export type Attendee = { name: string; email: string; username?: string }
 
-// The topic names the recording file, which is later sorted into Nextcloud
-// by its [prefix]: an ASCII id (the group's slug, or a member's username),
-// joined here only, so typed text can never pose as another project's.
+// The title names the recording file. Which project it belongs to travels
+// apart from it, in meetingPrefix and the group: an ASCII id (the group's
+// slug, or the organizer's username) that typed text can never pose as.
 const UNSAFE = /[\\/:*?"<>|[\]]/g
 
-export const DEFAULT_TOPIC = "meeting"
+export const DEFAULT_TOPIC = "Meeting"
+
+/** Whether a title is the default, including bookings made as "meeting". */
+export const isDefaultTopic = (title: string) =>
+  title.toLowerCase() === DEFAULT_TOPIC.toLowerCase()
 
 export const forFilename = (value: string) =>
   value.replace(UNSAFE, " ").replace(/\s+/g, " ").trim()
 
-/** The group, else the first attendee with a username; null for neither. */
+/** The group, else the organizer's username; null for neither. */
 export function topicPrefix(
   groupName: string | null | undefined,
-  attendees: Attendee[]
+  organizerUsername: string | null | undefined
 ) {
-  const raw = groupName ?? attendees.find((a) => a.username)?.username
+  const raw = groupName ?? organizerUsername
   return (raw && forFilename(raw)) || null
 }
 
-export function composeTopic(prefix: string | null, suffix: string) {
-  const clean = forFilename(suffix) || DEFAULT_TOPIC
-  return prefix ? `[${prefix}]-${clean}` : clean
+/**
+ * A typed title as a booking stores it: safe in a file name, so it never
+ * holds "[" or "]", and "Meeting" when empty. The project or person goes
+ * in meetingPrefix, apart from it.
+ */
+export const cleanTopic = (title: string) => forFilename(title) || DEFAULT_TOPIC
+
+type Titled = { title: string; meetingPrefix: string | null }
+
+/**
+ * The title members read. Teams-era rows stored "[prefix]-title"; a clean
+ * title never starts with "[", so only a row whose title starts with its
+ * own meetingPrefix in brackets is one of those.
+ */
+export function plainTitle({ title, meetingPrefix }: Titled) {
+  const head = meetingPrefix ? `[${meetingPrefix}]-` : null
+  return head && title.startsWith(head) ? title.slice(head.length) : title
 }
 
-/** A topic split back into its [prefix] and the title after it. */
-export function splitTopic(topic: string) {
-  const match = /^\[([^\]]+)\]-(.*)$/.exec(topic)
-  return match
-    ? { prefix: match[1], title: match[2] }
-    : { prefix: null, title: topic }
+/**
+ * The subject the Teams pipeline gets: "[prefix]-title", the name its
+ * recordings are filed by. Only that transport joins them.
+ */
+export function teamsSubject(row: Titled) {
+  const title = plainTitle(row)
+  return row.meetingPrefix ? `[${row.meetingPrefix}]-${title}` : title
+}
+
+/** An external meeting link as members paste it: https only, or null. */
+export function externalMeetingUrl(value: string | null | undefined) {
+  const raw = value?.trim()
+  if (!raw) return null
+  let url: URL
+  try {
+    url = new URL(raw)
+  } catch {
+    throw new Error("外部會議連結不是網址")
+  }
+  if (url.protocol !== "https:") throw new Error("外部會議連結要是 https")
+  return url.toString()
+}
+
+/** What an external link is, as an invite names it. */
+export function externalMeetingLabel(url: string) {
+  const host = new URL(url).hostname
+  if (/(^|\.)teams\.(microsoft|live)\.com$/.test(host)) return "外部 Teams"
+  if (/(^|\.)zoom\.us$/.test(host)) return "外部 Zoom"
+  if (host === "meet.google.com") return "外部 Google Meet"
+  if (/(^|\.)webex\.com$/.test(host)) return "外部 Webex"
+  return "外部會議"
 }
 
 /** The lab's advisor; project groups list students only. */
@@ -134,7 +177,7 @@ export function epicIid(ref: string, groupPath: string) {
 
 // RFC 5545: escape TEXT, fold lines at 75 octets without splitting a
 // character (titles are mostly Chinese, 3 bytes each).
-const icsText = (value: string) =>
+export const icsText = (value: string) =>
   value
     .replace(/\\/g, "\\\\")
     .replace(/;/g, "\\;")
@@ -144,7 +187,7 @@ const icsText = (value: string) =>
 // A parameter value is quoted, and may hold no quote or line break.
 const icsParam = (value: string) => `"${value.replace(/["\r\n]/g, " ")}"`
 
-function fold(line: string) {
+export function fold(line: string) {
   const bytes = new TextEncoder().encode(line)
   const decode = (from: number, to: number) =>
     new TextDecoder().decode(bytes.subarray(from, to))
@@ -162,7 +205,7 @@ function fold(line: string) {
   return parts.join("\r\n ")
 }
 
-const icsTime = (iso: string) =>
+export const icsTime = (iso: string) =>
   new Date(iso)
     .toISOString()
     .replace(/[-:]/g, "")
@@ -186,6 +229,8 @@ export function calendarInvite(event: {
   /** Asks each attendee to answer; off for a mailing list. */
   rsvp?: boolean
   joinUrl: string | null
+  /** Where the meeting really happens; joinUrl then only records it. */
+  externalUrl?: string | null
 }) {
   const lines = [
     "BEGIN:VCALENDAR",
@@ -207,12 +252,22 @@ export function calendarInvite(event: {
         `ATTENDEE;CN=${icsParam(a.name)};ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=${event.rsvp === false ? "FALSE" : "TRUE"}:mailto:${a.email}`
     ),
     `STATUS:${event.method === "CANCEL" ? "CANCELLED" : "CONFIRMED"}`,
-    ...(event.joinUrl
+    ...(event.externalUrl
       ? [
-          `DESCRIPTION:${icsText(`線上會議：${event.joinUrl}`)}`,
-          `URL:${event.joinUrl}`,
+          `DESCRIPTION:${icsText(
+            [
+              `會議連結：${event.externalUrl}`,
+              ...(event.joinUrl ? [`內部紀錄：${event.joinUrl}`] : []),
+            ].join("\n")
+          )}`,
+          `URL:${event.externalUrl}`,
         ]
-      : []),
+      : event.joinUrl
+        ? [
+            `DESCRIPTION:${icsText(`線上會議：${event.joinUrl}`)}`,
+            `URL:${event.joinUrl}`,
+          ]
+        : []),
     "END:VEVENT",
     "END:VCALENDAR",
   ]
@@ -232,4 +287,6 @@ export const MEETING_FAILURES: Record<string, string> = {
   UNEXPECTED_RESPONSE: "Teams 的回應缺少必要欄位",
   NO_CALLBACK: "pipeline 沒有在時限內回報",
   TRIGGER_FAILED: "Portal 連不上 GitLab，pipeline 沒有啟動",
+  MEET_FAILED: "meet 沒有回應，會議室可能沒有建立",
+  MEET_REFUSED: "meet 拒絕建立會議室",
 }

@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
-import { deliverableLabel, type Epic } from "@/lib/rooms/meeting"
+import { DEFAULT_TOPIC, deliverableLabel, type Epic } from "@/lib/rooms/meeting"
 
 import { loadDeliverables, loadEpics } from "./rooms-actions"
 
@@ -35,16 +35,18 @@ export type MeetingValue = {
   includeAdvisor: boolean
   epic: string | null
   agenda: string
+  externalUrl: string
 }
 
 export const emptyMeeting: MeetingValue = {
-  title: "meeting",
+  title: DEFAULT_TOPIC,
   group: null,
   inviteGroup: true,
   attendees: [],
   includeAdvisor: true,
   epic: null,
   agenda: "",
+  externalUrl: "",
 }
 
 /** The value as book_meeting takes it. */
@@ -56,6 +58,7 @@ export const meetingInput = (value: MeetingValue) => ({
   include_advisor: value.includeAdvisor,
   epic: value.epic,
   agenda: value.agenda || null,
+  external_url: value.externalUrl || null,
 })
 
 const NO_GROUP = "none"
@@ -125,19 +128,13 @@ export function MeetingFields({
   const epics = loadedEpics?.group === linked ? loadedEpics.epics : null
   const owes = loadedOwes?.key === owesKey ? loadedOwes.text : null
 
-  const prefix =
-    value.group ??
-    members.find((m) => value.attendees.includes(m.id))?.username ??
-    null
   const epicItems =
     Array.isArray(epics) &&
     epics.filter((epic) => !syncOnly || epic.kind === "sync")
 
   return (
     <>
-      <FormField
-        label={prefix ? `會議名稱（前面會加 [${prefix}]-）` : "會議名稱"}
-      >
+      <FormField label="會議名稱">
         <Input
           value={value.title}
           maxLength={80}
@@ -242,6 +239,16 @@ export function MeetingFields({
           {owes && <p className="text-muted-foreground">{owes}</p>}
         </div>
       )}
+      <FormField label="外部會議連結">
+        <Input
+          type="url"
+          inputMode="url"
+          placeholder="https://"
+          value={value.externalUrl}
+          maxLength={2000}
+          onChange={(event) => set({ externalUrl: event.target.value })}
+        />
+      </FormField>
       <FormField label="討論事項">
         <Textarea
           value={value.agenda}

@@ -192,6 +192,7 @@ import {
 import {
   bookMeeting,
   cancelMeeting,
+  getBookingAgenda,
   getEpicDeliverables,
   listGroupEpics,
   listRoomAvailability,
@@ -201,6 +202,7 @@ import {
 import {
   deleteStandingMeeting,
   listStandingMeetings,
+  updateMeeting,
   setStandingMeetingActive,
 } from "@/lib/actions/rooms-series"
 import {
@@ -214,6 +216,7 @@ import {
   listQueue,
   nowPlaying,
   playNext,
+  previousSong,
   removeSong,
   searchMusic,
   setAutoplay,
@@ -223,6 +226,24 @@ import {
   unlikeSong,
 } from "@/lib/actions/music"
 import { listAssets } from "@/lib/actions/assets"
+import {
+  getMemberCalendar,
+  getMyCalendar,
+  linkGoogleCalendar,
+  listCalendars,
+  rotateCalendarFeeds,
+  setCalendarSource,
+  addCalendarSource,
+  removeCalendarSource,
+  unlinkGoogleCalendar,
+} from "@/lib/actions/calendar"
+import {
+  bookAppointment,
+  getMyAppointmentSchedule,
+  listAppointmentSlots,
+  listMyAppointments,
+  setAppointmentSchedule,
+} from "@/lib/actions/appointments"
 import { listLabMembers } from "@/lib/actions/members"
 import { listLabMeetingStats } from "@/lib/actions/stats"
 import { whoami } from "@/lib/actions/users"
@@ -257,6 +278,25 @@ export const actionGroups: { app: ApiApp | null; actions: Action[] }[] = [
   {
     app: "leave",
     actions: [listLeaves, createLeave, deleteLeave],
+  },
+  {
+    app: "calendar",
+    actions: [
+      listCalendars,
+      getMemberCalendar,
+      getMyCalendar,
+      setCalendarSource,
+      addCalendarSource,
+      removeCalendarSource,
+      rotateCalendarFeeds,
+      linkGoogleCalendar,
+      unlinkGoogleCalendar,
+      getMyAppointmentSchedule,
+      listMyAppointments,
+      setAppointmentSchedule,
+      listAppointmentSlots,
+      bookAppointment,
+    ],
   },
   {
     app: "bulletin",
@@ -348,8 +388,10 @@ export const actionGroups: { app: ApiApp | null; actions: Action[] }[] = [
       getEpicDeliverables,
       bookMeeting,
       cancelMeeting,
+      getBookingAgenda,
       listStandingMeetings,
       setStandingMeetingActive,
+      updateMeeting,
       deleteStandingMeeting,
     ],
   },
@@ -488,6 +530,7 @@ export const actionGroups: { app: ApiApp | null; actions: Action[] }[] = [
       addPlaylist,
       playNext,
       skipSong,
+      previousSong,
       removeSong,
       setPaused,
       setVolume,
@@ -516,6 +559,7 @@ export const backgroundChanges: Record<string, ApiApp | null> = {
   compare_door_cards: null,
   room_daily_run: "meetings",
   room_meeting_callback: "meetings",
+  meet_room: "meetings",
   store_door_voice_clip: "greetings",
 }
 

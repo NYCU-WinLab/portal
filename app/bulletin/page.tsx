@@ -1,6 +1,12 @@
 import { EmptyState } from "@/components/empty-state"
 import { ExpandRow } from "@/components/expand-row"
-import { Focus, FocusLabel, FocusMeta, FocusTitle } from "@/components/focus"
+import {
+  Focus,
+  FocusHighlight,
+  FocusLabel,
+  FocusMeta,
+  FocusTitle,
+} from "@/components/focus"
 import { PageHeader, SectionHeader } from "@/components/page-header"
 import { PortalShell } from "@/components/portal-shell"
 import { isAdmin } from "@/lib/actions/authz"
@@ -67,7 +73,9 @@ export default async function BulletinPage() {
         ) : (
           <Focus>
             <FocusLabel>最新</FocusLabel>
-            <FocusTitle>{latest.title}</FocusTitle>
+            <FocusTitle>
+              <FocusHighlight>{latest.title}</FocusHighlight>
+            </FocusTitle>
             <p className="whitespace-pre-wrap">{latest.content}</p>
             <FocusMeta>
               <Meta post={latest} />

@@ -1,3 +1,9 @@
+import {
+  Focus,
+  FocusHighlight,
+  FocusLabel,
+  FocusTitle,
+} from "@/components/focus"
 import { EmptyState } from "@/components/empty-state"
 import { PageHeader, SectionHeader } from "@/components/page-header"
 import { PortalShell } from "@/components/portal-shell"
@@ -72,6 +78,12 @@ export default async function ApiKeysPage() {
     <PortalShell page={apiKeysPage}>
       <div className="flex flex-col gap-12">
         <PageHeader title="API 金鑰" actions={<CreateKey />} />
+        <Focus>
+          <FocusLabel>我的金鑰</FocusLabel>
+          <FocusTitle>
+            <FocusHighlight>{mine.length}</FocusHighlight> 把
+          </FocusTitle>
+        </Focus>
         <section className="flex flex-col gap-2">
           <SectionHeader title="用法" />
           <p className="font-mono break-all text-muted-foreground select-all">

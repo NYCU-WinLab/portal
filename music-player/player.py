@@ -1,15 +1,15 @@
 """Plays the WinLab Music queue on the lab HomePod.
 
-Runs on a machine on the speaker's network (spawner, over its WinLab Wi-Fi).
+Runs on a machine on the speaker's network (enderchest, wired to the lab LAN).
 It follows MUSIC_URL/api/music/player (MUSIC_URL is the portal, server-sent
 events) for what members asked for, fetches the audio with yt-dlp, and streams
 it over AirPlay (RAOP) with pyatv. It reports what it did back to the same route.
 
 FALLBACK_URL (optional) is a backup queue with the same route (638.winlab.tw on
-Spawner): while the portal cannot be reached FAILOVER_AFTER times in a row, the
-player follows the backup instead, and goes back as soon as the portal answers.
+Spawner, reached through a Spawner port forward): while the portal cannot be
+reached FAILOVER_AFTER times in a row, the player follows the backup instead, and goes back as soon as the portal answers.
 
-The door (idm-display on the same host) posts its greeting to ANNOUNCE_LISTEN.
+The door (idm-display, when it runs on the same host) posts its greeting to ANNOUNCE_LISTEN.
 The clip goes into the stream that is already playing: the song pauses, the
 clip plays at its own volume, and the song carries on from the same frame. With
 nothing playing, the clip gets a stream of its own.

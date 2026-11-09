@@ -1,3 +1,10 @@
+import {
+  Focus,
+  FocusHighlight,
+  FocusLabel,
+  FocusTitle,
+  FocusMeta,
+} from "@/components/focus"
 import { EmptyState } from "@/components/empty-state"
 import { PageHeader } from "@/components/page-header"
 import { PortalShell } from "@/components/portal-shell"
@@ -14,6 +21,7 @@ export const dynamic = "force-dynamic"
 export default async function LeaveStatsPage() {
   const actor = await requireActor("/leave/stats")
   const { members } = await runAction(listLabMeetingStats, actor, {})
+  const me = members.find((row) => row.userId === actor.userId)
   const rows = members
     .filter((row) => row.leaves + row.leaveScheduled > 0)
     .sort((a, b) => b.leaves - a.leaves || a.name.localeCompare(b.name))
@@ -22,6 +30,17 @@ export default async function LeaveStatsPage() {
     <PortalShell page={leavePage} nav={leaveNav}>
       <div className="flex flex-col gap-12">
         <PageHeader title="統計" />
+        <Focus>
+          <FocusLabel>你</FocusLabel>
+          <FocusTitle>
+            請了 <FocusHighlight>{me?.leaves ?? 0}</FocusHighlight> 次假
+          </FocusTitle>
+          {me && me.leaveScheduled > 0 && (
+            <FocusMeta>
+              <span>之後還有 {me.leaveScheduled} 次</span>
+            </FocusMeta>
+          )}
+        </Focus>
         {rows.length === 0 ? (
           <EmptyState noun="請假" />
         ) : (

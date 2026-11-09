@@ -1,3 +1,5 @@
+import { AsyncLocalStorage } from "node:async_hooks"
+
 import { and, asc, eq, gte, inArray, isNotNull, lte, sql } from "drizzle-orm"
 import { z } from "zod"
 
@@ -8,6 +10,7 @@ import {
 } from "@/lib/actions/rooms-series"
 import { queueMail } from "@/lib/actions/mail"
 import {
+  bookingAgenda,
   cancelTeamsMeeting,
   joinUrl,
   meetingsOf,
@@ -16,7 +19,13 @@ import {
 import type { Mail } from "@/lib/mail"
 import { mailBody } from "@/lib/mail-body"
 import { db } from "@/lib/db"
-import { bookingLeases, roomBookings, user } from "@/lib/db/schema"
+import {
+  appointments,
+  bookingLeases,
+  roomBookings,
+  roomMeetingRequests,
+  user,
+} from "@/lib/db/schema"
 import {
   epicIssues,
   epicsConfigured,
@@ -44,10 +53,13 @@ import {
   ADVISOR_USERNAME,
   DEFAULT_TOPIC,
   calendarInvite,
-  composeTopic,
+  cleanTopic,
   deliverablesOf,
   epicIid,
+  externalMeetingLabel,
+  externalMeetingUrl,
   mergeAttendees,
+  plainTitle,
   topicPrefix,
   type Attendee,
 } from "@/lib/rooms/meeting"
@@ -55,9 +67,14 @@ import {
   addDays,
   dayLabel,
   isCalendarDay,
+  endMinutesOf,
   minutesOf,
+  ONLINE_AHEAD_DAYS,
+  onlineSpanProblem,
   spanProblem,
+  spansOverlap,
   taipeiIso,
+  taipeiOffsetIso,
   todayInTaipei,
   weekdayOf,
 } from "@/lib/rooms/time"
@@ -111,7 +128,7 @@ export const listRoomAvailability = defineAction({
             room: b.room,
             startTime: b.startTime,
             endTime: b.endTime,
-            title: b.title,
+            title: plainTitle(b),
             requestedBy: b.requestedBy,
             requestedByName: b.requestedByName,
           })),
@@ -129,8 +146,10 @@ async function bookingsBetween(from: string, to: string) {
       endTime: roomBookings.endTime,
       room: roomBookings.room,
       online: roomBookings.online,
+      externalUrl: roomBookings.externalUrl,
       status: roomBookings.status,
       title: roomBookings.title,
+      meetingPrefix: roomBookings.meetingPrefix,
       agenda: roomBookings.agenda,
       groupName: roomBookings.groupName,
       attendees: roomBookings.attendees,
@@ -147,6 +166,7 @@ async function bookingsBetween(from: string, to: string) {
   const meetings = await meetingsOf(rows.map((row) => row.id))
   return rows.map((row) => ({
     ...row,
+    title: plainTitle(row),
     meeting: row.online ? (meetings.get(row.id) ?? null) : null,
   }))
 }
@@ -155,7 +175,7 @@ export const listMeetings = defineAction({
   name: "list_meetings",
   title: "會議",
   description:
-    "Every meeting booked through the portal from date (default today, Asia/Taipei) for days days, the lab meeting's weekly Teams meeting included (lab_meeting_id set; its program is in list_lab_meetings): room (null for an online-only meeting), date, start and end, status booked or cancelled (cancelled rows stay), title, agenda, project group, attendees, who booked it, and the Teams meeting's state (pending, success with join_url, or failed with the reason). Every member sees every booking; only the member who booked one can cancel it with cancel_meeting.",
+    "Every meeting booked through the portal from date (default today, Asia/Taipei) for days days, the lab meeting's weekly Teams meeting included (lab_meeting_id set; its program is in list_lab_meetings): room (null for an online-only meeting), date, start and end, status booked or cancelled (cancelled rows stay), title, agenda, project group, attendees, who booked it, and the Teams meeting's state (pending, success with join_url, or failed with the reason). Every member sees every booking; only the member who booked one (or the member it was booked with through book_appointment) can cancel it with cancel_meeting.",
   kind: "query",
   input: z.object({
     date: day.optional(),
@@ -340,13 +360,17 @@ export function bookingCalendar(
   organizer: { name: string; email: string },
   method: "REQUEST" | "CANCEL"
 ) {
+  const external = method === "REQUEST" ? booking.externalUrl : null
   return {
     ics: calendarInvite({
       uid: `rooms-${booking.id}@portal.winlab.tw`,
       method,
       sequence: booking.inviteSequence,
-      title: booking.title,
-      location: booking.room || booking.place ? placeOf(booking) : "線上會議",
+      title: plainTitle(booking),
+      location:
+        booking.room || booking.place
+          ? placeOf(booking)
+          : (external ?? "線上會議"),
       start: taipeiIso(booking.date, booking.startTime),
       end: taipeiIso(booking.date, booking.endTime),
       organizer,
@@ -356,6 +380,7 @@ export function bookingCalendar(
       rsvp: !booking.meetingId,
       joinUrl:
         booking.online && method === "REQUEST" ? joinUrl(booking.id) : null,
+      externalUrl: external,
     }),
     icsMethod: method,
   }
@@ -371,6 +396,8 @@ function inviteMail(
   const when = `${dayLabel(booking.date)} ${booking.startTime} 到 ${booking.endTime}`
   const link =
     booking.online && method === "REQUEST" ? joinUrl(booking.id) : null
+  // Someone else's meeting: people join it, and ours only records it.
+  const external = method === "REQUEST" ? booking.externalUrl : null
   const to = mergeAttendees(
     [{ name: organizer.name, email: organizer.email }],
     booking.attendees
@@ -378,9 +405,12 @@ function inviteMail(
   return {
     to,
     replyTo: organizer.email,
-    subject: `[WinLab 會議] ${method === "CANCEL" ? "已取消" : "邀請"}：${booking.title}（${when}）`,
+    subject: `[WinLab 會議] ${method === "CANCEL" ? "已取消" : "邀請"}：${plainTitle(booking)}（${when}）`,
     ...mailBody({
-      title: method === "CANCEL" ? `已取消：${booking.title}` : booking.title,
+      title:
+        method === "CANCEL"
+          ? `已取消：${plainTitle(booking)}`
+          : plainTitle(booking),
       rows: [
         ["時間", when],
         ["地點", placeOf(booking)],
@@ -393,9 +423,21 @@ function inviteMail(
               ],
             ]
           : []),
+        ...(external
+          ? ([
+              ["會議", externalMeetingLabel(external)],
+              ...(link ? [["紀錄", "WinLab Meet 錄影與摘要"]] : []),
+            ] as [string, string][])
+          : []),
       ],
       paragraphs: booking.agenda ? [booking.agenda] : [],
-      action: link ? { label: "加入會議", url: link } : undefined,
+      action: external
+        ? { label: "加入會議", url: external }
+        : link
+          ? { label: "加入會議", url: link }
+          : undefined,
+      links:
+        external && link ? [{ label: "開啟內部紀錄", url: link }] : undefined,
     }),
     ...bookingCalendar(booking, organizer, method),
   }
@@ -411,6 +453,8 @@ export type NewBooking = {
   attendees: Attendee[]
   organizer: { id: string; name: string; email: string }
   online: boolean
+  /** The meeting people join when it is not ours; ours then records it. */
+  externalUrl?: string | null
   meetingPrefix: string | null
   groupName: string | null
   agenda: string | null
@@ -498,6 +542,7 @@ export async function placeBooking(input: NewBooking) {
             title: input.title,
             attendees: input.attendees,
             online: input.online,
+            externalUrl: input.externalUrl ?? null,
             meetingPrefix: input.meetingPrefix,
             groupName: input.groupName,
             agenda: input.agenda,
@@ -533,13 +578,22 @@ export async function placeBooking(input: NewBooking) {
   return booking
 }
 
+const heldLeases = new AsyncLocalStorage<Set<string>>()
+
 /**
  * Runs fn holding the lease named key: taken by inserting a row (or
  * taking over one that ran out), so a caller that waits holds no
  * connection. Waits up to a minute; the lease runs out after 3 minutes if
  * its holder dies, longer than any reserve takes.
  */
-export async function withLease<T>(key: string, fn: () => Promise<T>) {
+export async function withLease<T>(
+  key: string,
+  fn: () => Promise<T>
+): Promise<T> {
+  // Re-entrant: a caller already holding key (book_appointment holds both
+  // members' locks before it books) runs fn straight away.
+  const held = heldLeases.getStore()
+  if (held?.has(key)) return fn()
   const token = crypto.randomUUID()
   for (let attempt = 0; ; attempt++) {
     const taken = await db
@@ -557,7 +611,7 @@ export async function withLease<T>(key: string, fn: () => Promise<T>) {
     await new Promise((resolve) => setTimeout(resolve, 500))
   }
   try {
-    return await fn()
+    return await heldLeases.run(new Set([...(held ?? []), key]), fn)
   } finally {
     await db
       .delete(bookingLeases)
@@ -579,7 +633,12 @@ export const withBookingLock = <T>(
 
 export async function organizerOf(userId: string) {
   const [me] = await db
-    .select({ id: user.id, name: user.name, email: user.email })
+    .select({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      username: user.username,
+    })
     .from(user)
     .where(eq(user.id, userId))
   if (!me) throw new Error("找不到你的帳號")
@@ -605,7 +664,7 @@ export const bookMeeting = defineAction({
   name: "book_meeting",
   title: "新增會議",
   description:
-    "Books a meeting as the member, 新增會議 on /meetings: a CS department room through the lab's shared account (the room /meetings would pick: open for the whole span, free before paid; a paid room only with allow_paid true, since the department charges for it), or no room with online_only. Every booking also gets a Teams meeting in the WinLab channel, recorded automatically with a transcript and an AI summary the channel can see, and every attendee and the member get a calendar invite by mail. Times are Asia/Taipei HH:MM on the 30-minute grid between 08:00 and 22:00; check list_room_availability first. attendees are portal user ids, emails or usernames; group is a project group's slug from list_project_groups, whose members are invited too unless invite_group_members is false, and which names the project the recording files under. epic (an iid from list_group_epics) needs a group linked to GitLab. include_advisor has no default because it mails the advisor. repeat weekly or biweekly makes it a standing meeting from date on instead (list_standing_meetings): each occurrence gets a room 7 days ahead, free first, else paid, so online_only is refused; epic may then only be a sync epic, and the answer is the standing meeting's id, how many occurrences were booked at once and why others were not. Never book the Monday lab meeting here; the portal books it itself. Read back the date, time, room or online, title, attendees, advisor and the recording, and get the member's yes first.",
+    "Books a meeting as the member, 新增會議 on /meetings: a CS department room through the lab's shared account (the room /meetings would pick: open for the whole span, free before paid; a paid room only with allow_paid true, since the department charges for it), or no room with online_only. Every booking also gets a meet.winlab.tw room, recorded automatically with a transcript and meeting notes filed in GitLab, and every attendee and the member get a calendar invite by mail. Times are Asia/Taipei HH:MM on the 30-minute grid. A room booking runs between 08:00 and 22:00 (check list_room_availability first). An online_only meeting may be at any time from today to 90 days ahead, 30 to 300 minutes, ending by 24:00, and is refused when it overlaps another meeting the member booked. attendees are portal user ids, emails or usernames; group is a project group's slug from list_project_groups, whose members are invited too unless invite_group_members is false, and which names the project the recording files under. epic (an iid from list_group_epics) needs a group linked to GitLab. include_advisor has no default because it mails the advisor. repeat weekly or biweekly makes it a standing meeting from date on instead (list_standing_meetings): each occurrence is booked 7 days ahead, with a room (free first, else paid) or, with online_only, only its meet.winlab.tw meeting; epic may then only be a sync epic, and the answer is the standing meeting's id, how many occurrences were booked at once and why others were not. Never book the Monday lab meeting here; the portal books it itself. Read back the date, time, room or online, title, attendees, advisor and the recording, and get the member's yes first.",
   kind: "mutation",
   input: z.object({
     date: day,
@@ -619,32 +678,47 @@ export const bookMeeting = defineAction({
     invite_group_members: z.boolean().default(true),
     include_advisor: z.boolean(),
     agenda: z.string().trim().max(2000).nullish(),
+    external_url: z
+      .string()
+      .trim()
+      .max(2000)
+      .nullish()
+      .describe(
+        "the meeting people really join when it is someone else's, such as another company's Teams link (https); the invite then leads with it and keeps the meet room as the internal record"
+      ),
     epic: z.string().trim().min(1).nullish(),
     repeat: z.enum(["none", "weekly", "biweekly"]).default("none"),
   }),
   run: async (actor, input) => {
-    const problem = spanProblem(input.start_time, input.end_time)
+    const externalUrl = externalMeetingUrl(input.external_url)
+    const online = input.online_only
+    const problem = online
+      ? onlineSpanProblem(input.start_time, input.end_time)
+      : spanProblem(input.start_time, input.end_time)
     if (problem) throw new Error(problem)
     if (input.date < todayInTaipei()) throw new Error("不能借過去的日期")
+    if (online && input.date > addDays(todayInTaipei(), ONLINE_AHEAD_DAYS))
+      throw new Error(`線上會議最多預約 ${ONLINE_AHEAD_DAYS} 天後`)
     if (input.repeat !== "none") {
-      if (input.online_only)
-        throw new Error("固定會議每場都會借教室，不能只開線上")
       const standing = await createStandingMeeting(
         actor.userId,
         standingMeetingInput.parse({
           weekday: weekdayOf(input.date),
           start_date: input.date,
           start_time: input.start_time,
-          // spanProblem passed, so both are on the grid.
+          // The span check passed, so both are on the grid; an online
+          // one may end at "24:00".
           duration_minutes:
-            minutesOf(input.end_time)! - minutesOf(input.start_time)!,
+            endMinutesOf(input.end_time)! - minutesOf(input.start_time)!,
           interval_weeks: input.repeat === "weekly" ? 1 : 2,
           title: input.title,
           attendees: input.attendees,
           group: input.group,
           invite_group_members: input.invite_group_members,
           include_advisor: input.include_advisor,
+          online_only: input.online_only,
           agenda: input.agenda,
+          external_url: externalUrl,
           epic: input.epic,
         })
       )
@@ -660,8 +734,8 @@ export const bookMeeting = defineAction({
       includeAdvisor: input.include_advisor,
     })
     const epic = await resolveEpic(group, input.epic ?? null, false)
-    const prefix = topicPrefix(group, attendees)
     const organizer = await organizerOf(actor.userId)
+    const prefix = topicPrefix(group, organizer.username)
     const { booking, room } = await withBookingLock(
       actor.userId,
       input.date,
@@ -681,6 +755,33 @@ export const bookMeeting = defineAction({
             )
           )
         if (standing) throw new Error("你的固定會議已經借好這個時段了")
+        if (input.online_only) {
+          const mine = await db
+            .select({
+              title: roomBookings.title,
+              meetingPrefix: roomBookings.meetingPrefix,
+              start: roomBookings.startTime,
+              end: roomBookings.endTime,
+            })
+            .from(roomBookings)
+            .where(
+              and(
+                eq(roomBookings.requestedBy, actor.userId),
+                eq(roomBookings.date, input.date),
+                eq(roomBookings.status, "booked")
+              )
+            )
+          const clash = mine.find((row) =>
+            spansOverlap(row, {
+              start: input.start_time,
+              end: input.end_time,
+            })
+          )
+          if (clash)
+            throw new Error(
+              `你 ${clash.start} 到 ${clash.end} 已有「${plainTitle(clash)}」`
+            )
+        }
         // Picked from a fresh read, not the grid the member clicked
         // minutes ago, and inside the lock.
         const room = input.online_only
@@ -696,11 +797,12 @@ export const bookMeeting = defineAction({
           startTime: input.start_time,
           endTime: input.end_time,
           room: room?.room ?? null,
-          title: composeTopic(prefix, input.title),
+          title: cleanTopic(input.title),
           attendees,
           organizer,
           // Every portal meeting gets a recording to look back at.
           online: true,
+          externalUrl,
           meetingPrefix: prefix,
           groupName: group,
           agenda: input.agenda || null,
@@ -713,8 +815,50 @@ export const bookMeeting = defineAction({
       id: booking.id,
       room: booking.room,
       paid: room?.paid ?? false,
-      title: booking.title,
+      title: plainTitle(booking),
       attendees: attendees.length,
+    }
+  },
+})
+
+export const getBookingAgenda = defineAction({
+  name: "get_booking_agenda",
+  title: "預約議程",
+  description:
+    "The agenda of an online booking as meet shows it, by the meet booking id (room-booking-…, the create request's id): status booked or cancelled, title, project group, startsAt and endsAt (Asia/Taipei offset), the epic reference, and items: the booking's agenda lines (source booking), then the epic's open child issues with their url (source issue), at most 30. gitlab is unavailable when GitLab did not answer and only the booking's lines are listed. meet calls this when the room opens; any member may read it.",
+  kind: "query",
+  input: z.object({
+    booking: z
+      .string()
+      .regex(/^room-booking-(?:[0-9a-f]){12}$/, "預約編號格式不對"),
+  }),
+  run: async (_actor, input) => {
+    const [row] = await db
+      .select({ booking: roomBookings })
+      .from(roomMeetingRequests)
+      .innerJoin(
+        roomBookings,
+        eq(roomBookings.id, roomMeetingRequests.bookingId)
+      )
+      .where(
+        and(
+          eq(roomMeetingRequests.requestId, input.booking),
+          eq(roomMeetingRequests.kind, "create")
+        )
+      )
+    if (!row) throw new Error("沒有這個預約")
+    const { booking } = row
+    const { items, gitlab } = await bookingAgenda(booking)
+    return {
+      booking: input.booking,
+      status: booking.status === "booked" ? "booked" : "cancelled",
+      title: plainTitle(booking),
+      group: booking.groupName,
+      startsAt: taipeiOffsetIso(booking.date, booking.startTime),
+      endsAt: taipeiOffsetIso(booking.date, booking.endTime),
+      epic: booking.issueRefs[0] ?? null,
+      items,
+      gitlab,
     }
   },
 })
@@ -723,7 +867,7 @@ export const cancelMeeting = defineAction({
   name: "cancel_meeting",
   title: "取消會議",
   description:
-    "Cancels one of the member's own bookings (by id from list_meetings): releases the department room, takes down its Teams meeting and mails everyone the cancellation. Only the member who booked it; fails on someone else's or one already cancelled. teams_error is set when the Teams meeting could not be taken down: it will still start and record unless someone deletes it in Teams.",
+    "Cancels one of the member's own bookings (by id from list_meetings), or a meeting a labmate booked with them through book_appointment: releases the department room, takes down its Teams meeting and mails everyone the cancellation. Only the member who booked it or, for an appointment, the member booked; fails on someone else's or one already cancelled. teams_error is set when the Teams meeting could not be taken down: it will still start and record unless someone deletes it in Teams.",
   kind: "mutation",
   input: z.object({ id: z.uuid("id 是預約的 id") }),
   run: async (actor, { id }) => {
@@ -732,8 +876,15 @@ export const cancelMeeting = defineAction({
       .from(roomBookings)
       .where(and(eq(roomBookings.id, id), eq(roomBookings.status, "booked")))
     if (!booking) throw new Error("找不到這筆預約，或已經取消")
-    if (booking.requestedBy !== actor.userId)
-      throw new Error("只能取消自己的預約")
+    if (booking.requestedBy !== actor.userId) {
+      // The member booked through their appointment schedule may cancel too.
+      const [appointment] = await db
+        .select({ ownerId: appointments.ownerId })
+        .from(appointments)
+        .where(eq(appointments.bookingId, booking.id))
+      if (appointment?.ownerId !== actor.userId)
+        throw new Error("只能取消自己的預約")
+    }
     if (booking.meetingId)
       throw new Error("這是週一 Lab Meeting 的會議，請到 /meetings 請管理員改")
     return cancelBooking(booking, actor.userId)

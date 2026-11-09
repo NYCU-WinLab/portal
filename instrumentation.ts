@@ -20,6 +20,8 @@ export async function register() {
     startMeetingMailScheduler()
     const { startDoorCardsScheduler } = await import("@/lib/actions/door-cards")
     startDoorCardsScheduler()
+    const { startCalendarSync } = await import("@/lib/actions/calendar")
+    startCalendarSync()
     const { startMemberSweep } = await import("@/lib/auth/member")
     startMemberSweep()
   }
@@ -35,6 +37,11 @@ export async function register() {
 
   registerOTel({
     serviceName: process.env.OTEL_SERVICE_NAME ?? "portal",
+    // LRCLIB answers 503 now and then and lrclib.ts retries it, so each failed
+    // try would be an error span and an alert for a call that recovers.
+    instrumentationConfig: {
+      fetch: { ignoreUrls: [/^https:\/\/lrclib\.net\//] },
+    },
     spanProcessors: [],
     traceExporter: new OTLPHttpJsonTraceExporter({
       url: `${endpoint}/v1/traces`,

@@ -1,9 +1,11 @@
-// The lab's GitLab, two ways and never a write: a read_api token
-// (GITLAB_API_TOKEN) reads epics for the booking form, and a pipeline
-// trigger token (GITLAB_MEETING_TRIGGER_TOKEN) asks winlab-helper to create
-// or cancel a booking's Teams meeting. The helper holds the Teams and GitLab
-// credentials and writes the meeting's issue itself; it answers on
-// /api/rooms/meeting-callback.
+// The lab's GitLab, three ways and never a write: a read_api token
+// (GITLAB_API_TOKEN) reads epics for the booking form; a pipeline trigger
+// token (GITLAB_MEETING_TRIGGER_TOKEN) asks teams-meeting-bot (177) to
+// create or cancel a booking's Teams meeting, answering on
+// /api/rooms/meeting-callback; and one on winlab-helper (165,
+// GITLAB_HELPER_TRIGGER_TOKEN) has it open, update or close the record epic
+// of a meet booking (`meeting_open`). The helper holds the GitLab
+// credentials and writes the epic itself.
 
 import { deliverablesOf, readEpic, type Epic } from "@/lib/rooms/meeting"
 
@@ -24,16 +26,48 @@ export async function triggerMeetingPipeline(
 ) {
   const token = process.env.GITLAB_MEETING_TRIGGER_TOKEN
   if (!token) throw new Error("GitLab 會議 pipeline 沒有設定")
+  return trigger(
+    process.env.GITLAB_MEETING_TRIGGER_URL ??
+      `${base()}/api/v4/projects/177/trigger/pipeline`,
+    token,
+    variables
+  )
+}
+
+export const helperConfigured = () =>
+  Boolean(process.env.GITLAB_HELPER_TRIGGER_TOKEN)
+
+/** Starts winlab-helper's `meeting_open` with these variables; returns the
+ * pipeline id. */
+export async function triggerHelperPipeline(variables: Record<string, string>) {
+  const token = process.env.GITLAB_HELPER_TRIGGER_TOKEN
+  if (!token) throw new Error("winlab-helper trigger 沒有設定")
+  return trigger(
+    process.env.GITLAB_HELPER_TRIGGER_URL ??
+      `${base()}/api/v4/projects/165/trigger/pipeline`,
+    token,
+    variables
+  )
+}
+
+async function trigger(
+  url: string,
+  token: string,
+  variables: Record<string, string>
+) {
   const form = new FormData()
   form.set("token", token)
   form.set("ref", "main")
+  // GitLab expands $NAME inside trigger variable values before the job
+  // sees them: measured 2026-11-03, "NT$100" arrived as "NT00" and "$$" as
+  // "$". Doubling every $ makes a title or agenda arrive as typed.
   for (const [key, value] of Object.entries(variables))
-    form.set(`variables[${key}]`, value)
-  const response = await fetch(
-    process.env.GITLAB_MEETING_TRIGGER_URL ??
-      `${base()}/api/v4/projects/177/trigger/pipeline`,
-    { method: "POST", body: form, signal: timeout() }
-  )
+    form.set(`variables[${key}]`, value.replaceAll("$", "$$$$"))
+  const response = await fetch(url, {
+    method: "POST",
+    body: form,
+    signal: timeout(),
+  })
   if (!response.ok) {
     const body = (await response.text().catch(() => "")).slice(0, 200)
     throw new Error(
@@ -42,6 +76,50 @@ export async function triggerMeetingPipeline(
   }
   const { id } = (await response.json().catch(() => ({}))) as { id?: unknown }
   return id === undefined || id === null ? null : String(id)
+}
+
+const helperProject = () =>
+  /\/projects\/([^/]+)\/trigger\//.exec(
+    process.env.GITLAB_HELPER_TRIGGER_URL ?? ""
+  )?.[1] ?? "165"
+
+/**
+ * How winlab-helper's `meeting_open` job in this pipeline ended: "done"
+ * (exit 0, or exit 1, which means the record is there and a person has
+ * something to do), "failed" (it broke, was cancelled, or the pipeline
+ * ended without it), "running", or "unknown" when GitLab cannot be read.
+ * A 201 from the trigger only says the pipeline was accepted.
+ */
+export async function helperJobOutcome(pipelineId: string) {
+  if (!epicsConfigured()) return "unknown" as const
+  try {
+    const jobs = (await get(
+      `/projects/${helperProject()}/pipelines/${encodeURIComponent(pipelineId)}/jobs?per_page=100`
+    )) as { name?: unknown; status?: unknown; allow_failure?: unknown }[]
+    const job = Array.isArray(jobs)
+      ? jobs.find((row) => row.name === "meeting_open")
+      : undefined
+    if (!job) {
+      const pipeline = (await get(
+        `/projects/${helperProject()}/pipelines/${encodeURIComponent(pipelineId)}`
+      )) as { status?: unknown }
+      return ["success", "failed", "canceled", "skipped"].includes(
+        String(pipeline.status)
+      )
+        ? ("failed" as const)
+        : ("running" as const)
+    }
+    if (job.status === "success") return "done" as const
+    if (job.status === "failed")
+      return job.allow_failure === true
+        ? ("done" as const)
+        : ("failed" as const)
+    if (job.status === "canceled" || job.status === "skipped")
+      return "failed" as const
+    return "running" as const
+  } catch {
+    return "unknown" as const
+  }
 }
 
 export const epicsConfigured = () => Boolean(process.env.GITLAB_API_TOKEN)
@@ -92,6 +170,27 @@ export async function listOpenEpics(groupPath: string): Promise<Epic[]> {
     `${group(groupPath)}/epics?state=opened&order_by=updated_at&sort=desc`
   )
   return rows.map(readEpic).filter((epic) => epic !== null)
+}
+
+/**
+ * The open child issues of the epic a booking names (`<group path>&<iid>`),
+ * for its agenda. Every epic kind: a meeting covers what is still open
+ * under it, whatever it owes.
+ */
+export async function openEpicIssues(ref: string) {
+  const match = /^(.+)&(\d+)$/.exec(ref)
+  if (!match) return []
+  const rows = await getAll(`${group(match[1])}/epics/${match[2]}/issues`)
+  return rows.flatMap((row) => {
+    const issue = row as { title?: unknown; web_url?: unknown; state?: unknown }
+    if (issue.state !== "opened" || typeof issue.title !== "string") return []
+    return [
+      {
+        title: issue.title.trim(),
+        url: typeof issue.web_url === "string" ? issue.web_url : null,
+      },
+    ]
+  })
 }
 
 /** One epic, or null when GitLab says it does not exist. */

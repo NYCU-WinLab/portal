@@ -1,7 +1,13 @@
 import { and, eq, gt } from "drizzle-orm"
 
 import { db } from "@/lib/db"
-import { account, oauthRefreshToken, session } from "@/lib/db/schema"
+import {
+  account,
+  calendarLinks,
+  calendarSources,
+  oauthRefreshToken,
+  session,
+} from "@/lib/db/schema"
 import { findKeycloakUser } from "@/lib/keycloak"
 import { emitErrorLog } from "@/lib/otel"
 
@@ -110,6 +116,9 @@ async function remember(userId: string, member: boolean) {
         .delete(oauthRefreshToken)
         .where(eq(oauthRefreshToken.userId, userId))
       await tx.delete(session).where(eq(session.userId, userId))
+      // Their linked calendar stops showing to the lab with them.
+      await tx.delete(calendarLinks).where(eq(calendarLinks.userId, userId))
+      await tx.delete(calendarSources).where(eq(calendarSources.userId, userId))
     })
   }
 }

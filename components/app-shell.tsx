@@ -43,6 +43,7 @@ function AppShell({
   account,
   layout = "column",
   corners,
+  build,
   children,
 }: {
   breadcrumb?: Crumb[]
@@ -57,6 +58,10 @@ function AppShell({
     >
   >
   layout?: "column" | "spotlight" | "wide"
+  /** The build running, read on the server at run time: the image is built
+   * on the pull request and only retagged on merge, so the commit is not
+   * known when it is built. */
+  build?: Build
   children: React.ReactNode
 }) {
   const pathname = usePathname()
@@ -153,7 +158,7 @@ function AppShell({
       </div>
 
       <div className="fixed bottom-6 left-6 z-50 flex items-center gap-4">
-        {corners?.bottomLeft ?? <BuildVersion />}
+        {corners?.bottomLeft ?? <BuildVersion build={build} />}
       </div>
 
       <div className="fixed right-6 bottom-6 z-50 flex items-center gap-4">
@@ -209,13 +214,13 @@ function CornerTip({
 const cornerLink =
   "relative inline-flex h-6 items-center text-muted-foreground transition-colors duration-state outline-none after:absolute after:-inset-2 hover:text-foreground focus-visible:text-foreground"
 
+type Build = { sha?: string; time?: string; url?: string }
+
 // Which build is running: the short commit, linking to the CD run that built
-// it, with the build time as its tip. CD sets these at build time; without
-// them (local dev) the corner says "dev".
-function BuildVersion() {
-  const sha = process.env.NEXT_PUBLIC_BUILD_SHA
-  const time = process.env.NEXT_PUBLIC_BUILD_TIME
-  const url = process.env.NEXT_PUBLIC_BUILD_URL
+// it, with the build time as its tip. Without a commit (local dev) the
+// corner says "dev".
+function BuildVersion({ build }: { build?: Build }) {
+  const { sha, time, url } = build ?? {}
   if (!sha) {
     return <span className={cornerLink}>dev</span>
   }

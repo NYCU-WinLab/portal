@@ -1,4 +1,4 @@
-import { and, desc, eq, isNotNull, sql } from "drizzle-orm"
+import { and, desc, eq, inArray, isNotNull, notInArray, sql } from "drizzle-orm"
 import { z } from "zod"
 
 import { defineAction } from "@/lib/actions/define"
@@ -27,7 +27,7 @@ import {
   musicTracks,
 } from "@/lib/db/schema"
 import * as bilibili from "@/lib/bilibili"
-import { findLyrics, parseLrc } from "@/lib/lrclib"
+import { findLyrics, LyricsUnavailable, parseLrc } from "@/lib/lrclib"
 import * as twitch from "@/lib/twitch"
 import {
   getPlaylist,
@@ -315,6 +315,50 @@ export const skipSong = defineAction({
     }),
 })
 
+export const previousSong = defineAction({
+  name: "previous_song",
+  title: "上一首",
+  description:
+    "Play the song that ended most recently and is not in the queue now. The current song goes back to the front of the queue and resumes where it was, so pressing again steps further back.",
+  kind: "mutation",
+  input: z.object({}),
+  run: async (actor) =>
+    withQueue(async (tx) => {
+      const live = (await queuedItems(tx)).map((item) => item.videoId)
+      const playing = await currentItem(tx)
+      if (playing) live.push(playing.videoId)
+      const [last] = await tx
+        .select({ videoId: musicQueueItems.videoId })
+        .from(musicQueueItems)
+        .where(
+          and(
+            inArray(musicQueueItems.status, ["done", "skipped"]),
+            live.length ? notInArray(musicQueueItems.videoId, live) : undefined
+          )
+        )
+        .orderBy(desc(musicQueueItems.endedAt))
+        .limit(1)
+      if (!last) throw new Error("沒有上一首")
+      const { front } = await sortKeys(tx)
+      const [item] = await tx
+        .insert(musicQueueItems)
+        .values({
+          videoId: last.videoId,
+          sort: front,
+          addedBy: actor.userId,
+          addedAs: "cut_in",
+        })
+        .returning({ id: musicQueueItems.id })
+      await cutIn(tx, item.id)
+      await logActivity(tx, {
+        userId: actor.userId,
+        kind: "previous",
+        itemId: item.id,
+      })
+      return { itemId: item.id }
+    }),
+})
+
 export const removeSong = defineAction({
   name: "remove_song",
   title: "移出佇列",
@@ -434,7 +478,17 @@ export const getLyrics = defineAction({
       !row.plain &&
       Date.now() - row.fetchedAt.getTime() > LYRICS_RETRY_MS
     if (!row || stale) {
-      const found = await findLyrics(track.title, track.artist, track.durationS)
+      // When LRCLIB is down the song gets no row, so the next open asks again
+      // instead of remembering "no lyrics" for a week.
+      const found = await findLyrics(
+        track.title,
+        track.artist,
+        track.durationS
+      ).catch((error) => {
+        if (error instanceof LyricsUnavailable) return null
+        throw error
+      })
+      if (!found) return { timed: false, lines: [] }
       ;[row] = await db
         .insert(musicLyrics)
         .values({ videoId, ...found })

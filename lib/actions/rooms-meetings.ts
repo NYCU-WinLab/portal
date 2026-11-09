@@ -6,19 +6,43 @@
 // booking actions or the daily run.
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto"
 
-import { and, desc, eq, inArray, isNull, lt, sql } from "drizzle-orm"
+import {
+  and,
+  desc,
+  eq,
+  inArray,
+  isNotNull,
+  isNull,
+  lt,
+  ne,
+  notInArray,
+  or,
+  sql,
+} from "drizzle-orm"
 
 import { announceChange } from "@/lib/actions/changes"
 import { queueMail } from "@/lib/actions/mail"
 import { mailBody } from "@/lib/mail-body"
 import { db } from "@/lib/db"
 import { roomBookings, roomMeetingRequests, user } from "@/lib/db/schema"
-import { meetingPipelineConfigured, triggerMeetingPipeline } from "@/lib/gitlab"
-import { MEETING_FAILURES } from "@/lib/rooms/meeting"
+import {
+  helperConfigured,
+  helperJobOutcome,
+  meetingPipelineConfigured,
+  openEpicIssues,
+  triggerHelperPipeline,
+  triggerMeetingPipeline,
+} from "@/lib/gitlab"
+import { MeetRefused, meetAction, meetConfigured, meetHost } from "@/lib/meet"
+import { agendaItems } from "@/lib/rooms/agenda"
+import { MEETING_FAILURES, plainTitle, teamsSubject } from "@/lib/rooms/meeting"
 import { dayLabel, taipeiOffsetIso } from "@/lib/rooms/time"
 
 const sha256 = (value: string) =>
   createHash("sha256").update(value).digest("hex")
+
+/** Online meetings happen somewhere: on meet, or through the Teams pipeline. */
+const meetingsConfigured = () => meetConfigured() || meetingPipelineConfigured()
 
 export const joinUrl = (bookingId: string) =>
   `${process.env.BETTER_AUTH_URL}/rooms/join/${bookingId}`
@@ -67,12 +91,13 @@ async function askIf(
   })
   if (!asked) return null
   const { booking, variables } = asked
+  if (meetConfigured()) return askMeet(requestId, kind, booking, variables)
   try {
     const pipelineId = await triggerMeetingPipeline({
       REQUEST_ID: requestId,
       CALLBACK_TOKEN: callbackToken,
       ACTION: kind,
-      SUBJECT: booking.title,
+      SUBJECT: teamsSubject(booking),
       ...(booking.groupName ? { GROUP_NAME: booking.groupName } : {}),
       ...(booking.issueRefs.length
         ? { ISSUE_REFS: booking.issueRefs.join(",") }
@@ -100,6 +125,218 @@ async function askIf(
   }
 }
 
+/**
+ * What meet shows as the booking's agenda: its lines, then the epic's open
+ * child issues. GitLab not answering leaves the lines alone and says so.
+ */
+export async function bookingAgenda(booking: Booking) {
+  const ref = booking.issueRefs[0]
+  if (!ref) return { items: agendaItems(booking.agenda, []), gitlab: "ok" }
+  try {
+    const issues = await openEpicIssues(ref)
+    return { items: agendaItems(booking.agenda, issues), gitlab: "ok" }
+  } catch {
+    return { items: agendaItems(booking.agenda, []), gitlab: "unavailable" }
+  }
+}
+
+/**
+ * The meet side of ask: books, renames or cancels the room on meet right
+ * away and settles the request row itself, since meet answers in the call.
+ * The create request's id is the booking id meet files recordings under;
+ * an update or cancel names it as BOOKING_REQUEST_ID. The room name goes
+ * in cancelId and "meet" in messageId so the Teams-era checks for "a
+ * meeting was made" keep working. Once meet has answered, winlab-helper is
+ * asked for the record epic (notifyHelper); that never fails the booking.
+ * Returns why it failed, or null.
+ */
+async function askMeet(
+  requestId: string,
+  kind: "create" | "update" | "cancel",
+  booking: Booking,
+  variables: Record<string, string>
+) {
+  const target = kind === "create" ? requestId : variables.BOOKING_REQUEST_ID
+  try {
+    let joinUrl: string | null = null
+    let roomName: string | null = null
+    if (kind === "create") {
+      const [who] = await db
+        .select({ username: user.username })
+        .from(user)
+        .where(eq(user.id, booking.requestedBy))
+      const { items } = await bookingAgenda(booking)
+      const room = await meetAction<{ name: string; url: string }>(
+        "schedule_room",
+        {
+          agenda: items,
+          // meet files by group and opener; the [prefix]- is for Teams.
+          title: plainTitle(booking),
+          group: booking.groupName ?? undefined,
+          booking: target,
+          startsAt: taipeiOffsetIso(booking.date, booking.startTime),
+          endsAt: taipeiOffsetIso(booking.date, booking.endTime),
+          opener: who?.username ?? undefined,
+        }
+      )
+      joinUrl = room.url
+      roomName = room.name
+    } else if (kind === "update") {
+      const { items } = await bookingAgenda(booking)
+      const room = await meetAction<{ name: string; url: string }>(
+        "update_scheduled_room",
+        {
+          agenda: items,
+          booking: target,
+          title: plainTitle(booking),
+          group: booking.groupName ?? undefined,
+          startsAt: taipeiOffsetIso(booking.date, booking.startTime),
+          endsAt: taipeiOffsetIso(booking.date, booking.endTime),
+        }
+      )
+      roomName = room.name
+    } else {
+      await meetAction("cancel_scheduled_room", { booking: target })
+    }
+    await db
+      .update(roomMeetingRequests)
+      .set({
+        status: "success",
+        joinUrl,
+        cancelId: roomName,
+        messageId: roomName ? "meet" : null,
+        optionsApplied: kind === "create",
+        completedAt: sql`now()`,
+        // Marked before the helper is told, so a crash in between leaves
+        // something reconcileTeams retries.
+        ...(helperConfigured() ? { helperError: HELPER_UNSENT } : {}),
+      })
+      .where(eq(roomMeetingRequests.requestId, requestId))
+    await announceChange("meet_room").catch(() => {})
+    // Not awaited: the member's request does not wait on GitLab.
+    void notifyHelper(requestId)
+    return null
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    await db
+      .update(roomMeetingRequests)
+      .set({
+        status: "failed",
+        errorCode:
+          error instanceof MeetRefused ? "MEET_REFUSED" : "MEET_FAILED",
+        errorMessage: message,
+        completedAt: sql`now()`,
+      })
+      .where(eq(roomMeetingRequests.requestId, requestId))
+    return message
+  }
+}
+
+/**
+ * Asks winlab-helper's `meeting_open` to open, update or close the record
+ * epic of a meet booking, the job teams-meeting-bot did in the Teams era.
+ * REQUEST_ID is always the create request's id, the one the epic is
+ * stamped with. Records the pipeline or the error on the request row; an
+ * error is retried by reconcileTeams, which also checks how the pipeline's
+ * job ended. A no-op without the trigger token. Never throws: the meet
+ * request it follows has already succeeded.
+ */
+async function notifyHelper(requestId: string, triesSeen?: number) {
+  if (!helperConfigured()) return
+  // The try is counted and stamped before the trigger, and a retry claims
+  // it only if nobody else did since it looked: two overlapping runs send
+  // one, and the stamp keeps a later run off it during the grace.
+  const [claimed] = await db
+    .update(roomMeetingRequests)
+    .set({
+      helperTries: sql`${roomMeetingRequests.helperTries} + 1`,
+      helperAskedAt: sql`now()`,
+    })
+    .where(
+      and(
+        eq(roomMeetingRequests.requestId, requestId),
+        triesSeen === undefined
+          ? undefined
+          : eq(roomMeetingRequests.helperTries, triesSeen)
+      )
+    )
+    .returning({ id: roomMeetingRequests.id })
+    .catch(() => [])
+  if (!claimed) return
+  try {
+    await tellHelper(requestId)
+  } catch (error) {
+    await db
+      .update(roomMeetingRequests)
+      .set({
+        helperError: error instanceof Error ? error.message : String(error),
+      })
+      .where(eq(roomMeetingRequests.requestId, requestId))
+      .catch(() => {})
+  }
+}
+
+async function tellHelper(requestId: string) {
+  const [row] = await db
+    .select({ request: roomMeetingRequests, booking: roomBookings })
+    .from(roomMeetingRequests)
+    .innerJoin(roomBookings, eq(roomBookings.id, roomMeetingRequests.bookingId))
+    .where(eq(roomMeetingRequests.requestId, requestId))
+  if (!row) return
+  const { request, booking } = row
+  // Nothing to tell yet: clear the marker so it is not retried or mailed.
+  const clear = () =>
+    db
+      .update(roomMeetingRequests)
+      .set({ helperError: null })
+      .where(eq(roomMeetingRequests.requestId, requestId))
+  const [created] = await db
+    .select({
+      requestId: roomMeetingRequests.requestId,
+      joinUrl: roomMeetingRequests.joinUrl,
+    })
+    .from(roomMeetingRequests)
+    .where(
+      and(
+        eq(roomMeetingRequests.bookingId, booking.id),
+        eq(roomMeetingRequests.kind, "create"),
+        eq(roomMeetingRequests.status, "success")
+      )
+    )
+    .orderBy(desc(roomMeetingRequests.createdAt))
+    .limit(1)
+  if (!created) return clear()
+  const [who] = await db
+    .select({ username: user.username })
+    .from(user)
+    .where(eq(user.id, booking.requestedBy))
+  const pipelineId = await triggerHelperPipeline({
+    REQUEST_ID: created.requestId,
+    KIND: request.kind,
+    // As stored: plain for new bookings, "[prefix]-title" for Teams-era
+    // ones, which winlab-helper still files under their old names.
+    SUBJECT: booking.title,
+    ...(request.kind === "cancel" ? {} : createVariables(booking)),
+    ...(request.kind === "cancel"
+      ? { START_TIME: taipeiOffsetIso(booking.date, booking.startTime) }
+      : {}),
+    ...(booking.groupName ? { GROUP_NAME: booking.groupName } : {}),
+    ...(who?.username ? { PERSON: who.username } : {}),
+    ...(booking.issueRefs.length
+      ? { ISSUE_REFS: booking.issueRefs.join(",") }
+      : {}),
+    ...(created.joinUrl ? { MEETING_URL: created.joinUrl } : {}),
+  })
+  await db
+    .update(roomMeetingRequests)
+    .set({
+      helperPipelineId: pipelineId,
+      helperError: null,
+      helperSettledAt: pipelineId ? null : sql`now()`,
+    })
+    .where(eq(roomMeetingRequests.requestId, requestId))
+}
+
 const createVariables = (booking: Booking) => ({
   START_TIME: taipeiOffsetIso(booking.date, booking.startTime),
   END_TIME: taipeiOffsetIso(booking.date, booking.endTime),
@@ -111,7 +348,7 @@ const createVariables = (booking: Booking) => ({
 
 /** Asks for the Teams meeting of a booking just made. */
 export async function requestTeamsMeeting(booking: Booking) {
-  if (!booking.online || !meetingPipelineConfigured()) return
+  if (!booking.online || !meetingsConfigured()) return
   await ask(booking, "create", createVariables(booking))
 }
 
@@ -132,8 +369,9 @@ const cancelVariables = (
  * "busy" while a create or update is still out or no meeting exists yet,
  * "current" when the last one asked for that title (a failed update is
  * not asked again; the daily run mails it), else "stale" with the create
- * request whose meeting to rename. Only the title counts: an update posts
- * in the channel, and an agenda alone is not worth that.
+ * request whose meeting to rename. On Teams only the title counts: an
+ * update posts in the channel, and an agenda alone is not worth that. On
+ * meet the agenda counts too, since the room's checklist shows it.
  */
 async function teamsTopicState(tx: Tx, booking: Booking) {
   const asked = await tx
@@ -151,7 +389,11 @@ async function teamsTopicState(tx: Tx, booking: Booking) {
   )
   if (!meeting || asked.some((row) => row.status === "pending"))
     return { state: "busy" as const }
-  return asked[0]!.subject === booking.title
+  const last = asked[0]!
+  const current =
+    last.subject === booking.title &&
+    (!meetConfigured() || (last.agenda ?? null) === (booking.agenda ?? null))
+  return current
     ? { state: "current" as const }
     : {
         state: "stale" as const,
@@ -170,7 +412,7 @@ async function teamsTopicState(tx: Tx, booking: Booking) {
  * why the ask failed, or null.
  */
 export async function renameTeamsMeeting(bookingId: string) {
-  if (!meetingPipelineConfigured()) return null
+  if (!meetingsConfigured()) return null
   return askIf("update", async (tx) => {
     const [booking] = await tx
       .select()
@@ -200,6 +442,12 @@ export async function renameTeamsMeeting(bookingId: string) {
 // A Teams meeting is taken down at most this many times before the
 // organizer is mailed to delete it by hand.
 const CANCEL_TRIES = 3
+// winlab-helper is asked for a meet booking's record at most this often.
+const HELPER_TRIES = 3
+// helperError until the trigger answers: a crash before then is retried.
+const HELPER_UNSENT = "portal 在通知 winlab-helper 之前中斷"
+// How long a fresh ask is left to its own notifyHelper before a retry.
+const HELPER_GRACE_MINUTES = 2
 
 /** The Teams meeting a booking's create request made, if Teams named it:
  * a success, or a failure that still made one (a link that is not a
@@ -254,7 +502,7 @@ async function cancelsOf(tx: Tx | typeof db, bookingId: string) {
  * and a cancel arriving together ask once.
  */
 export async function cancelTeamsMeeting(booking: Booking) {
-  if (!booking.online || !meetingPipelineConfigured()) return null
+  if (!booking.online || !meetingsConfigured()) return null
   let missing = false
   const error = await askIf("cancel", async (tx) => {
     const [row] = await tx
@@ -338,6 +586,7 @@ export async function meetingsOf(bookingIds: string[]) {
       status: roomMeetingRequests.status,
       joinUrl: roomMeetingRequests.joinUrl,
       errorCode: roomMeetingRequests.errorCode,
+      errorMessage: roomMeetingRequests.errorMessage,
     })
     .from(roomMeetingRequests)
     .where(
@@ -354,7 +603,9 @@ export async function meetingsOf(bookingIds: string[]) {
         status: row.status as MeetingState["status"],
         joinUrl: row.joinUrl,
         error: row.errorCode
-          ? (MEETING_FAILURES[row.errorCode] ?? row.errorCode)
+          ? row.errorCode.startsWith("MEET_") && row.errorMessage
+            ? `${MEETING_FAILURES[row.errorCode] ?? row.errorCode}：${row.errorMessage}`
+            : (MEETING_FAILURES[row.errorCode] ?? row.errorCode)
           : null,
       },
     ])
@@ -428,10 +679,12 @@ export async function applyMeetingCallback(
     pipelineUrl: text(body.pipeline?.url),
     completedAt: sql`now()`,
   }
-  // Only a Teams link may become the invite's redirect.
+  // Only a Teams or meet link may become the invite's redirect.
   const rawJoin = text(body.meeting?.join_url)
   const join =
-    rawJoin && /^https:\/\/teams\.microsoft\.com\//.test(rawJoin)
+    rawJoin &&
+    (/^https:\/\/teams\.microsoft\.com\//.test(rawJoin) ||
+      rawJoin.startsWith(`https://${meetHost()}/`))
       ? rawJoin
       : null
   const succeeded =
@@ -514,6 +767,12 @@ const STUCK_MINUTES = 30
 // A booking older than this with no create request lost it to a restart
 // between its commit and the ask.
 const ORPHAN_MINUTES = 10
+// A meet room that could not be made is asked for again, this many times
+// in all, so a fix on meet's side heals the booking without a rebook.
+const MEET_CREATE_TRIES = 5
+// Only a refusal meet answered made nothing anywhere: a timeout or a
+// Teams trigger may have made a room or meeting, so it is not asked again.
+const RETRYABLE_CREATE = ["MEET_REFUSED"]
 
 /**
  * Every scheduler tick: asks again for what a restart or a failed call
@@ -523,7 +782,7 @@ const ORPHAN_MINUTES = 10
  * past one has already happened.
  */
 export async function reconcileTeams() {
-  if (!meetingPipelineConfigured()) return
+  if (!meetingsConfigured()) return
   const today = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Taipei",
   }).format(new Date())
@@ -571,6 +830,7 @@ export async function reconcileTeams() {
         )
       return existing ? null : { booking: row, variables: createVariables(row) }
     })
+  if (meetConfigured()) await retryMeetCreates(ahead)
   const cancelled = await db
     .select()
     .from(roomBookings)
@@ -583,6 +843,70 @@ export async function reconcileTeams() {
         sql`not exists (select 1 from ${roomMeetingRequests} where ${roomMeetingRequests.bookingId} = ${roomBookings.id} and ${roomMeetingRequests.kind} = 'cancel' and ${roomMeetingRequests.status} <> 'failed')`
       )
     )
+  // A helper pipeline that was accepted but not yet seen to finish: a
+  // failed meeting_open job counts as untold, so it is asked again below.
+  const unsettled = await db
+    .select({
+      requestId: roomMeetingRequests.requestId,
+      pipelineId: roomMeetingRequests.helperPipelineId,
+    })
+    .from(roomMeetingRequests)
+    .where(
+      and(
+        isNotNull(roomMeetingRequests.helperPipelineId),
+        isNull(roomMeetingRequests.helperError),
+        isNull(roomMeetingRequests.helperSettledAt),
+        // A pipeline GitLab lost or never ran is not polled forever.
+        sql`${roomMeetingRequests.bookingId} in (select ${roomBookings.id} from ${roomBookings} where ${roomBookings.date} >= ${today}::date - 2)`
+      )
+    )
+  for (const { requestId, pipelineId } of unsettled) {
+    const outcome = await helperJobOutcome(pipelineId!)
+    if (outcome === "running" || outcome === "unknown") continue
+    await db
+      .update(roomMeetingRequests)
+      .set(
+        outcome === "done"
+          ? { helperSettledAt: sql`now()` }
+          : {
+              helperError: `winlab-helper 的 meeting_open 沒有完成（pipeline ${pipelineId}）`,
+            }
+      )
+      .where(
+        and(
+          eq(roomMeetingRequests.requestId, requestId),
+          eq(roomMeetingRequests.helperPipelineId, pipelineId!),
+          isNull(roomMeetingRequests.helperSettledAt)
+        )
+      )
+  }
+  // A record epic winlab-helper was not told about, while the meeting is
+  // still ahead. Opening or updating one stops once the booking is cancelled.
+  // A fresh ask is left a moment for its own notifyHelper.
+  const untold = await db
+    .select({
+      requestId: roomMeetingRequests.requestId,
+      tries: roomMeetingRequests.helperTries,
+    })
+    .from(roomMeetingRequests)
+    .innerJoin(roomBookings, eq(roomBookings.id, roomMeetingRequests.bookingId))
+    .where(
+      and(
+        isNotNull(roomMeetingRequests.helperError),
+        lt(roomMeetingRequests.helperTries, HELPER_TRIES),
+        lt(
+          sql`coalesce(${roomMeetingRequests.helperAskedAt}, ${roomMeetingRequests.completedAt})`,
+          sql`now() - make_interval(mins => ${HELPER_GRACE_MINUTES})`
+        ),
+        ahead,
+        or(
+          eq(roomMeetingRequests.kind, "cancel"),
+          eq(roomBookings.status, "booked")
+        )
+      )
+    )
+  for (const { requestId, tries } of untold)
+    await notifyHelper(requestId, tries)
   for (const booking of cancelled) {
     const { failed } = await cancelsOf(db, booking.id)
     if (failed >= CANCEL_TRIES) continue
@@ -601,6 +925,86 @@ export async function reconcileTeams() {
         )
     await cancelTeamsMeeting(booking)
   }
+}
+
+/**
+ * Asks meet again for the room of an upcoming booking whose every create
+ * meet refused, at most MEET_CREATE_TRIES times. Only the last refusal is
+ * mailed (sweepMeetingRequests skips the ones a retry follows); earlier
+ * ones mailed before this ran are marked so they are not mailed again.
+ */
+async function retryMeetCreates(ahead: ReturnType<typeof sql>) {
+  const creates = sql`(select count(*) from ${roomMeetingRequests} where ${roomMeetingRequests.bookingId} = ${roomBookings.id} and ${roomMeetingRequests.kind} = 'create')`
+  const retryable = sql`(select count(*) from ${roomMeetingRequests} where ${roomMeetingRequests.bookingId} = ${roomBookings.id} and ${roomMeetingRequests.kind} = 'create' and ${roomMeetingRequests.status} = 'failed' and ${roomMeetingRequests.messageId} is null and ${roomMeetingRequests.errorCode} in ${RETRYABLE_CREATE} and ${roomMeetingRequests.completedAt} < now() - make_interval(mins => ${ORPHAN_MINUTES}))`
+  const failed = await db
+    .select({ id: roomBookings.id })
+    .from(roomBookings)
+    .where(
+      and(
+        eq(roomBookings.status, "booked"),
+        eq(roomBookings.online, true),
+        ahead,
+        sql`${creates} > 0`,
+        sql`${creates} = ${retryable}`,
+        sql`${creates} < ${MEET_CREATE_TRIES}`
+      )
+    )
+  for (const { id } of failed)
+    await askIf("create", async (tx) => {
+      // Locked and checked again, so two runs ask once.
+      const [row] = await tx
+        .select()
+        .from(roomBookings)
+        .where(eq(roomBookings.id, id))
+        .for("update")
+      if (!row || row.status !== "booked") return null
+      const asked = await tx
+        .select({
+          status: roomMeetingRequests.status,
+          errorCode: roomMeetingRequests.errorCode,
+          messageId: roomMeetingRequests.messageId,
+        })
+        .from(roomMeetingRequests)
+        .where(
+          and(
+            eq(roomMeetingRequests.bookingId, row.id),
+            eq(roomMeetingRequests.kind, "create")
+          )
+        )
+      const allFailed = asked.every(
+        (r) =>
+          r.status === "failed" &&
+          !r.messageId &&
+          RETRYABLE_CREATE.includes(r.errorCode ?? "")
+      )
+      if (!asked.length || !allFailed || asked.length >= MEET_CREATE_TRIES)
+        return null
+      await tx
+        .update(roomMeetingRequests)
+        .set({ notifiedAt: sql`now()` })
+        .where(
+          and(
+            eq(roomMeetingRequests.bookingId, row.id),
+            eq(roomMeetingRequests.kind, "create"),
+            isNull(roomMeetingRequests.notifiedAt)
+          )
+        )
+      return { booking: row, variables: createVariables(row) }
+    })
+}
+
+/** How many creates a booking has asked for. */
+async function createsOf(bookingId: string) {
+  const [row] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(roomMeetingRequests)
+    .where(
+      and(
+        eq(roomMeetingRequests.bookingId, bookingId),
+        eq(roomMeetingRequests.kind, "create")
+      )
+    )
+  return row?.n ?? 0
 }
 
 /**
@@ -639,6 +1043,7 @@ export async function sweepMeetingRequests() {
       pipelineUrl: roomMeetingRequests.pipelineUrl,
       bookingStatus: roomBookings.status,
       title: roomBookings.title,
+      meetingPrefix: roomBookings.meetingPrefix,
       date: roomBookings.date,
       startTime: roomBookings.startTime,
       endTime: roomBookings.endTime,
@@ -656,6 +1061,16 @@ export async function sweepMeetingRequests() {
   for (const row of failed) {
     // reconcileTeams will try that take-down again: mail only the last.
     // One with no meeting ids to send cannot be retried and is mailed now.
+    // A refused meet room is asked for again: mail only the last refusal.
+    if (
+      row.kind === "create" &&
+      row.errorCode === "MEET_REFUSED" &&
+      row.bookingStatus === "booked" &&
+      row.date >= today &&
+      meetConfigured() &&
+      (await createsOf(row.bookingId)) < MEET_CREATE_TRIES
+    )
+      continue
     if (
       row.kind === "cancel" &&
       row.date >= today &&
@@ -683,12 +1098,12 @@ export async function sweepMeetingRequests() {
           to: [row.email],
           subject:
             row.kind === "cancel"
-              ? `[WinLab 會議] Teams 會議沒有取消：${row.title}`
+              ? `[WinLab 會議] Teams 會議沒有取消：${plainTitle(row)}`
               : row.kind === "update"
-                ? `[WinLab 會議] Teams 會議名稱沒有更新：${row.title}`
-                : `[WinLab 會議] 會議連結建立失敗：${row.title}`,
+                ? `[WinLab 會議] Teams 會議名稱沒有更新：${plainTitle(row)}`
+                : `[WinLab 會議] 會議連結建立失敗：${plainTitle(row)}`,
           ...mailBody({
-            title: row.title,
+            title: plainTitle(row),
             rows: [
               [
                 "時間",
@@ -713,6 +1128,160 @@ export async function sweepMeetingRequests() {
       }
     })
   }
+  await mailUntoldRecords(today)
+}
+
+/**
+ * A meet booking whose record epic winlab-helper was never told about,
+ * after HELPER_TRIES tries or once the meeting is over: the booker is
+ * mailed once per booking, since the recording will then file under no
+ * epic. A cancel the helper never heard of is mailed too, as its own mail,
+ * but only when the create reached the helper: otherwise no epic exists.
+ */
+async function mailUntoldRecords(today: string) {
+  const rows = await db
+    .select({
+      id: roomMeetingRequests.id,
+      bookingId: roomMeetingRequests.bookingId,
+      kind: roomMeetingRequests.kind,
+      helperError: roomMeetingRequests.helperError,
+      title: roomBookings.title,
+      meetingPrefix: roomBookings.meetingPrefix,
+      date: roomBookings.date,
+      startTime: roomBookings.startTime,
+      endTime: roomBookings.endTime,
+      email: user.email,
+    })
+    .from(roomMeetingRequests)
+    .innerJoin(roomBookings, eq(roomBookings.id, roomMeetingRequests.bookingId))
+    .innerJoin(user, eq(user.id, roomBookings.requestedBy))
+    .where(
+      and(
+        isNotNull(roomMeetingRequests.helperError),
+        isNull(roomMeetingRequests.helperNotifiedAt),
+        or(
+          eq(roomMeetingRequests.kind, "cancel"),
+          eq(roomBookings.status, "booked")
+        ),
+        sql`(${roomMeetingRequests.helperTries} >= ${HELPER_TRIES} or ${roomBookings.date} < ${today})`
+      )
+    )
+  // One mail per booking and side: the cancel apart from create and update.
+  const groups = new Map<string, typeof rows>()
+  for (const row of rows) {
+    const key = `${row.bookingId}:${row.kind === "cancel" ? "cancel" : "open"}`
+    groups.set(key, [...(groups.get(key) ?? []), row])
+  }
+  for (const group of groups.values())
+    await db.transaction(async (tx) => {
+      const [first] = group
+      const cancel = first.kind === "cancel"
+      // Locked, so a second sweep waits and then sees what this one mailed.
+      await tx
+        .select({ id: roomBookings.id })
+        .from(roomBookings)
+        .where(eq(roomBookings.id, first.bookingId))
+        .for("update")
+      // Another request on this side is still being retried: mail when it
+      // has settled, unless the meeting is already over.
+      if (first.date >= today) {
+        const [retrying] = await tx
+          .select({ id: roomMeetingRequests.id })
+          .from(roomMeetingRequests)
+          .where(
+            and(
+              eq(roomMeetingRequests.bookingId, first.bookingId),
+              cancel
+                ? eq(roomMeetingRequests.kind, "cancel")
+                : ne(roomMeetingRequests.kind, "cancel"),
+              isNotNull(roomMeetingRequests.helperError),
+              lt(roomMeetingRequests.helperTries, HELPER_TRIES),
+              isNull(roomMeetingRequests.helperNotifiedAt)
+            )
+          )
+          .limit(1)
+        if (retrying) return
+      }
+      const claimed = await tx
+        .update(roomMeetingRequests)
+        .set({ helperNotifiedAt: sql`now()` })
+        .where(
+          and(
+            inArray(
+              roomMeetingRequests.id,
+              group.map((row) => row.id)
+            ),
+            isNull(roomMeetingRequests.helperNotifiedAt)
+          )
+        )
+        .returning({
+          id: roomMeetingRequests.id,
+          kind: roomMeetingRequests.kind,
+          helperError: roomMeetingRequests.helperError,
+        })
+      if (!claimed.length) return
+      const others = await tx
+        .select({
+          kind: roomMeetingRequests.kind,
+          helperPipelineId: roomMeetingRequests.helperPipelineId,
+          helperError: roomMeetingRequests.helperError,
+          helperNotifiedAt: roomMeetingRequests.helperNotifiedAt,
+        })
+        .from(roomMeetingRequests)
+        .where(
+          and(
+            eq(roomMeetingRequests.bookingId, first.bookingId),
+            notInArray(
+              roomMeetingRequests.id,
+              claimed.map((row) => row.id)
+            )
+          )
+        )
+      // The create reached the helper, so an epic was opened.
+      const opened = others.some(
+        (row) =>
+          row.kind === "create" &&
+          row.helperPipelineId !== null &&
+          row.helperError === null
+      )
+      if (cancel && !opened) return
+      // This booking's open side was already mailed.
+      if (
+        !cancel &&
+        others.some((row) => row.kind !== "cancel" && row.helperNotifiedAt)
+      )
+        return
+      const created = !claimed.some((row) => row.kind === "create") && opened
+      await queueMail(tx, {
+        to: [first.email],
+        subject: cancel
+          ? `[WinLab 會議] GitLab 會議紀錄沒有關閉：${plainTitle(first)}`
+          : created
+            ? `[WinLab 會議] GitLab 會議紀錄沒有更新：${plainTitle(first)}`
+            : `[WinLab 會議] GitLab 會議紀錄沒有建立：${plainTitle(first)}`,
+        ...mailBody({
+          title: plainTitle(first),
+          rows: [
+            [
+              "時間",
+              `${dayLabel(first.date)} ${first.startTime} 到 ${first.endTime}`,
+            ],
+            [
+              "原因",
+              (claimed.find((row) => row.kind === "create") ?? claimed[0])
+                .helperError ?? "",
+            ],
+          ],
+          paragraphs: [
+            cancel
+              ? "會議已取消，但 GitLab 上這場會議的紀錄 epic 還開著，請到 GitLab 手動關閉或通知管理員。"
+              : created
+                ? "會議連結不受影響，但 GitLab 上這場會議的紀錄 epic 還是舊的時間或議程，請到 GitLab 手動更新或通知管理員。"
+                : "會議連結不受影響，但 GitLab 上沒有這場會議的紀錄 epic，錄影會歸到未對應的區域，請到 GitLab 手動建立或通知管理員。",
+          ],
+        }),
+      })
+    })
 }
 
 /**

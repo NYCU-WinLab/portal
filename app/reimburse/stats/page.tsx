@@ -1,3 +1,10 @@
+import {
+  Focus,
+  FocusHighlight,
+  FocusLabel,
+  FocusTitle,
+  FocusMeta,
+} from "@/components/focus"
 import { EmptyState } from "@/components/empty-state"
 import { PageHeader, SectionHeader } from "@/components/page-header"
 import { PortalShell } from "@/components/portal-shell"
@@ -16,11 +23,24 @@ export default async function ReimburseStatsPage() {
   const actor = await requireActor("/reimburse/stats")
   await requireAdminPage(actor, "reimburse")
   const { months, applicants } = await runAction(getReimburseStats, actor, {})
+  const owed = applicants.filter((row) => row.owed > 0)
+  const owedTotal = owed.reduce((sum, row) => sum + row.owed, 0)
 
   return (
     <PortalShell page={reimbursePage} nav={reimburseNav}>
       <div className="flex flex-col gap-12">
         <PageHeader title="統計" />
+        <Focus>
+          <FocusLabel>未轉帳</FocusLabel>
+          <FocusTitle>
+            <FocusHighlight>{ntd(owedTotal)}</FocusHighlight>
+          </FocusTitle>
+          {owed.length > 0 && (
+            <FocusMeta>
+              <span>{owed.length} 位申請人等轉帳</span>
+            </FocusMeta>
+          )}
+        </Focus>
         {months.length === 0 ? (
           <EmptyState noun="紀錄" />
         ) : (

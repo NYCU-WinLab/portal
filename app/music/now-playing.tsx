@@ -5,6 +5,7 @@ import {
   PauseIcon,
   PlayIcon,
   PlusIcon,
+  SkipBackIcon,
   SkipForwardIcon,
 } from "lucide-react"
 import * as React from "react"
@@ -19,8 +20,9 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import type { nowPlaying } from "@/lib/actions/music"
+import { cn } from "@/lib/utils"
 
-import { autoplay, pause, skip, volume } from "./actions"
+import { autoplay, pause, previous, skip, volume } from "./actions"
 import { Lyrics } from "./lyrics"
 import { LikeButton } from "./like-button"
 import { ok } from "./ok"
@@ -56,7 +58,12 @@ export function NowPlaying({ playing }: { playing: Playing }) {
       <div className="flex items-center gap-6">
         <Cover src={current?.track.thumbnail ?? null} className="size-24" />
         <div className="flex min-w-0 flex-col gap-1">
-          <h1 className="truncate text-title font-medium">
+          <h1
+            className={cn(
+              "truncate text-title font-medium",
+              current && "text-primary"
+            )}
+          >
             {current?.track.title ?? "還沒有歌，點一首吧"}
           </h1>
           <p className="truncate text-muted-foreground">
@@ -91,6 +98,10 @@ export function NowPlaying({ playing }: { playing: Playing }) {
         >
           {playing.paused ? <PlayIcon /> : <PauseIcon />}
           {playing.paused ? "繼續" : "暫停"}
+        </Button>
+        <Button variant="outline" onClick={async () => ok(await previous({}))}>
+          <SkipBackIcon />
+          上一首
         </Button>
         <Button
           variant="outline"

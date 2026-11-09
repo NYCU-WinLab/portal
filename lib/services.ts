@@ -33,6 +33,13 @@ export const serviceGroups: { title: string; apps: Service[] }[] = [
         emoji: "📢",
         href: "/bulletin",
       },
+      {
+        key: "calendar",
+        label: "Calendar",
+        name: "行事曆",
+        emoji: "📅",
+        href: "/calendar",
+      },
       { key: "door", label: "Door", name: "門禁", emoji: "🚪", href: "/door" },
       {
         key: "gallery",
@@ -61,6 +68,13 @@ export const serviceGroups: { title: string; apps: Service[] }[] = [
         name: "成員",
         emoji: "📇",
         href: "/members",
+      },
+      {
+        key: "meet",
+        label: "Meet",
+        name: "視訊會議",
+        emoji: "📹",
+        href: "https://meet.winlab.tw",
       },
       {
         key: "meetings",
