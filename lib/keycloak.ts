@@ -284,12 +284,16 @@ let accounts: { list: RealmAccount[]; at: number } | null = null
  * bot and test accounts). They carry real groups and attributes, so
  * Keycloak marks them here instead of the portal guessing from a username.
  */
-async function systemAccountIds(): Promise<Set<string>> {
+let system: { ids: Set<string>; at: number } | null = null
+
+export async function systemAccountIds(): Promise<Set<string>> {
+  if (system && Date.now() - system.at < LAB_DIRECTORY_TTL_MS) return system.ids
   const group = await adminGet<{ id: string }>("/group-by-path/system")
   const people = await adminGet<{ id: string }[]>(
     `/groups/${group.id}/members?max=1000&briefRepresentation=true`
   )
-  return new Set(people.map(({ id }) => id))
+  system = { ids: new Set(people.map(({ id }) => id)), at: Date.now() }
+  return system.ids
 }
 
 /**
