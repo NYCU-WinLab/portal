@@ -11200,6 +11200,69 @@
     }
   },
   {
+    "name": "send_invitation",
+    "title": "寄邀請信",
+    "description": "Mails someone an invitation to open a link in a lab service (viewer.winlab.tw or meet.winlab.tw only), from the lab's mail address. inviter is the lab member who invites, by email (must be a portal member; replies go to them; defaults to the caller). title names what the link opens, note is an optional line such as the access given, expiresAt when the link stops working. At most 30 a member an hour.",
+    "kind": "mutation",
+    "app": "invitations",
+    "hash": "7971a32593bf6e4e",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "expiresAt": {
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
+          "type": "string"
+        },
+        "inviter": {
+          "format": "email",
+          "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$",
+          "type": "string"
+        },
+        "note": {
+          "maxLength": 200,
+          "type": "string"
+        },
+        "title": {
+          "maxLength": 120,
+          "minLength": 1,
+          "type": "string"
+        },
+        "to": {
+          "format": "email",
+          "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$",
+          "type": "string"
+        },
+        "url": {
+          "format": "uri",
+          "type": "string"
+        }
+      },
+      "required": [
+        "to",
+        "url",
+        "title"
+      ],
+      "type": "object"
+    },
+    "output": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "queued": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "queued"
+      ],
+      "type": "object"
+    }
+  },
+  {
     "name": "set_appointment_schedule",
     "title": "設定預約時段",
     "description": "Sets when labmates may book a meeting with the signed-in member: weekly windows (weekday 0 = Sunday; start and end Asia/Taipei HH:MM on the 30-minute grid between 08:00 and 22:00), slot_minutes 30 or 60, and ahead_days (1 to 60) for how far ahead. Free slots are the windows minus the member's Google Calendar events and portal meetings. An empty windows list stops taking appointments; booked ones stay. Needs a linked Google Calendar.",

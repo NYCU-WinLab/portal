@@ -21,6 +21,7 @@ export const apiApps = {
   reimburse: "記帳",
   trip: "出差文件",
   groups: "群組信",
+  invitations: "邀請信",
 } as const
 
 export type ApiApp = keyof typeof apiApps
