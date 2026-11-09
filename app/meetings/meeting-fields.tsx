@@ -131,6 +131,8 @@ export function MeetingFields({
   const epicItems =
     Array.isArray(epics) &&
     epics.filter((epic) => !syncOnly || epic.kind === "sync")
+  // A group with nothing to pick gets no Epic field, not a lone "none".
+  const showEpic = group?.gitlabLinked && !(epicItems && !epicItems.length)
 
   return (
     <>
@@ -202,7 +204,7 @@ export function MeetingFields({
           onCheckedChange={(checked) => set({ includeAdvisor: checked })}
         />
       </div>
-      {group?.gitlabLinked && (
+      {showEpic && (
         <div className="flex flex-col gap-2">
           <Label htmlFor="meeting-epic">
             {syncOnly ? "GitLab Epic（只能選 Sync）" : "GitLab Epic"}

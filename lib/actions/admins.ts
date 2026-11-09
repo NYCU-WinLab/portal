@@ -4,25 +4,39 @@ import { z } from "zod"
 import { defineAction } from "@/lib/actions/define"
 import { adminAppKeys, adminApps, ownAdminsOnly } from "@/lib/apps"
 import { db } from "@/lib/db"
-import { admins, user } from "@/lib/db/schema"
+import { account, admins, user } from "@/lib/db/schema"
+import { systemAccountIds } from "@/lib/keycloak"
 
 export const listMembers = defineAction({
   name: "list_members",
   title: "成員名單",
   description:
-    "Every lab member on the portal: id, name (Chinese), account name and email, sorted by name. Use it to find a member's id for other tools.",
+    "Every lab member on the portal: id, name (Chinese), account name and email, sorted by name. Accounts Keycloak marks as not people (the /system group: bots, shared and test accounts) are left out. Use it to find a member's id for other tools.",
   kind: "query",
   input: z.object({}),
-  run: async () =>
-    db
-      .select({
-        id: user.id,
-        name: user.name,
-        username: user.username,
-        email: user.email,
-      })
-      .from(user)
-      .orderBy(asc(user.name)),
+  run: async () => {
+    const [rows, system] = await Promise.all([
+      db
+        .select({
+          id: user.id,
+          name: user.name,
+          username: user.username,
+          email: user.email,
+          sub: account.accountId,
+        })
+        .from(user)
+        .leftJoin(
+          account,
+          and(eq(account.userId, user.id), eq(account.providerId, "keycloak"))
+        )
+        .orderBy(asc(user.name)),
+      // Keycloak being down shows everyone rather than no one.
+      systemAccountIds().catch(() => new Set<string>()),
+    ])
+    return rows
+      .filter((row) => !row.sub || !system.has(row.sub))
+      .map(({ id, name, username, email }) => ({ id, name, username, email }))
+  },
 })
 
 export const listAdmins = defineAction({
