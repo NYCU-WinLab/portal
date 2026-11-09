@@ -13,7 +13,7 @@ export const doorNav = [
     label: "聲音",
     href: "/door/sounds",
     tip: "開門時的音效與問候語",
-    also: ["/door/greetings", "/door/voice"],
+    also: ["/door/greetings", "/door/schedule", "/door/voice"],
   },
   {
     label: "紀錄",
@@ -31,6 +31,7 @@ export const doorNav = [
 
 export const soundTabs = [
   { label: "音效", href: "/door/sounds" },
+  { label: "排程", href: "/door/schedule" },
   { label: "問候語", href: "/door/greetings" },
   { label: "語音", href: "/door/voice", admin: "door" as const },
 ]

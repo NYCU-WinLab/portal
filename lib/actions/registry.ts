@@ -84,6 +84,12 @@ import {
   uploadDoorSound,
 } from "@/lib/actions/door-sounds"
 import {
+  createDoorSoundRule,
+  deleteDoorSoundRule,
+  listDoorSoundRules,
+  updateDoorSoundRule,
+} from "@/lib/actions/door-sound-rules"
+import {
   addMailGroupMembers,
   getMailGroup,
   listCohorts,
@@ -345,6 +351,10 @@ export const actionGroups: { app: ApiApp | null; actions: Action[] }[] = [
       deleteDoorSound,
       setDoorPlaylist,
       setDoorSoundDefault,
+      listDoorSoundRules,
+      createDoorSoundRule,
+      updateDoorSoundRule,
+      deleteDoorSoundRule,
       listDoorPhrases,
       createDoorPhrase,
       updateDoorPhrase,

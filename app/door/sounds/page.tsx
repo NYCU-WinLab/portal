@@ -34,7 +34,7 @@ export default async function DoorSoundsPage() {
           <FocusLabel>你開門時</FocusLabel>
           <FocusTitle>
             {mine.length === 0 ? (
-              "播實驗室預設音效"
+              "播實驗室排程或預設音效"
             ) : mine.length === 1 ? (
               <>
                 都播 <FocusHighlight>{mine[0].label}</FocusHighlight>
