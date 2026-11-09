@@ -46,7 +46,7 @@ export const invitations = pgTable(
   "invitations",
   {
     id: uuid().defaultRandom().primaryKey(),
-    /** The member whose API key sent it. */
+    /** Who sent it: a member (by their API key), or a service key's id. */
     senderId: uuid().notNull(),
     to: text().notNull(),
     url: text().notNull(),
