@@ -11202,29 +11202,27 @@
   {
     "name": "send_invitation",
     "title": "寄邀請信",
-    "description": "Mails someone an invitation to open a link in a lab service (viewer.winlab.tw or meet.winlab.tw only), from the lab's mail address. inviter is the lab member who invites, by email (must be a portal member; replies go to them; defaults to the caller). title names what the link opens, note is an optional line such as the access given, expiresAt when the link stops working. At most 30 a member an hour.",
+    "description": "Mails someone an invitation to open a link in a lab service (viewer.winlab.tw or meet.winlab.tw only), from the lab's mail address, in a fixed text that names the service. title names what the link opens (one line, no links or addresses), access the access the link gives (view or comment), expiresAt when the link stops working. At most 30 a member an hour.",
     "kind": "mutation",
     "app": "invitations",
-    "hash": "7971a32593bf6e4e",
+    "hash": "54dc88b4681860ce",
     "input": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
+        "access": {
+          "enum": [
+            "view",
+            "comment"
+          ],
+          "type": "string"
+        },
         "expiresAt": {
           "format": "date-time",
           "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
           "type": "string"
         },
-        "inviter": {
-          "format": "email",
-          "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$",
-          "type": "string"
-        },
-        "note": {
-          "maxLength": 200,
-          "type": "string"
-        },
         "title": {
-          "maxLength": 120,
+          "maxLength": 80,
           "minLength": 1,
           "type": "string"
         },
