@@ -16,7 +16,7 @@ import {
   meetingsOf,
   requestTeamsMeeting,
 } from "@/lib/actions/rooms-meetings"
-import type { Mail } from "@/lib/mail"
+import type { QueuedMail } from "@/lib/mail"
 import { mailBody } from "@/lib/mail-body"
 import { db } from "@/lib/db"
 import {
@@ -468,7 +468,7 @@ export type NewBooking = {
    * Replaces the usual invite, as the lab meeting's announcement does; null
    * mails nothing, for a booking whose invite goes out later.
    */
-  invite?: (booking: Booking) => Mail | null
+  invite?: (booking: Booking) => QueuedMail | null
   /** Runs first in the booking's transaction; throwing books nothing. */
   inTransaction?: (tx: Tx) => Promise<void>
 }

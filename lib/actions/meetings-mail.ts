@@ -33,7 +33,7 @@ import {
   roomBookings,
   user,
 } from "@/lib/db/schema"
-import type { Mail } from "@/lib/mail"
+import type { QueuedMail } from "@/lib/mail"
 import { mailBody } from "@/lib/mail-body"
 import { emitErrorLog } from "@/lib/otel"
 import { cleanTopic, plainTitle } from "@/lib/rooms/meeting"
@@ -215,7 +215,7 @@ async function claimCurrent(tx: Tx, meeting: ScheduledMeeting, kind: Kind) {
 async function queueOnce(
   meeting: ScheduledMeeting,
   kind: Kind,
-  mail: Mail,
+  mail: QueuedMail,
   /** Runs under the lock; throwing AlreadySent sends nothing this tick. */
   stillDue?: (tx: Tx) => Promise<void>
 ) {

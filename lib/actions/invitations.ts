@@ -5,6 +5,7 @@ import { defineAction } from "@/lib/actions/define"
 import { queueMail } from "@/lib/actions/mail"
 import { db } from "@/lib/db"
 import { invitations } from "@/lib/db/schema"
+import { mailBody } from "@/lib/mail-body"
 
 // Invitation mail for other lab services: a member (through an API key,
 // usually one a service such as viewer.winlab.tw holds) invites someone,
@@ -112,21 +113,31 @@ export const sendInvitation = defineAction({
         )
       if (sent >= (actor.service ? PER_HOUR_SERVICE : PER_HOUR))
         throw new Error("這一小時寄太多邀請了")
-      const lines = [
-        `你收到一份 ${service} 的邀請，可以打開「${input.title}」。`,
-        "",
-        input.url,
-        "",
-        ...(input.access ? [`權限：${ACCESS[input.access]}。`] : []),
-        ...(input.expiresAt
-          ? [`連結到 ${when.format(new Date(input.expiresAt))} 失效。`]
+      const rows: [string, string][] = [
+        ...(input.access
+          ? [["權限", ACCESS[input.access]] as [string, string]]
           : []),
-        "這個連結就是你的通行證，請不要轉給別人。",
+        ...(input.expiresAt
+          ? [
+              ["失效", when.format(new Date(input.expiresAt))] as [
+                string,
+                string,
+              ],
+            ]
+          : []),
       ]
       const outboxId = await queueMail(tx, {
         to: [input.to],
         subject: `${service} 邀請：${input.title}`,
-        text: lines.join("\n"),
+        ...mailBody({
+          title: input.title,
+          rows,
+          paragraphs: [
+            `你收到一份 ${service} 的邀請。`,
+            "這個連結就是你的通行證，請不要轉給別人。",
+          ],
+          action: { label: `在 ${service} 打開`, url: input.url },
+        }),
       })
       const [row] = await tx
         .insert(invitations)
