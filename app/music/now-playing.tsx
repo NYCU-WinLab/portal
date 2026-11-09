@@ -24,6 +24,7 @@ import { cn } from "@/lib/utils"
 
 import { autoplay, pause, previous, skip, volume } from "./actions"
 import { Lyrics } from "./lyrics"
+import { LikeButton } from "./like-button"
 import { ok } from "./ok"
 import { addedLine, Cover, duration } from "./song"
 
@@ -112,6 +113,9 @@ export function NowPlaying({ playing }: { playing: Playing }) {
           <SkipForwardIcon />
           跳過
         </Button>
+        {current && (
+          <LikeButton videoId={current.track.videoId} liked={current.liked} />
+        )}
         <Volume key={playing.volume} initial={playing.volume} />
         <label className="flex items-center gap-2">
           <Switch

@@ -7,4 +7,5 @@ export const musicPage = {
 export const musicNav = [
   { label: "播放", href: "/music", tip: "正在播與佇列" },
   { label: "播過", href: "/music/played", tip: "播完、跳過的歌" },
+  { label: "愛心", href: "/music/liked", tip: "我按愛心的歌" },
 ]

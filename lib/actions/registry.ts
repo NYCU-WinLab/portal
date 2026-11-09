@@ -209,7 +209,9 @@ import {
   addPlaylist,
   addSong,
   getLyrics,
+  likeSong,
   listActivity,
+  listLikedSongs,
   listPlayed,
   listQueue,
   nowPlaying,
@@ -221,6 +223,7 @@ import {
   setPaused,
   setVolume,
   skipSong,
+  unlikeSong,
 } from "@/lib/actions/music"
 import { listAssets } from "@/lib/actions/assets"
 import {
@@ -521,6 +524,7 @@ export const actionGroups: { app: ApiApp | null; actions: Action[] }[] = [
       listActivity,
       listPlayed,
       getLyrics,
+      listLikedSongs,
       searchMusic,
       addSong,
       addPlaylist,
@@ -531,6 +535,8 @@ export const actionGroups: { app: ApiApp | null; actions: Action[] }[] = [
       setPaused,
       setVolume,
       setAutoplay,
+      likeSong,
+      unlikeSong,
     ],
   },
 ]

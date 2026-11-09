@@ -7,6 +7,7 @@ import { fillQueue } from "@/lib/actions/music-autoplay"
 import { db } from "@/lib/db"
 import {
   musicActivities,
+  musicLikes,
   musicPlayer,
   musicQueueItems,
   musicTracks,
@@ -153,13 +154,31 @@ export async function logActivity(
   await tx.insert(musicActivities).values(entry)
 }
 
-/** Items with their song and who added, skipped or removed them. */
+/** The ids among videoIds that the member liked. */
+export async function likedAmong(
+  tx: Tx | typeof db,
+  userId: string,
+  videoIds: string[]
+) {
+  if (!videoIds.length) return new Set<string>()
+  const rows = await tx
+    .select({ videoId: musicLikes.videoId })
+    .from(musicLikes)
+    .where(
+      and(eq(musicLikes.userId, userId), inArray(musicLikes.videoId, videoIds))
+    )
+  return new Set(rows.map((row) => row.videoId))
+}
+
+/** Items with their song, who added, skipped or removed them, and whether
+ * userId liked the song. */
 export async function describeItems(
   tx: Tx | typeof db,
+  userId: string,
   items: (typeof musicQueueItems.$inferSelect)[]
 ) {
   if (!items.length) return []
-  const [songs, people] = await Promise.all([
+  const [songs, people, liked] = await Promise.all([
     tx
       .select()
       .from(musicTracks)
@@ -182,6 +201,11 @@ export async function describeItems(
           "00000000-0000-0000-0000-000000000000",
         ])
       ),
+    likedAmong(
+      tx,
+      userId,
+      items.map((item) => item.videoId)
+    ),
   ])
   const song = new Map(songs.map((s) => [s.videoId, s]))
   const name = new Map(people.map((p) => [p.id, p.name]))
@@ -191,6 +215,7 @@ export async function describeItems(
     addedAs: item.addedAs,
     fromPlaylist: item.playlistId !== null,
     track: song.get(item.videoId)!,
+    liked: liked.has(item.videoId),
     addedBy: item.addedBy ? (name.get(item.addedBy) ?? null) : null,
     endedBy: item.endedBy ? (name.get(item.endedBy) ?? null) : null,
     startedAt: item.startedAt,
