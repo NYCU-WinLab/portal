@@ -49,6 +49,7 @@ CACHE_DIR = Path(os.environ.get("CACHE_DIR", "/var/cache/winlab-music"))
 CACHE_MAX_BYTES = int(os.environ.get("CACHE_MAX_MB", "2048")) * 1024 * 1024
 YT_DLP = os.environ.get("YT_DLP", "yt-dlp")
 ANNOUNCE_LISTEN = os.environ.get("ANNOUNCE_LISTEN", "127.0.0.1:8791")
+KNOB_HOLD_S = 2.0  # after a knob turn, the server's volume waits this long (it catches up)
 
 # The HomePod starts sound about this long after we start sending.
 BUFFER_S = 2.0
@@ -537,6 +538,9 @@ class Player:
         self.mixer = None  # the running stream's source, song or clips alone
         self.airplay = asyncio.Lock()  # one stream to the HomePod at a time
         self.state = "idle"
+        self.knob_volume = None  # the level the knob asked for last
+        self.knob_at = 0.0  # when; the server's volume waits KNOB_HOLD_S behind it
+        self.knob_task = None
 
     def position(self):
         if self.state != "playing" or self.mixer is None:
@@ -634,13 +638,11 @@ class Player:
                 await self.api.report(current and current["itemId"], "idle", self.offset if mine else None)
                 self.playing = None
                 continue
-            if self.mixer and self.mixer.clip is not None:
-                self.mixer.volume = want["volume"]  # set when the door clip ends
-            else:
+            # The knob sets the HomePod at once and tells the server after; a state sent
+            # before that would turn the volume back while the knob still turns.
+            if time.monotonic() - self.knob_at >= KNOB_HOLD_S:
                 try:
-                    await self.homepod.volume(want["volume"])
-                    if self.mixer:
-                        self.mixer.volume = want["volume"]
+                    await self.apply_volume(want["volume"])
                 except Exception as e:  # noqa: BLE001
                     log.warning("volume: %s", e)
                     self.homepod.drop()
@@ -653,6 +655,31 @@ class Player:
                 self.task = asyncio.create_task(self.play(current, want["volume"]))
             if want["upcoming"] and (prefetching is None or prefetching.done()):
                 prefetching = asyncio.create_task(self.prefetch(want["upcoming"]))
+
+    async def apply_volume(self, level):
+        if self.mixer and self.mixer.clip is not None:
+            self.mixer.volume = level  # set when the door clip ends
+            return
+        await self.homepod.volume(level)
+        if self.mixer:
+            self.mixer.volume = level
+
+    def knob(self, level):
+        """The lab knob's volume, straight to the HomePod: one set at a time,
+        the latest level wins, so a fast turn never queues up stale ones."""
+        self.knob_volume, self.knob_at = level, time.monotonic()
+        if self.knob_task is None or self.knob_task.done():
+            self.knob_task = asyncio.get_running_loop().create_task(self.follow_knob())
+
+    async def follow_knob(self):
+        done = None
+        while self.knob_volume != done:
+            done = self.knob_volume
+            try:
+                await self.apply_volume(done)
+            except Exception as e:  # noqa: BLE001  the server's volume comes after anyway
+                log.warning("knob volume %s: %s", done, e)
+                return
 
     async def play(self, item, volume):
         item_id, offset = item["itemId"], float(item["startAtS"] or 0)
@@ -789,7 +816,21 @@ def announce_app(player):
         return web.json_response({"ok": True, "how": how, "ms": ms})
 
     app = web.Application(client_max_size=ANNOUNCE_MAX_BYTES)
+    async def volume(request):
+        # The knob daemon on this host only: the port is open to the door host too.
+        if request.remote not in ("127.0.0.1", "::1"):
+            return web.json_response({"ok": False, "error": "local only"}, status=403)
+        try:
+            level = float(request.query["level"])
+        except (KeyError, ValueError):
+            return web.json_response({"ok": False, "error": "bad level"}, status=400)
+        if not 0 <= level <= 100:
+            return web.json_response({"ok": False, "error": "bad level"}, status=400)
+        player.knob(level)
+        return web.json_response({"ok": True})
+
     app.router.add_post("/announce", handle)
+    app.router.add_post("/volume", volume)
     return app
 
 
