@@ -23,25 +23,43 @@ const SERVICES: Record<string, string> = {
 /** Invitations one member may send in an hour. */
 const PER_HOUR = 30
 
+// The mail prints the parsed link (url.href), never the caller's string,
+// and only a plain https link into a service: printable ASCII with no
+// spaces, no user or password, no port and no second scheme in it.
 const linkInto = z
   .string()
-  .url()
+  .max(500)
+  .refine((value) => /^https:\/\/[\x21-\x7e]+$/.test(value), "連結格式不對")
   .refine((value) => {
+    if (!URL.canParse(value)) return false
     const url = new URL(value)
-    return url.protocol === "https:" && url.hostname in SERVICES
+    return (
+      url.protocol === "https:" &&
+      url.hostname in SERVICES &&
+      !url.username &&
+      !url.password &&
+      !url.port &&
+      !url.href.slice("https://".length).includes("//")
+    )
   }, "只能邀請到實驗室的服務")
+  .transform((value) => new URL(value).href)
 
-/** Text that could pass for a link or an address in a mail. */
-const LINKISH =
-  /:\/\/|www\.|@|[a-z0-9-]+\.(com|net|org|edu|gov|tw|io|me|co|app|dev|xyz|info|link|ly|cc|ru|cn)\b/i
+/** A dot of any width or script between two letters or digits. */
+const DOTTED = /[\p{L}\p{N}][.\u2024\u3002\uFE52\uFF0E\uFF61][\p{L}\p{N}]/u
 
+// One line of plain words: compared after NFKC, so full-width forms count
+// as their ASCII twins. Any word.word shape is refused, not a list of
+// TLDs, so no domain gets through; a file name drops its extension first.
 const title = z
   .string()
   .trim()
   .min(1)
   .max(80)
-  .refine((value) => !/[\p{Cc}\p{Cf}\u2028\u2029]/u.test(value), "標題只能一行")
-  .refine((value) => !LINKISH.test(value), "標題不能有網址或信箱")
+  .refine((value) => !/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u.test(value), "標題只能一行")
+  .refine((value) => {
+    const plain = value.normalize("NFKC")
+    return !/[@:\/\\]/.test(plain) && !DOTTED.test(plain)
+  }, "標題不能有網址或信箱")
 
 const ACCESS = { view: "僅檢視", comment: "可註解" } as const
 
@@ -59,14 +77,17 @@ export const sendInvitation = defineAction({
   name: "send_invitation",
   title: "寄邀請信",
   description:
-    "Mails someone an invitation to open a link in a lab service (viewer.winlab.tw or meet.winlab.tw only), from the lab's mail address, in a fixed text that names the service. title names what the link opens (one line, no links or addresses), access the access the link gives (view or comment), expiresAt when the link stops working. At most 30 a member an hour.",
+    "Mails someone an invitation to open a link in a lab service (viewer.winlab.tw or meet.winlab.tw only), from the lab's mail address, in a fixed text that names the service. title names what the link opens (one line of plain words: no link, address, slash, colon or dotted word such as a file extension), access the access the link gives (view or comment), expiresAt when the link stops working. At most 30 a member an hour.",
   kind: "mutation",
   input: z.object({
     to: z.email("收件人信箱格式不對"),
     url: linkInto,
     title,
     access: z.enum(["view", "comment"]).optional(),
-    expiresAt: z.iso.datetime({ offset: true }).optional(),
+    expiresAt: z.iso
+      .datetime({ offset: true })
+      .refine((value) => Date.parse(value) > Date.now(), "失效時間已經過了")
+      .optional(),
   }),
   run: async (actor, input) => {
     const service = SERVICES[new URL(input.url).hostname]
