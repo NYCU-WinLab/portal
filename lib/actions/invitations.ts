@@ -25,11 +25,14 @@ const PER_HOUR = 30
 
 // The mail prints the parsed link (url.href), never the caller's string,
 // and only a plain https link into a service: printable ASCII with no
-// spaces, no user or password, no port and no second scheme in it.
+// spaces, no backslash or @, no user or password, no port and no second scheme in it.
 const linkInto = z
   .string()
   .max(500)
-  .refine((value) => /^https:\/\/[\x21-\x7e]+$/.test(value), "連結格式不對")
+  .refine(
+    (value) => /^https:\/\/[\x21-\x7e]+$/.test(value) && !/[\\@]/.test(value),
+    "連結格式不對"
+  )
   .refine((value) => {
     if (!URL.canParse(value)) return false
     const url = new URL(value)
