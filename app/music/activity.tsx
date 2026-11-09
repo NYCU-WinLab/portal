@@ -28,6 +28,8 @@ function sentence(entry: Entry) {
       return `回到上一首${song}`
     case "remove":
       return `把${song}移出佇列`
+    case "clear":
+      return `清空佇列 ${entry.detail?.count ?? 0} 首`
     case "pause":
       return "暫停"
     case "resume":

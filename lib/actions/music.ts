@@ -384,6 +384,30 @@ export const removeSong = defineAction({
     }),
 })
 
+export const clearQueue = defineAction({
+  name: "clear_queue",
+  title: "清空佇列",
+  description:
+    "Take every waiting song out of the queue. The playing song keeps playing.",
+  kind: "mutation",
+  input: z.object({}),
+  run: async (actor) =>
+    withQueue(async (tx) => {
+      const removed = await tx
+        .update(musicQueueItems)
+        .set({ status: "removed", endedAt: new Date(), endedBy: actor.userId })
+        .where(eq(musicQueueItems.status, "queued"))
+        .returning({ id: musicQueueItems.id })
+      if (!removed.length) throw new Error("佇列已經是空的")
+      await logActivity(tx, {
+        userId: actor.userId,
+        kind: "clear",
+        detail: { count: removed.length },
+      })
+      return { count: removed.length }
+    }),
+})
+
 export const setPaused = defineAction({
   name: "set_paused",
   title: "暫停或繼續",
