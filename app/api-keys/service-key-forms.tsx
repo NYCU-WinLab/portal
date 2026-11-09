@@ -82,10 +82,7 @@ export function CreateServiceKey() {
             <DialogTitle>金鑰只顯示這一次</DialogTitle>
           </DialogHeader>
           <p className="font-mono break-all select-all">{token}</p>
-          <p className="text-muted-foreground">
-            這把金鑰屬於實驗室，建立的人離開也照常能用。放進服務的環境變數，不要放進
-            git。
-          </p>
+          <p className="text-muted-foreground">不要放進 git。</p>
           <p className="font-mono break-all text-muted-foreground select-all">
             {token && listLine(token)}
           </p>
