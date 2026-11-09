@@ -7,6 +7,7 @@ import {
   panelPhrases,
   panelVoice,
 } from "@/lib/actions/door-phrases"
+import { panelSoundRules } from "@/lib/actions/door-sound-rules"
 import { panelPlaylists } from "@/lib/actions/door-sounds"
 import { readSchedule } from "@/lib/actions/meetings-shared"
 import { db } from "@/lib/db"
@@ -118,7 +119,9 @@ export const setDoorSpeakName = defineAction({
  * saying "Hi <name>". phrases is the lab's default spoken greeting
  * schedule the door picks from at open time, member_phrases each member's
  * own by name, which win over the defaults while one is in force; voice
- * links the clips in CC's voice by text.
+ * links the clips in CC's voice by text. sound_rules is the lab's door
+ * sound schedule: for a member with no playlist, one of the sounds of the
+ * rules in force, before default.
  */
 export async function panelGreetings() {
   const [
@@ -126,6 +129,7 @@ export async function panelGreetings() {
     { playlists, defaults, versions },
     { defaults: phrases, members: ownPhrases },
     voice,
+    soundRules,
   ] = await Promise.all([
     db
       .select({
@@ -140,6 +144,7 @@ export async function panelGreetings() {
     panelPlaylists(),
     panelPhrases(),
     panelVoice(),
+    panelSoundRules(),
   ])
   const suffixes = new Map(
     suffixRows.flatMap((row) =>
@@ -207,12 +212,16 @@ export async function panelGreetings() {
     }
   }
   for (const soundId of defaults) link(soundId)
+  for (const rule of soundRules) rule.sounds.forEach(link)
   return {
     suffix,
     color: {},
     playlist,
     pool,
     default: defaults,
+    // For members with an empty playlist, before the defaults: the door
+    // pools the sounds of the rules in force at open time.
+    sound_rules: soundRules,
     quiet: [...quiet].sort(),
     phrases,
     member_phrases: memberPhrases,

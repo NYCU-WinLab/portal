@@ -223,3 +223,33 @@ export const doorVoiceClips = pgTable("door_voice_clips", {
   audioType: text().notNull(),
   createdAt: timestamp({ withTimezone: true }).defaultNow().notNull(),
 })
+
+// The lab's door sounds by the time of day, for members whose playlist is
+// empty: when a rule is in force the door picks one of its sounds at random,
+// otherwise one of the defaults. Times and days work as in door_phrases.
+// sound_ids may name a sound since deleted; readers skip it.
+export const doorSoundRules = pgTable(
+  "door_sound_rules",
+  {
+    id: uuid().defaultRandom().primaryKey(),
+    startsAt: smallint().notNull(),
+    endsAt: smallint().notNull(),
+    days: smallint().default(127).notNull(),
+    enabled: boolean().default(true).notNull(),
+    soundIds: uuid().array().notNull(),
+    createdBy: uuid().references(() => user.id, { onDelete: "set null" }),
+    updatedBy: uuid().references(() => user.id, { onDelete: "set null" }),
+    createdAt: timestamp({ withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp({ withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    check(
+      "door_sound_rules_times",
+      sql`${table.startsAt} between 0 and 1439 and ${table.endsAt} between 0 and 1439 and ${table.startsAt} <> ${table.endsAt}`
+    ),
+    check(
+      "door_sound_rules_sounds",
+      sql`cardinality(${table.soundIds}) between 1 and 50`
+    ),
+  ]
+)

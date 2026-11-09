@@ -1534,6 +1534,83 @@
     }
   },
   {
+    "name": "create_door_sound_rule",
+    "title": "新增門口音效排程",
+    "description": "Adds a rule to the lab's door sound schedule: during the time range on those days, members with an empty playlist hear one of these pool sounds. Rules may overlap; then the sounds of every rule in force are pooled. Door admins only.",
+    "kind": "mutation",
+    "app": "greetings",
+    "admin": "door",
+    "hash": "f08db443f4731d82",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "days": {
+          "default": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7
+          ],
+          "description": "Weekdays the range starts on, 1 Monday to 7 Sunday.",
+          "items": {
+            "maximum": 7,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "maxItems": 7,
+          "minItems": 1,
+          "type": "array"
+        },
+        "enabled": {
+          "default": true,
+          "type": "boolean"
+        },
+        "ends_at": {
+          "description": "HH:MM, Asia/Taipei; at or before starts_at runs past midnight.",
+          "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
+          "type": "string"
+        },
+        "sound_ids": {
+          "description": "Pool sounds (ids from list_door_sounds); one plays at random.",
+          "items": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          },
+          "maxItems": 50,
+          "minItems": 1,
+          "type": "array"
+        },
+        "starts_at": {
+          "description": "HH:MM, Asia/Taipei.",
+          "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "starts_at",
+        "ends_at",
+        "sound_ids"
+      ],
+      "type": "object"
+    },
+    "output": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "type": "object"
+    }
+  },
+  {
     "name": "create_leave",
     "title": "請假",
     "description": "Signs the signed-in member up as away from one Monday lab meeting. date must be one of the next 8 Mondays (today counts if Monday), the same choices the page offers; one sign-up per member per Monday. The reason is shown to the whole lab, so confirm the date and wording with the member first.",
@@ -1810,6 +1887,41 @@
     "description": "Deletes a sound from the door sound pool and from every playlist it is on. Only its uploader or a door admin may.",
     "kind": "mutation",
     "app": "greetings",
+    "hash": "dfea24f3426da00b",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "id": {
+          "format": "uuid",
+          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "type": "object"
+    },
+    "output": {
+      "additionalProperties": false,
+      "properties": {
+        "deleted": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "deleted"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "delete_door_sound_rule",
+    "title": "刪除門口音效排程",
+    "description": "Deletes a door sound rule by its id. Door admins only; to pause one, update it with enabled false.",
+    "kind": "mutation",
+    "app": "greetings",
+    "admin": "door",
     "hash": "dfea24f3426da00b",
     "input": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -6541,6 +6653,121 @@
         "defaults",
         "now",
         "can_edit_defaults"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "list_door_sound_rules",
+    "title": "門口音效排程",
+    "description": "The lab's door sound schedule: rules with starts_at, ends_at (HH:MM Asia/Taipei; an end at or before the start runs past midnight), days (1 Monday to 7 Sunday, the day the range starts), sounds ({id, label}) and enabled. A member's own playlist always wins; for members with an empty playlist the door plays one of the sounds of the rules in force, else one of the lab's defaults. now lists the rule ids in force at this moment and now_sounds what such a member would hear; can_edit says whether the caller is a door admin.",
+    "kind": "query",
+    "app": "greetings",
+    "hash": "7cd99057372190be",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {},
+      "type": "object"
+    },
+    "output": {
+      "additionalProperties": false,
+      "properties": {
+        "can_edit": {
+          "type": "boolean"
+        },
+        "now": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "now_from": {
+          "enum": [
+            "defaults",
+            "schedule"
+          ],
+          "type": "string"
+        },
+        "now_sounds": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "label"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "rules": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "days": {
+                "items": {
+                  "type": "number"
+                },
+                "type": "array"
+              },
+              "enabled": {
+                "type": "boolean"
+              },
+              "ends_at": {
+                "type": "string"
+              },
+              "id": {
+                "type": "string"
+              },
+              "sounds": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "label"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "starts_at": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "starts_at",
+              "ends_at",
+              "days",
+              "sounds",
+              "enabled"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "rules",
+        "now",
+        "now_sounds",
+        "now_from",
+        "can_edit"
       ],
       "type": "object"
     }
@@ -12503,6 +12730,89 @@
         "enabled",
         "first_visit",
         "default"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "update_door_sound_rule",
+    "title": "修改門口音效排程",
+    "description": "Replaces a door sound rule's times, days, sounds and enabled flag, by its id from list_door_sound_rules. Door admins only.",
+    "kind": "mutation",
+    "app": "greetings",
+    "admin": "door",
+    "hash": "872fcf7e7b03c6b5",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "days": {
+          "default": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7
+          ],
+          "description": "Weekdays the range starts on, 1 Monday to 7 Sunday.",
+          "items": {
+            "maximum": 7,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "maxItems": 7,
+          "minItems": 1,
+          "type": "array"
+        },
+        "enabled": {
+          "default": true,
+          "type": "boolean"
+        },
+        "ends_at": {
+          "description": "HH:MM, Asia/Taipei; at or before starts_at runs past midnight.",
+          "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
+          "type": "string"
+        },
+        "id": {
+          "format": "uuid",
+          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+          "type": "string"
+        },
+        "sound_ids": {
+          "description": "Pool sounds (ids from list_door_sounds); one plays at random.",
+          "items": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          },
+          "maxItems": 50,
+          "minItems": 1,
+          "type": "array"
+        },
+        "starts_at": {
+          "description": "HH:MM, Asia/Taipei.",
+          "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "starts_at",
+        "ends_at",
+        "sound_ids",
+        "id"
+      ],
+      "type": "object"
+    },
+    "output": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
       ],
       "type": "object"
     }
