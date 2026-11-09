@@ -220,6 +220,7 @@ import {
 import {
   addPlaylist,
   addSong,
+  clearQueue,
   getLyrics,
   likeSong,
   listActivity,
@@ -555,6 +556,7 @@ export const actionGroups: { app: ApiApp | null; actions: Action[] }[] = [
       skipSong,
       previousSong,
       removeSong,
+      clearQueue,
       setPaused,
       setVolume,
       setAutoplay,

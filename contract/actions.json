@@ -1134,6 +1134,31 @@
     }
   },
   {
+    "name": "clear_queue",
+    "title": "清空佇列",
+    "description": "Take every waiting song out of the queue. The playing song keeps playing.",
+    "kind": "mutation",
+    "app": "music",
+    "hash": "324c5505bb84840b",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {},
+      "type": "object"
+    },
+    "output": {
+      "additionalProperties": false,
+      "properties": {
+        "count": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "count"
+      ],
+      "type": "object"
+    }
+  },
+  {
     "name": "close_bento_order",
     "title": "關單",
     "description": "Closes an order once it is sent to the restaurant (bento admins only): no more lines can be added, removed or copied.",
@@ -5535,7 +5560,7 @@
     "description": "Recent actions, newest first: who added, cut in, skipped, removed, paused, resumed or changed the volume (a member's clicks within a minute show as the level they ended on), with the song title and, for playlists, how many songs.",
     "kind": "query",
     "app": "music",
-    "hash": "76f20a858d82e39c",
+    "hash": "6e7fd3d858b0b22e",
     "input": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
@@ -5592,6 +5617,7 @@
                   "add",
                   "auto",
                   "autoplay",
+                  "clear",
                   "cut_in",
                   "next",
                   "pause",

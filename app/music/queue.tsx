@@ -2,6 +2,7 @@
 
 import { EllipsisIcon } from "lucide-react"
 
+import { ConfirmDialog } from "@/components/confirm-dialog"
 import { EmptyState } from "@/components/empty-state"
 import { SectionHeader } from "@/components/page-header"
 import { Badge } from "@/components/ui/badge"
@@ -14,7 +15,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import type { listQueue } from "@/lib/actions/music"
 
-import { add, next, remove } from "./actions"
+import { add, clear, next, remove } from "./actions"
 import { LikeButton } from "./like-button"
 import { ok } from "./ok"
 import { addedAsLabel, addedLine, Cover, length } from "./song"
@@ -25,7 +26,22 @@ type Item = Awaited<ReturnType<typeof listQueue.run>>["items"][number]
 export function Queue({ items }: { items: Item[] }) {
   return (
     <section aria-label="接下來" className="flex flex-col gap-4">
-      <SectionHeader title={`接下來 ${items.length ? items.length : ""}`} />
+      <SectionHeader
+        title={`接下來 ${items.length ? items.length : ""}`}
+        actions={
+          items.length > 0 && (
+            <ConfirmDialog
+              trigger={<Button variant="ghost">全部移除</Button>}
+              title={`把 ${items.length} 首歌全部移出佇列？`}
+              confirmLabel="全部移除"
+              pendingLabel="移除中…"
+              onConfirm={async () => {
+                ok(await clear({}))
+              }}
+            />
+          )
+        }
+      />
       {items.length ? (
         <ol className="flex flex-col">
           {items.map((item) => (

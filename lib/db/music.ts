@@ -100,6 +100,7 @@ export const musicActivities = pgTable(
         "skip",
         "previous",
         "remove",
+        "clear",
         "pause",
         "resume",
         "volume",
