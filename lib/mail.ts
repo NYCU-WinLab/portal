@@ -17,6 +17,10 @@ export type Mail = {
   icsMethod?: "REQUEST" | "CANCEL"
 }
 
+/** A mail as actions queue it: always with the html from mailBody
+ * (lib/mail-body.ts), so every mail has the ui.winlab.tw look. */
+export type QueuedMail = Mail & { html: string }
+
 let transport: Transporter | null = null
 
 /** False when SMTP is not configured; queued mail then waits. */
