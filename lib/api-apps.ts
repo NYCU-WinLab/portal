@@ -27,6 +27,12 @@ export const apiApps = {
 export type ApiApp = keyof typeof apiApps
 export const apiAppKeys = Object.keys(apiApps) as [ApiApp, ...ApiApp[]]
 
+// The apps a service key can be allowed into: their actions never act as a
+// person (no profile, no "mine"), so a key that belongs to nobody can run
+// them. Add an app here only when every action in it is like that.
+export const serviceApps = ["invitations"] as const satisfies ApiApp[]
+export type ServiceApp = (typeof serviceApps)[number]
+
 /** The curl line that runs one action with a key, shown on /api-keys. */
 export const curlLine = (token: string, action: string) =>
   `curl -X POST -H "Authorization: Bearer ${token}" -H "Content-Type: application/json" -d '{}' https://portal.winlab.tw/api/actions/${action}`

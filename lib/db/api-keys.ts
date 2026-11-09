@@ -43,3 +43,22 @@ export const apiKeys = pgTable(
   },
   (table) => [index().on(table.userId)]
 )
+
+// A service's key (viewer.winlab.tw mailing invitations, say): owned by the
+// lab, not by a member, so it keeps working when whoever made it leaves.
+// Only portal admins make and revoke them, and only into the apps in
+// serviceApps (lib/api-apps.ts), whose actions never need a person. A key
+// is "wsk_" and 43 base64url characters; only its SHA-256 is kept. Its id
+// is the actor's userId when it runs an action.
+export const serviceKeys = pgTable("service_keys", {
+  id: uuid().defaultRandom().primaryKey(),
+  service: text().notNull(),
+  tokenHash: text().notNull().unique(),
+  prefix: text().notNull(),
+  apps: text().array().notNull(),
+  createdBy: uuid().references(() => user.id, { onDelete: "set null" }),
+  createdAt: timestamp({ withTimezone: true }).defaultNow().notNull(),
+  lastUsedAt: timestamp({ withTimezone: true }),
+  revokedAt: timestamp({ withTimezone: true }),
+  revokedBy: uuid().references(() => user.id, { onDelete: "set null" }),
+})

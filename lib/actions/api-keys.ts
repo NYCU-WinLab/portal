@@ -6,6 +6,7 @@ import { z } from "zod"
 import { isAdmin } from "@/lib/actions/authz"
 import { type Actor, defineAction } from "@/lib/actions/define"
 import { apiAppKeys, type ApiApp } from "@/lib/api-apps"
+import { checkServiceKey } from "@/lib/actions/service-keys"
 import { isLabMember, isLabMemberNow } from "@/lib/auth/member"
 import { db } from "@/lib/db"
 import { apiKeys, user } from "@/lib/db/schema"
@@ -132,7 +133,14 @@ export const revokeApiKey = defineAction({
 })
 
 export type ApiKeyCheck =
-  | { ok: true; userId: string; keyId: string; apps: ApiApp[] }
+  | {
+      ok: true
+      userId: string
+      keyId: string
+      apps: ApiApp[]
+      // A service key's service; its userId is then the key's id.
+      service?: string
+    }
   | { ok: false; status: 401 | 403 | 503; error: string }
 
 /** Checks a bearer key for the HTTP API. Not an action: the caller has no
@@ -147,6 +155,18 @@ export async function checkApiKey(
     status: 401,
     error: "invalid or revoked key",
   } as const
+  // A service key belongs to no member, so it has no membership to check.
+  if (token.startsWith("wsk_")) {
+    const key = await checkServiceKey(token, { touch })
+    if (!key) return unauthorized
+    return {
+      ok: true,
+      userId: key.id,
+      keyId: key.id,
+      apps: key.apps,
+      service: key.service,
+    }
+  }
   if (!TOKEN.test(token)) return unauthorized
   const live = and(
     eq(apiKeys.tokenHash, hash(token)),

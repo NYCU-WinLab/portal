@@ -421,6 +421,13 @@
       "when": 1794192627230,
       "tag": "0059_red_gravity",
       "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1794194127181,
+      "tag": "0060_long_texas_twister",
+      "breakpoints": true
     }
   ]
 }

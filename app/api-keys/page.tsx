@@ -8,12 +8,14 @@ import { EmptyState } from "@/components/empty-state"
 import { PageHeader, SectionHeader } from "@/components/page-header"
 import { PortalShell } from "@/components/portal-shell"
 import { listApiKeys } from "@/lib/actions/api-keys"
+import { listServiceKeys } from "@/lib/actions/service-keys"
 import { isAdmin } from "@/lib/actions/authz"
 import { runAction } from "@/lib/actions/define"
 import { apiApps, type ApiApp, curlLine, listLine } from "@/lib/api-apps"
 import { requireActor } from "@/lib/auth/session"
 
 import { CreateKey, RevokeKey } from "./key-forms"
+import { CreateServiceKey, RevokeServiceKey } from "./service-key-forms"
 import { apiKeysPage } from "./nav"
 
 export const dynamic = "force-dynamic"
@@ -27,6 +29,41 @@ const day = (date: Date | null) =>
         day: "numeric",
       })
     : "還沒用過"
+
+type ServiceKey = Awaited<
+  ReturnType<typeof listServiceKeys.run>
+>["keys"][number]
+
+function ServiceKeyList({ keys }: { keys: ServiceKey[] }) {
+  if (keys.length === 0) return <EmptyState noun="服務金鑰" />
+  return (
+    <ul className="flex stagger-rise flex-col">
+      {keys.map((key) => (
+        <li
+          key={key.id}
+          className="flex min-h-14 items-center gap-4 border-b border-border py-3"
+        >
+          <span className="flex min-w-0 flex-1 flex-col">
+            <span className="truncate">{key.service}</span>
+            <span className="text-muted-foreground">{appNames(key.apps)}</span>
+            <span className="truncate text-muted-foreground">
+              {[
+                `${key.prefix}…`,
+                key.createdBy && `${key.createdBy} 建立 ${day(key.createdAt)}`,
+                key.lastUsedAt
+                  ? `上次 ${day(key.lastUsedAt)}`
+                  : day(key.lastUsedAt),
+              ]
+                .filter(Boolean)
+                .join("，")}
+            </span>
+          </span>
+          <RevokeServiceKey id={key.id} service={key.service} />
+        </li>
+      ))}
+    </ul>
+  )
+}
 
 type Key = Awaited<ReturnType<typeof listApiKeys.run>>["keys"][number]
 
@@ -67,11 +104,12 @@ function KeyList({ keys, owner }: { keys: Key[]; owner: boolean }) {
 
 export default async function ApiKeysPage() {
   const actor = await requireActor("/api-keys")
-  const admin =
-    (await isAdmin(actor, "portal")) || (await isAdmin(actor, "door"))
-  const [{ keys: mine }, everyone] = await Promise.all([
+  const portalAdmin = await isAdmin(actor, "portal")
+  const admin = portalAdmin || (await isAdmin(actor, "door"))
+  const [{ keys: mine }, everyone, services] = await Promise.all([
     runAction(listApiKeys, actor, {}),
     admin ? runAction(listApiKeys, actor, { all: true }) : null,
+    portalAdmin ? runAction(listServiceKeys, actor, {}) : null,
   ])
 
   return (
@@ -97,6 +135,12 @@ export default async function ApiKeysPage() {
           <SectionHeader title="我的金鑰" />
           <KeyList keys={mine} owner={false} />
         </section>
+        {services && (
+          <section className="flex flex-col gap-2">
+            <SectionHeader title="服務金鑰" actions={<CreateServiceKey />} />
+            <ServiceKeyList keys={services.keys} />
+          </section>
+        )}
         {everyone && (
           <section className="flex flex-col gap-2">
             <SectionHeader title="所有人" />

@@ -11202,7 +11202,7 @@
   {
     "name": "send_invitation",
     "title": "寄邀請信",
-    "description": "Mails someone an invitation to open a link in a lab service (viewer.winlab.tw or meet.winlab.tw only), from the lab's mail address, in a fixed text that names the service. title names what the link opens (one line of plain words: no link, address, slash, colon or dotted word such as a file extension), access the access the link gives (view or comment), expiresAt when the link stops working. At most 30 a member an hour.",
+    "description": "Mails someone an invitation to open a link in a lab service (viewer.winlab.tw or meet.winlab.tw only), from the lab's mail address, in a fixed text that names the service. title names what the link opens (one line of plain words: no link, address, slash, colon or dotted word such as a file extension), access the access the link gives (view or comment), expiresAt when the link stops working. At most 30 an hour for a member, 300 for a service key.",
     "kind": "mutation",
     "app": "invitations",
     "hash": "ada5d7ba43300308",

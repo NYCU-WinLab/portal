@@ -16,6 +16,9 @@ export type Actor = {
   via: "web" | "mcp" | "api"
   tokenId?: string
   ip?: string
+  // Set when a service key runs the action: the service's name. userId is
+  // then the key's id, not a member.
+  service?: string
 }
 
 /**
