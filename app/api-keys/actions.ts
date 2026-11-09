@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache"
 
 import { createApiKey, revokeApiKey } from "@/lib/actions/api-keys"
+import { createServiceKey, revokeServiceKey } from "@/lib/actions/service-keys"
 import { errorMessage, runAction } from "@/lib/actions/define"
 import { requireActor } from "@/lib/auth/session"
 
@@ -29,6 +30,33 @@ export async function revokeApiKeyAction(
   const actor = await requireActor("/api-keys")
   try {
     await runAction(revokeApiKey, actor, { id })
+  } catch (error) {
+    return { error: errorMessage(error) }
+  }
+  revalidatePath("/api-keys")
+  return {}
+}
+
+export async function createServiceKeyAction(input: {
+  service: string
+  apps: string[]
+}): Promise<{ error?: string; token?: string }> {
+  const actor = await requireActor("/api-keys")
+  try {
+    const { token } = await runAction(createServiceKey, actor, input)
+    revalidatePath("/api-keys")
+    return { token }
+  } catch (error) {
+    return { error: errorMessage(error) }
+  }
+}
+
+export async function revokeServiceKeyAction(
+  id: string
+): Promise<{ error?: string }> {
+  const actor = await requireActor("/api-keys")
+  try {
+    await runAction(revokeServiceKey, actor, { id })
   } catch (error) {
     return { error: errorMessage(error) }
   }

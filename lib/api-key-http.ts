@@ -42,7 +42,12 @@ function refuse(
   )
 }
 
-type KeyHolder = { userId: string; keyId: string; apps: Set<string> }
+type KeyHolder = {
+  userId: string
+  keyId: string
+  apps: Set<string>
+  service?: string
+}
 
 /** The key in the Authorization header, or the response refusing it.
  * touch: false checks it without counting as a use (the change stream's
@@ -57,7 +62,12 @@ export async function authenticate(
   if (!token) return refuse(401, "missing bearer key")
   const check = await checkApiKey(token, { touch })
   if (!check.ok) return refuse(check.status, check.error)
-  return { userId: check.userId, keyId: check.keyId, apps: new Set(check.apps) }
+  return {
+    userId: check.userId,
+    keyId: check.keyId,
+    apps: new Set(check.apps),
+    service: check.service,
+  }
 }
 
 /** Whether the key may call this action at all: on MCP, in an app, and in
@@ -98,7 +108,13 @@ export async function runWithKey(
   try {
     const result = await runAction(
       action,
-      { userId: holder.userId, via: "api", tokenId: holder.keyId, ip },
+      {
+        userId: holder.userId,
+        via: "api",
+        tokenId: holder.keyId,
+        ip,
+        service: holder.service,
+      },
       input
     )
     return Response.json(result ?? null, { headers: noStore })

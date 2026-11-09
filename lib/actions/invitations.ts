@@ -20,8 +20,10 @@ const SERVICES: Record<string, string> = {
   "meet.winlab.tw": "WinLab Meet",
 }
 
-/** Invitations one member may send in an hour. */
+/** Invitations one member may send in an hour; a service key, which sends
+ * for everyone using its service, may send more. */
 const PER_HOUR = 30
+const PER_HOUR_SERVICE = 300
 
 // The mail prints the parsed link (url.href), never the caller's string,
 // and only a plain https link into a service: printable ASCII with no
@@ -80,7 +82,7 @@ export const sendInvitation = defineAction({
   name: "send_invitation",
   title: "寄邀請信",
   description:
-    "Mails someone an invitation to open a link in a lab service (viewer.winlab.tw or meet.winlab.tw only), from the lab's mail address, in a fixed text that names the service. title names what the link opens (one line of plain words: no link, address, slash, colon or dotted word such as a file extension), access the access the link gives (view or comment), expiresAt when the link stops working. At most 30 a member an hour.",
+    "Mails someone an invitation to open a link in a lab service (viewer.winlab.tw or meet.winlab.tw only), from the lab's mail address, in a fixed text that names the service. title names what the link opens (one line of plain words: no link, address, slash, colon or dotted word such as a file extension), access the access the link gives (view or comment), expiresAt when the link stops working. At most 30 an hour for a member, 300 for a service key.",
   kind: "mutation",
   input: z.object({
     to: z.email("收件人信箱格式不對"),
@@ -108,7 +110,8 @@ export const sendInvitation = defineAction({
             gt(invitations.createdAt, sql`now() - interval '1 hour'`)
           )
         )
-      if (sent >= PER_HOUR) throw new Error("這一小時寄太多邀請了")
+      if (sent >= (actor.service ? PER_HOUR_SERVICE : PER_HOUR))
+        throw new Error("這一小時寄太多邀請了")
       const lines = [
         `你收到一份 ${service} 的邀請，可以打開「${input.title}」。`,
         "",

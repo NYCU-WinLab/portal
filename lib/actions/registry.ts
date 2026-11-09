@@ -75,6 +75,11 @@ import {
 } from "@/lib/actions/door-phrases"
 import { createApiKey, listApiKeys, revokeApiKey } from "@/lib/actions/api-keys"
 import {
+  createServiceKey,
+  listServiceKeys,
+  revokeServiceKey,
+} from "@/lib/actions/service-keys"
+import {
   deleteDoorSound,
   getDoorSound,
   listDoorSounds,
@@ -529,6 +534,9 @@ export const actionGroups: { app: ApiApp | null; actions: Action[] }[] = [
       listApiKeys,
       createApiKey,
       revokeApiKey,
+      listServiceKeys,
+      createServiceKey,
+      revokeServiceKey,
     ],
   },
   {
