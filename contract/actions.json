@@ -5510,6 +5510,56 @@
     }
   },
   {
+    "name": "get_unseen_release_notes",
+    "title": "沒看過的更新",
+    "description": "The release notes the signed-in member has not seen, newest first (at most the last 7 days), or none when they already closed the release dialog today (Asia/Taipei): the dialog shows at most once a day.",
+    "kind": "query",
+    "app": "bulletin",
+    "hash": "20f4966875c458dc",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {},
+      "type": "object"
+    },
+    "output": {
+      "additionalProperties": false,
+      "properties": {
+        "notes": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "body": {
+                "type": "string"
+              },
+              "publishedAt": {
+                "format": "date-time",
+                "type": "string"
+              },
+              "sha": {
+                "type": "string"
+              },
+              "slug": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "slug",
+              "body",
+              "sha",
+              "publishedAt"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "notes"
+      ],
+      "type": "object"
+    }
+  },
+  {
     "name": "like_song",
     "title": "按愛心",
     "description": "Like a song by YouTube video id, so it is kept in the caller's own list (list_liked_songs). Likes are private to the caller and belong to the song, not to a queue item. Liking a liked song changes nothing. At most 500 songs per member.",
@@ -9468,6 +9518,68 @@
     }
   },
   {
+    "name": "list_release_notes",
+    "title": "版本更新",
+    "description": "What changed in the portal for members, newest first: slug, body (Chinese, one change per line), sha (the commit deployed with it, as in the bottom-left build) and published_at. before pages back by published_at.",
+    "kind": "query",
+    "app": "bulletin",
+    "hash": "0c34df5f13bb5329",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "before": {
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
+          "type": "string"
+        },
+        "limit": {
+          "default": 100,
+          "maximum": 200,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "output": {
+      "additionalProperties": false,
+      "properties": {
+        "notes": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "body": {
+                "type": "string"
+              },
+              "publishedAt": {
+                "format": "date-time",
+                "type": "string"
+              },
+              "sha": {
+                "type": "string"
+              },
+              "slug": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "slug",
+              "body",
+              "sha",
+              "publishedAt"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "notes"
+      ],
+      "type": "object"
+    }
+  },
+  {
     "name": "list_room_availability",
     "title": "教室空檔",
     "description": "Free and busy time in the CS department's meeting rooms for up to 14 days from date (Asia/Taipei), read live from the department system, the grid 新增會議 on /meetings draws. Each run of the 30-minute grid lists the free-tier rooms open, the paid ones, and the rooms the lab's shared account already holds; lab_bookings says who booked those through the portal and what for. Every member gets the same answer. Book a slot with book_meeting.",
@@ -10091,6 +10203,31 @@
       },
       "required": [
         "version"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "mark_release_notes_seen",
+    "title": "看過更新",
+    "description": "Marks every release note so far as seen by the signed-in member, so the release dialog stays closed until a newer note on a later day.",
+    "kind": "mutation",
+    "app": "bulletin",
+    "hash": "3d4abe9355d2a346",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {},
+      "type": "object"
+    },
+    "output": {
+      "additionalProperties": false,
+      "properties": {
+        "ok": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "ok"
       ],
       "type": "object"
     }

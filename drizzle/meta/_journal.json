@@ -435,6 +435,13 @@
       "when": 1794271334491,
       "tag": "0061_avatars_app",
       "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "7",
+      "when": 1794273656645,
+      "tag": "0062_release_notes",
+      "breakpoints": true
     }
   ]
 }

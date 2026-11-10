@@ -22,6 +22,7 @@ COPY --from=build /app/public ./public
 COPY --from=build /app/migrate.mjs ./migrate.mjs
 COPY --from=build /app/pdf-worker.mjs ./pdf-worker.mjs
 COPY --from=build /app/drizzle ./drizzle
+COPY --from=build /app/release-notes ./release-notes
 USER node
 EXPOSE 3000
 # web by default; compose's migrate service runs `node migrate.mjs`.

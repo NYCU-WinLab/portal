@@ -21,6 +21,8 @@ services:
     command: ["node", "migrate.mjs"]
     environment:
       DATABASE_URL: postgres://portal:${POSTGRES_PASSWORD}@postgres:5432/portal
+      # Stamps the release notes it publishes with the deployed commit.
+      PORTAL_VERSION: ${PORTAL_VERSION:-}
     depends_on:
       postgres:
         condition: service_healthy

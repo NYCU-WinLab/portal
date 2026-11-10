@@ -50,6 +50,9 @@ export type Action<
   /** Set when it changes what /api/door/greetings serves, so the door
    * panel fetches it again right after the change. */
   refreshesDoorPanel?: true
+  /** Set on a write only its own member sees (closing the release dialog),
+   * so it does not refresh every open page in the lab. */
+  quiet?: true
 }
 
 /** Names of every action created, for the registry check. */
@@ -78,7 +81,7 @@ export async function runAction<Input extends z.ZodObject, Output>(
       const result = await action.run(actor, parsed)
       // Open pages refresh on this; a failed announcement never fails the
       // change itself.
-      if (action.kind === "mutation")
+      if (action.kind === "mutation" && !action.quiet)
         await announceChange(action.name).catch(() => {})
       if (action.kind === "mutation" && action.refreshesDoorPanel)
         void reloadGreetings()
