@@ -279,7 +279,6 @@ export const actionGroups: { app: ApiApp | null; actions: Action[] }[] = [
       loadGravatars,
       removeMyAvatar,
       removeMemberAvatar,
-      getMemberAvatar,
       listHomePins,
       setHomePin,
     ],
@@ -483,6 +482,12 @@ export const actionGroups: { app: ApiApp | null; actions: Action[] }[] = [
   {
     app: "invitations",
     actions: [sendInvitation],
+  },
+  {
+    // Its own app so a service key (viewer.winlab.tw's presence avatars)
+    // can read pictures without the member's profile.
+    app: "avatars",
+    actions: [getMemberAvatar],
   },
   {
     app: "groups",

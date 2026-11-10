@@ -4128,7 +4128,7 @@
     "title": "成員頭像",
     "description": "One member's avatar as base64 WebP (size small 96px or large 256px) with its version, or null when they have none. Name the member by portal user_id or by Keycloak username. Any signed-in member may look.",
     "kind": "query",
-    "app": "profile",
+    "app": "avatars",
     "hash": "eb3e0b771d0445e9",
     "input": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",

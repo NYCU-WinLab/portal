@@ -22,6 +22,7 @@ export const apiApps = {
   trip: "出差文件",
   groups: "群組信",
   invitations: "邀請信",
+  avatars: "頭像",
 } as const
 
 export type ApiApp = keyof typeof apiApps
@@ -30,7 +31,10 @@ export const apiAppKeys = Object.keys(apiApps) as [ApiApp, ...ApiApp[]]
 // The apps a service key can be allowed into: their actions never act as a
 // person (no profile, no "mine"), so a key that belongs to nobody can run
 // them. Add an app here only when every action in it is like that.
-export const serviceApps = ["invitations"] as const satisfies ApiApp[]
+export const serviceApps = [
+  "invitations",
+  "avatars",
+] as const satisfies ApiApp[]
 export type ServiceApp = (typeof serviceApps)[number]
 
 /** The curl line that runs one action with a key, shown on /api-keys. */
