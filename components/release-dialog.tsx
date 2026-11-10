@@ -1,10 +1,9 @@
 "use client"
 
-import Link from "next/link"
 import * as React from "react"
 
 import { ReleaseNotes, type ReleaseNote } from "@/components/release-notes"
-import { Button, buttonVariants } from "@/components/ui/button"
+import { Button } from "@/components/ui/button"
 import {
   Dialog,
   DialogContent,
@@ -26,19 +25,12 @@ export function ReleaseDialog({ notes }: { notes: ReleaseNote[] }) {
 
   return (
     <Dialog open={open} onOpenChange={(next) => !next && close()}>
-      <DialogContent className="max-h-160 overflow-y-auto">
+      <DialogContent size="wide" className="max-h-160 overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Portal 更新了</DialogTitle>
         </DialogHeader>
         <ReleaseNotes notes={notes} />
         <DialogFooter>
-          <Link
-            href="/changelog"
-            className={buttonVariants({ variant: "outline" })}
-            onClick={close}
-          >
-            全部更新
-          </Link>
           <Button onClick={close}>知道了</Button>
         </DialogFooter>
       </DialogContent>

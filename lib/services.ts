@@ -40,6 +40,13 @@ export const serviceGroups: { title: string; apps: Service[] }[] = [
         emoji: "📅",
         href: "/calendar",
       },
+      {
+        key: "changelog",
+        label: "Changelog",
+        name: "版本更新",
+        emoji: "🆕",
+        href: "/changelog",
+      },
       { key: "door", label: "Door", name: "門禁", emoji: "🚪", href: "/door" },
       {
         key: "gallery",
