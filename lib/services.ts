@@ -242,6 +242,13 @@ export const serviceGroups: { title: string; apps: Service[] }[] = [
         href: "https://transcribe.winlab.tw",
       },
       {
+        key: "tts",
+        label: "TTS",
+        name: "語音合成",
+        emoji: "🗣️",
+        href: "https://tts.winlab.tw",
+      },
+      {
         key: "video",
         label: "Video",
         name: "影片",
