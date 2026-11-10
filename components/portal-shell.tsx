@@ -1,6 +1,9 @@
 import { AppShell } from "@/components/app-shell"
 import { LiveRefresh } from "@/components/live-refresh"
+import { ReleaseDialog } from "@/components/release-dialog"
 import { adminAppsOf, type Gated, visibleTo } from "@/lib/actions/authz"
+import { runAction } from "@/lib/actions/define"
+import { getUnseenReleaseNotes } from "@/lib/actions/releases"
 import { getSession } from "@/lib/auth/session"
 
 // The build in the bottom left. The deploy sets PORTAL_VERSION (sha-<commit>)
@@ -34,7 +37,7 @@ export async function PortalShell({
   children: React.ReactNode
 }) {
   const gated = nav?.some((item) => item.admin)
-  const session = page && !gated ? null : await getSession()
+  const session = await getSession()
   const shown =
     nav && gated
       ? visibleTo(
@@ -44,6 +47,14 @@ export async function PortalShell({
           nav
         )
       : nav
+  // The day's first page shows what changed since the member last looked.
+  const unseen = session
+    ? await runAction(
+        getUnseenReleaseNotes,
+        { userId: session.user.id, via: "web" },
+        {}
+      ).catch(() => ({ notes: [] }))
+    : { notes: [] }
   return (
     <AppShell
       layout={layout}
@@ -71,6 +82,7 @@ export async function PortalShell({
       }
     >
       <LiveRefresh />
+      {unseen.notes.length > 0 && <ReleaseDialog notes={unseen.notes} />}
       {children}
     </AppShell>
   )

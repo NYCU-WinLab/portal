@@ -19,3 +19,26 @@ export const announcements = pgTable(
   },
   (table) => [index().on(table.createdAt)]
 )
+
+// What changed for members, one row per release-notes/<slug>.md in the
+// repo. The deploy's migrate step adds the files it has not seen, stamped
+// with the commit being deployed (the bottom-left build) and the time.
+export const releaseNotes = pgTable(
+  "release_notes",
+  {
+    slug: text().primaryKey(),
+    body: text().notNull(),
+    sha: text().notNull(),
+    publishedAt: timestamp({ withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [index().on(table.publishedAt)]
+)
+
+// When each member last closed the release dialog: it shows notes
+// published after that, at most once a day.
+export const releaseReads = pgTable("release_reads", {
+  userId: uuid()
+    .primaryKey()
+    .references(() => user.id, { onDelete: "cascade" }),
+  seenAt: timestamp({ withTimezone: true }).defaultNow().notNull(),
+})

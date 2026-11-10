@@ -34,6 +34,11 @@ import {
   updateAnnouncement,
 } from "@/lib/actions/bulletin"
 import {
+  getUnseenReleaseNotes,
+  listReleaseNotes,
+  markReleaseNotesSeen,
+} from "@/lib/actions/releases"
+import {
   createApproveDocument,
   deleteApproveDocument,
   getApproveDocument,
@@ -317,6 +322,9 @@ export const actionGroups: { app: ApiApp | null; actions: Action[] }[] = [
       createAnnouncement,
       updateAnnouncement,
       deleteAnnouncement,
+      listReleaseNotes,
+      getUnseenReleaseNotes,
+      markReleaseNotesSeen,
     ],
   },
   {
