@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/dialog"
 import { markSeen } from "@/app/changelog/actions"
 
-// The day's first visit shows what changed since the member last closed
+// A visit after a deploy with new notes shows what changed since the member last closed
 // this; closing it, any way, marks those notes seen.
 export function ReleaseDialog({ notes }: { notes: ReleaseNote[] }) {
   const [open, setOpen] = React.useState(true)

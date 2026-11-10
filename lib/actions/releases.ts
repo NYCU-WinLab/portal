@@ -8,7 +8,7 @@ import { releaseNotes, releaseReads } from "@/lib/db/schema"
 // Release notes: what changed for members, written in each PR as
 // release-notes/<slug>.md and published by the deploy (scripts/migrate.ts).
 // The dialog shows a member the notes since they last closed it, at most
-// once a day; /changelog lists them all.
+// after every deploy that brings new ones; /changelog lists them all.
 
 const columns = {
   slug: releaseNotes.slug,
@@ -19,10 +19,6 @@ const columns = {
 
 /** A new member, or one away long, sees at most the last 7 days. */
 const firstLook = sql`now() - interval '7 days'`
-
-/** Today's date in Taipei, the day the dialog counts by. */
-const taipeiDay = (date: Date) =>
-  date.toLocaleDateString("sv-SE", { timeZone: "Asia/Taipei" })
 
 export const listReleaseNotes = defineAction({
   name: "list_release_notes",
@@ -51,7 +47,7 @@ export const getUnseenReleaseNotes = defineAction({
   name: "get_unseen_release_notes",
   title: "沒看過的更新",
   description:
-    "The release notes the signed-in member has not seen, newest first (at most the last 7 days), or none when they already closed the release dialog today (Asia/Taipei): the dialog shows at most once a day.",
+    "The release notes the signed-in member has not seen, newest first (at most the last 7 days), published after they last closed the release dialog.",
   kind: "query",
   input: z.object({}),
   run: async (actor) => {
@@ -59,8 +55,6 @@ export const getUnseenReleaseNotes = defineAction({
       .select({ seenAt: releaseReads.seenAt })
       .from(releaseReads)
       .where(eq(releaseReads.userId, actor.userId))
-    if (read && taipeiDay(read.seenAt) === taipeiDay(new Date()))
-      return { notes: [] }
     const notes = await db
       .select(columns)
       .from(releaseNotes)
@@ -80,7 +74,7 @@ export const markReleaseNotesSeen = defineAction({
   name: "mark_release_notes_seen",
   title: "看過更新",
   description:
-    "Marks every release note so far as seen by the signed-in member, so the release dialog stays closed until a newer note on a later day.",
+    "Marks every release note so far as seen by the signed-in member, so the release dialog stays closed until a newer note is published.",
   kind: "mutation",
   quiet: true,
   input: z.object({}),

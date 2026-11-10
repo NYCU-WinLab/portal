@@ -5512,7 +5512,7 @@
   {
     "name": "get_unseen_release_notes",
     "title": "沒看過的更新",
-    "description": "The release notes the signed-in member has not seen, newest first (at most the last 7 days), or none when they already closed the release dialog today (Asia/Taipei): the dialog shows at most once a day.",
+    "description": "The release notes the signed-in member has not seen, newest first (at most the last 7 days), published after they last closed the release dialog.",
     "kind": "query",
     "app": "bulletin",
     "hash": "20f4966875c458dc",
@@ -10210,7 +10210,7 @@
   {
     "name": "mark_release_notes_seen",
     "title": "看過更新",
-    "description": "Marks every release note so far as seen by the signed-in member, so the release dialog stays closed until a newer note on a later day.",
+    "description": "Marks every release note so far as seen by the signed-in member, so the release dialog stays closed until a newer note is published.",
     "kind": "mutation",
     "app": "bulletin",
     "hash": "3d4abe9355d2a346",

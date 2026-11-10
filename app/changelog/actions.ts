@@ -4,7 +4,7 @@ import { runAction } from "@/lib/actions/define"
 import { markReleaseNotesSeen } from "@/lib/actions/releases"
 import { getSession } from "@/lib/auth/session"
 
-/** Closes the release dialog until a newer note on a later day. */
+/** Closes the release dialog until a newer note is published. */
 export async function markSeen() {
   const session = await getSession()
   if (!session) return
