@@ -8,7 +8,7 @@ import { getSession } from "@/lib/auth/session"
 
 // The build in the bottom left. The deploy sets PORTAL_VERSION (sha-<commit>)
 // in .env, which web reads; the image carries when and where it was built.
-const runningBuild = () => {
+export const runningBuild = () => {
   const sha = process.env.PORTAL_VERSION?.match(/^sha-([0-9a-f]{7,})$/)?.[1]
   return sha
     ? { sha, time: process.env.BUILD_TIME, url: process.env.BUILD_URL }
