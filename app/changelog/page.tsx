@@ -17,7 +17,7 @@ const changelogPage = {
 // Every release note, newest first, the commit beside each change.
 export default async function ChangelogPage() {
   const actor = await requireActor("/changelog")
-  const { notes } = await runAction(listReleaseNotes, actor, {})
+  const { notes } = await runAction(listReleaseNotes, actor, { limit: 200 })
   return (
     <PortalShell page={changelogPage}>
       <div className="flex flex-col gap-12">
