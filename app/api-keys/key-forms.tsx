@@ -14,13 +14,14 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
-import { Switch } from "@/components/ui/switch"
-import { apiApps, apiAppKeys, listLine, type ApiApp } from "@/lib/api-apps"
+import { apiAppKeys, listLine, type ApiApp } from "@/lib/api-apps"
 import { report } from "@/lib/report"
+
+import { type AppActions, AppPicker } from "./app-picker"
 
 import { createApiKeyAction, revokeApiKeyAction } from "./actions"
 
-export function CreateKey() {
+export function CreateKey({ actions }: { actions: AppActions }) {
   const [token, setToken] = React.useState<string | null>(null)
   const [apps, setApps] = React.useState<Set<ApiApp>>(new Set())
 
@@ -38,15 +39,6 @@ export function CreateKey() {
     setToken(token!)
   }
 
-  function toggle(app: ApiApp, on: boolean) {
-    setApps((current) => {
-      const next = new Set(current)
-      if (on) next.add(app)
-      else next.delete(app)
-      return next
-    })
-  }
-
   return (
     <>
       <FormDialog
@@ -54,24 +46,17 @@ export function CreateKey() {
         title="建立 API 金鑰"
         submitLabel="建立"
         onSubmit={submit}
+        size="wide"
       >
         <FormField label="名稱" required>
           <Input name="name" maxLength={60} placeholder="iPhone 捷徑" />
         </FormField>
-        <fieldset className="flex flex-col gap-2">
-          <legend className="mb-2">可以用的 app</legend>
-          <div className="grid grid-cols-2 gap-x-4 gap-y-3">
-            {apiAppKeys.map((app) => (
-              <label key={app} className="flex items-center gap-3">
-                <Switch
-                  checked={apps.has(app)}
-                  onCheckedChange={(on) => toggle(app, on)}
-                />
-                {apiApps[app]}
-              </label>
-            ))}
-          </div>
-        </fieldset>
+        <AppPicker
+          apps={apiAppKeys}
+          actions={actions}
+          value={apps}
+          onChange={setApps}
+        />
       </FormDialog>
       <Dialog
         open={token !== null}
