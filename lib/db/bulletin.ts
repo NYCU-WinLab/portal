@@ -35,7 +35,7 @@ export const releaseNotes = pgTable(
 )
 
 // When each member last closed the release dialog: it shows notes
-// published after that, at most once a day.
+// published after that.
 export const releaseReads = pgTable("release_reads", {
   userId: uuid()
     .primaryKey()

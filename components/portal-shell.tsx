@@ -47,7 +47,7 @@ export async function PortalShell({
           nav
         )
       : nav
-  // The day's first page shows what changed since the member last looked.
+  // A page after a deploy with new notes shows what changed.
   const unseen = session
     ? await runAction(
         getUnseenReleaseNotes,
