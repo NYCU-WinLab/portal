@@ -10,10 +10,12 @@ import { PortalShell } from "@/components/portal-shell"
 import { listApiKeys } from "@/lib/actions/api-keys"
 import { listServiceKeys } from "@/lib/actions/service-keys"
 import { isAdmin } from "@/lib/actions/authz"
+import { actionGroups } from "@/lib/actions/registry"
 import { runAction } from "@/lib/actions/define"
 import { apiApps, type ApiApp, curlLine, listLine } from "@/lib/api-apps"
 import { requireActor } from "@/lib/auth/session"
 
+import type { AppActions } from "./app-picker"
 import { CreateKey, RevokeKey } from "./key-forms"
 import { CreateServiceKey, RevokeServiceKey } from "./service-key-forms"
 import { apiKeysPage } from "./nav"
@@ -67,6 +69,29 @@ function ServiceKeyList({ keys }: { keys: ServiceKey[] }) {
 
 type Key = Awaited<ReturnType<typeof listApiKeys.run>>["keys"][number]
 
+// What each app reaches, listed in the key forms so a member asks only for
+// the apps they need.
+const appActions: AppActions = Object.fromEntries(
+  actionGroups.flatMap(({ app, actions }) =>
+    app
+      ? [
+          [
+            app,
+            // An action off MCP is off API keys too (lib/api-key-http.ts).
+            actions
+              .filter((action) => !action.mcpExcludedBecause)
+              .map((action) => ({
+                name: action.name,
+                title: action.title,
+                kind: action.kind,
+                admin: !!action.admin,
+              })),
+          ],
+        ]
+      : []
+  )
+)
+
 const appNames = (apps: string[]) =>
   apps.map((app) => apiApps[app as ApiApp] ?? app).join("、")
 
@@ -115,7 +140,10 @@ export default async function ApiKeysPage() {
   return (
     <PortalShell page={apiKeysPage}>
       <div className="flex flex-col gap-12">
-        <PageHeader title="API 金鑰" actions={<CreateKey />} />
+        <PageHeader
+          title="API 金鑰"
+          actions={<CreateKey actions={appActions} />}
+        />
         <Focus>
           <FocusLabel>我的金鑰</FocusLabel>
           <FocusTitle>
@@ -137,7 +165,10 @@ export default async function ApiKeysPage() {
         </section>
         {services && (
           <section className="flex flex-col gap-2">
-            <SectionHeader title="服務金鑰" actions={<CreateServiceKey />} />
+            <SectionHeader
+              title="服務金鑰"
+              actions={<CreateServiceKey actions={appActions} />}
+            />
             <ServiceKeyList keys={services.keys} />
           </section>
         )}

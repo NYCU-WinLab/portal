@@ -14,13 +14,14 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
-import { Switch } from "@/components/ui/switch"
-import { apiApps, listLine, serviceApps, type ServiceApp } from "@/lib/api-apps"
+import { listLine, serviceApps, type ServiceApp } from "@/lib/api-apps"
 import { report } from "@/lib/report"
+
+import { type AppActions, AppPicker } from "./app-picker"
 
 import { createServiceKeyAction, revokeServiceKeyAction } from "./actions"
 
-export function CreateServiceKey() {
+export function CreateServiceKey({ actions }: { actions: AppActions }) {
   const [token, setToken] = React.useState<string | null>(null)
   const [apps, setApps] = React.useState<Set<ServiceApp>>(new Set())
 
@@ -38,15 +39,6 @@ export function CreateServiceKey() {
     setToken(token!)
   }
 
-  function toggle(app: ServiceApp, on: boolean) {
-    setApps((current) => {
-      const next = new Set(current)
-      if (on) next.add(app)
-      else next.delete(app)
-      return next
-    })
-  }
-
   return (
     <>
       <FormDialog
@@ -54,24 +46,17 @@ export function CreateServiceKey() {
         title="建立服務金鑰"
         submitLabel="建立"
         onSubmit={submit}
+        size="wide"
       >
         <FormField label="服務" required>
           <Input name="service" maxLength={60} placeholder="viewer.winlab.tw" />
         </FormField>
-        <fieldset className="flex flex-col gap-2">
-          <legend className="mb-2">可以用的 app</legend>
-          <div className="grid grid-cols-2 gap-x-4 gap-y-3">
-            {serviceApps.map((app) => (
-              <label key={app} className="flex items-center gap-3">
-                <Switch
-                  checked={apps.has(app)}
-                  onCheckedChange={(on) => toggle(app, on)}
-                />
-                {apiApps[app]}
-              </label>
-            ))}
-          </div>
-        </fieldset>
+        <AppPicker
+          apps={serviceApps}
+          actions={actions}
+          value={apps}
+          onChange={setApps}
+        />
       </FormDialog>
       <Dialog
         open={token !== null}
