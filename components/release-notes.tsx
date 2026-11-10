@@ -26,9 +26,9 @@ export function ReleaseNotes({ notes }: { notes: ReleaseNote[] }) {
   return (
     <div className="flex flex-col gap-6">
       {[...days].map(([date, list]) => (
-        <section key={date} className="flex flex-col gap-2">
+        <section key={date} className="flex flex-col gap-3">
           <h3 className="text-muted-foreground">{date}</h3>
-          <ul className="flex flex-col gap-2">
+          <ul className="flex flex-col gap-4">
             {list.flatMap((note) =>
               note.body
                 .split("\n")
@@ -39,7 +39,9 @@ export function ReleaseNotes({ notes }: { notes: ReleaseNote[] }) {
                     key={`${note.slug}-${i}`}
                     className="flex items-baseline gap-4"
                   >
-                    <span className="min-w-0 flex-1">{line}</span>
+                    <span className="min-w-0 flex-1 leading-relaxed">
+                      {line}
+                    </span>
                     <span className="shrink-0 font-mono text-muted-foreground">
                       {note.sha}
                     </span>
