@@ -316,11 +316,12 @@ export const listAppointmentSlots = defineAction({
   input: z.object({ user_id: z.uuid() }),
   run: async (_actor, input) => {
     const owner = await ownerOf(input.user_id)
-    if (!owner) throw new Error("這位成員沒有連結行事曆")
-    const schedule = await scheduleOf(owner.id)
-    if (!schedule)
+    // A member whose only source is the portal itself still has a calendar
+    // page; they just take no appointments.
+    const schedule = owner && (await scheduleOf(owner.id))
+    if (!owner || !schedule)
       return {
-        name: owner.name,
+        name: owner?.name ?? "",
         schedule: false,
         synced: true,
         slotMinutes: 0,
