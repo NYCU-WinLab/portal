@@ -10,7 +10,7 @@ import { serviceApps } from "@/lib/api-apps"
 // updates the list.
 describe("service keys", () => {
   test("reach only the apps checked for them", () => {
-    expect([...serviceApps]).toEqual(["invitations"])
+    expect([...serviceApps]).toEqual(["invitations", "avatars"])
   })
 
   test("reach only the actions checked for them", () => {
@@ -23,6 +23,6 @@ describe("service keys", () => {
       .filter((action) => !action.mcpExcludedBecause)
       .map((action) => action.name)
       .sort()
-    expect(reachable).toEqual(["send_invitation"])
+    expect(reachable).toEqual(["get_member_avatar", "send_invitation"])
   })
 })

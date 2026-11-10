@@ -428,6 +428,13 @@
       "when": 1794194127181,
       "tag": "0060_long_texas_twister",
       "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1794271334491,
+      "tag": "0061_avatars_app",
+      "breakpoints": true
     }
   ]
 }
