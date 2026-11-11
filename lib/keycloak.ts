@@ -154,10 +154,19 @@ type RawGroup = {
  * right now: read live, never cached, for deciding a write.
  */
 export async function inProjectGroup(sub: string, groupName: string) {
+  const paths = await getKeycloakUserGroupPaths(sub)
+  return paths.includes(`/winlab-projects/${groupName}`)
+}
+
+/**
+ * The full paths (`/lab-member/114`) of every group a member (by Keycloak id,
+ * the OIDC sub) is directly in, read live.
+ */
+export async function getKeycloakUserGroupPaths(sub: string) {
   const groups = await adminGet<{ path?: string }[]>(
     `/users/${encodeURIComponent(sub)}/groups?max=500&briefRepresentation=true`
   )
-  return groups.some((g) => g.path === `/winlab-projects/${groupName}`)
+  return groups.flatMap((g) => (g.path ? [g.path] : []))
 }
 
 let projects: { groups: ProjectGroup[]; at: number } | null = null

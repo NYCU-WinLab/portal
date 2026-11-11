@@ -8,6 +8,7 @@ import {
 import { FieldList, FieldRow } from "@/components/field-list"
 import { PageHeader, SectionHeader } from "@/components/page-header"
 import { PortalShell } from "@/components/portal-shell"
+import { Badge } from "@/components/ui/badge"
 import { buttonVariants } from "@/components/ui/button"
 import { getMemberAvatar } from "@/lib/actions/avatars"
 import { errorMessage, runAction } from "@/lib/actions/define"
@@ -106,6 +107,19 @@ export default async function ProfilePage() {
                 )}
               </FieldRow>
             ))}
+            <FieldRow label="分組">
+              {profile.groups.length ? (
+                <div className="flex flex-wrap gap-2">
+                  {profile.groups.map((group) => (
+                    <Badge key={group} variant="outline">
+                      {group}
+                    </Badge>
+                  ))}
+                </div>
+              ) : (
+                <span className="text-muted-foreground">沒有分組</span>
+              )}
+            </FieldRow>
           </FieldList>
         )}
         <section className="flex flex-col gap-6">

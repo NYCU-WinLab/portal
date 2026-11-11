@@ -4896,10 +4896,10 @@
   {
     "name": "get_profile",
     "title": "我的資料",
-    "description": "The signed-in member's lab account from Keycloak: Chinese name, English family and given names, account name, email and student id. Read only; members change these in Keycloak's account console.",
+    "description": "The signed-in member's lab account from Keycloak: Chinese name, English family and given names, account name, email, student id, and the Keycloak groups they are in (paths without the leading slash, e.g. lab-member/114). Read only; members change these in Keycloak's account console.",
     "kind": "query",
     "app": "profile",
-    "hash": "d5e1fe8a9f2d7f76",
+    "hash": "383e9b8fefbb219c",
     "input": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {},
@@ -4938,6 +4938,12 @@
             }
           ]
         },
+        "groups": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
         "lastName": {
           "anyOf": [
             {
@@ -4968,7 +4974,8 @@
         "firstName",
         "username",
         "email",
-        "studentId"
+        "studentId",
+        "groups"
       ],
       "type": "object"
     }
