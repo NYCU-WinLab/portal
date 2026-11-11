@@ -564,7 +564,10 @@ export const reviewDeveloperScopes = defineAction({
         await tx
           .update(developerApps)
           .set({
-            approvedScopes: sql`array(select distinct unnest(${developerApps.approvedScopes} || ${request.scopes}::text[]))`,
+            approvedScopes: sql`array(select distinct unnest(${developerApps.approvedScopes} || array[${sql.join(
+              request.scopes.map((scope) => sql`${scope}`),
+              sql`, `
+            )}]::text[]))`,
           })
           .where(eq(developerApps.id, request.appId))
         await tx
