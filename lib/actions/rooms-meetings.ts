@@ -1283,35 +1283,3 @@ async function mailUntoldRecords(today: string) {
       })
     })
 }
-
-/**
- * What GitLab polls every 30 minutes to keep one marker comment per issue.
- * Cancelled rows stay with their status: a row that disappears could mean
- * cancelled, finished or a broken endpoint, and the reader must not guess.
- * join_url is the portal's link, valid before the Teams meeting exists.
- */
-export async function bookingsFeed(from: string, to: string) {
-  const rows = await db
-    .select()
-    .from(roomBookings)
-    .where(
-      and(
-        sql`${roomBookings.date} >= ${from}`,
-        sql`${roomBookings.date} <= ${to}`
-      )
-    )
-    .orderBy(roomBookings.date, roomBookings.startTime)
-  return rows.map((row) => ({
-    booking_id: row.id,
-    start: taipeiOffsetIso(row.date, row.startTime),
-    end: taipeiOffsetIso(row.date, row.endTime),
-    room: row.room,
-    title: row.title,
-    status: row.status === "booked" ? "confirmed" : "cancelled",
-    join_url: row.online ? joinUrl(row.id) : null,
-    issue_refs: row.issueRefs,
-    group_name: row.groupName,
-    agenda: row.agenda,
-    deliverables: row.deliverables,
-  }))
-}
