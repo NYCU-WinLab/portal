@@ -47,6 +47,7 @@ import {
   icsAddress,
   IcsError,
   icsEvents,
+  MEMBER_STEPS,
 } from "@/lib/ics"
 import { emitErrorLog } from "@/lib/otel"
 import { fold, icsText, icsTime } from "@/lib/rooms/meeting"
@@ -279,6 +280,9 @@ async function syncGoogleList(
           label: calendar.summary,
           accessRole: calendar.accessRole,
           primary: calendar.primary,
+          // Only a calendar the member owns may be public: one whose role
+          // dropped since it was made public goes back to private.
+          ...(calendar.accessRole === "owner" ? {} : { visibility: "private" }),
         },
       })
   }
@@ -297,22 +301,30 @@ async function syncGoogleList(
     )
 }
 
+/** Shown on a source whose file was too big to read to the end. */
+const TRUNCATED = "活動太多，只讀到一部分，有些忙碌時段可能沒算到"
+
 async function readSource(
   source: Source,
   accessToken: string | null,
   from: Date,
-  to: Date
-): Promise<GoogleEvent[]> {
+  to: Date,
+  left: { steps: number }
+): Promise<{ events: GoogleEvent[]; truncated?: boolean }> {
   if (source.kind === "google") {
     if (!accessToken) throw new Error("no Google access")
-    return source.accessRole === "freeBusyReader"
-      ? busyBlocks(accessToken, source.googleCalendarId!, from, to)
-      : busyEvents(accessToken, source.googleCalendarId!, from, to)
+    return {
+      events:
+        source.accessRole === "freeBusyReader"
+          ? await busyBlocks(accessToken, source.googleCalendarId!, from, to)
+          : await busyEvents(accessToken, source.googleCalendarId!, from, to),
+    }
   }
-  if (source.kind === "portal") return portalMeetings(source.userId, from, to)
+  if (source.kind === "portal")
+    return { events: await portalMeetings(source.userId, from, to) }
   if (source.kind === "ics")
-    return icsEvents(await fetchIcs(open(source.url!)), from, to)
-  return icsEvents(source.content!, from, to)
+    return icsEvents(await fetchIcs(open(source.url!)), from, to, left)
+  return icsEvents(source.content!, from, to, left)
 }
 
 /** Replaces one source's events with what it holds now. */
@@ -320,10 +332,17 @@ async function syncSource(
   source: Source,
   accessToken: string | null,
   from: Date,
-  to: Date
+  to: Date,
+  left: { steps: number } = { steps: MEMBER_STEPS }
 ) {
   try {
-    const events = await readSource(source, accessToken, from, to)
+    const { events, truncated } = await readSource(
+      source,
+      accessToken,
+      from,
+      to,
+      left
+    )
     await db.transaction(async (tx) => {
       await tx
         .delete(calendarEvents)
@@ -341,7 +360,7 @@ async function syncSource(
           .onConflictDoNothing()
       await tx
         .update(calendarSources)
-        .set({ syncedAt: new Date(), syncError: null })
+        .set({ syncedAt: new Date(), syncError: truncated ? TRUNCATED : null })
         .where(eq(calendarSources.id, source.id))
     })
   } catch (error) {
@@ -439,6 +458,7 @@ async function syncOne(userId: string, only?: string) {
     .select()
     .from(calendarSources)
     .where(eq(calendarSources.userId, userId))
+  const left = { steps: MEMBER_STEPS }
   for (const source of sources) {
     if (only && source.id !== only) continue
     if (!source.enabled) {
@@ -449,7 +469,7 @@ async function syncOne(userId: string, only?: string) {
     }
     // Without Google access the link's syncError says why.
     if (source.kind === "google" && !accessToken) continue
-    await syncSource(source, accessToken, from, to)
+    await syncSource(source, accessToken, from, to, left)
   }
 }
 
@@ -769,12 +789,28 @@ export const addCalendarSource = defineAction({
     const to = new Date(now.getTime() + AHEAD_DAYS * 86_400_000)
     // Read it once first, so a wrong address or file fails here.
     const address = input.url ? icsAddress(input.url) : null
-    const events = icsEvents(
+    const { events, truncated } = icsEvents(
       address ? await fetchIcs(address) : input.content!,
       from,
       to
     )
     const id = await db.transaction(async (tx) => {
+      // One add at a time per member, so parallel calls cannot pass the
+      // limit together.
+      await tx.execute(
+        sql`select pg_advisory_xact_lock(hashtext(${`calendar-sources:${actor.userId}`}))`
+      )
+      const [{ total }] = await tx
+        .select({ total: count() })
+        .from(calendarSources)
+        .where(
+          and(
+            eq(calendarSources.userId, actor.userId),
+            inArray(calendarSources.kind, ["ics", "file"])
+          )
+        )
+      if (total >= MAX_SOURCES)
+        throw new Error(`最多加入 ${MAX_SOURCES} 個行事曆`)
       const [source] = await tx
         .insert(calendarSources)
         .values({
@@ -786,6 +822,7 @@ export const addCalendarSource = defineAction({
           enabled: true,
           visibility: input.visibility,
           syncedAt: now,
+          syncError: truncated ? TRUNCATED : null,
         })
         .returning({ id: calendarSources.id })
       if (events.length > 0)

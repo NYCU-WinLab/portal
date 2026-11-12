@@ -30,6 +30,9 @@ const MAX_STEPS = 20_000
 /** Steps the whole file may take, so a file of many such rules cannot hold
  * the server (each step is CPU on the one event loop). */
 const FILE_STEPS = 100_000
+/** Steps all of one member's calendars may take in one sync: 20 files at
+ * FILE_STEPS each would hold the event loop for about 10 s. */
+export const MEMBER_STEPS = 300_000
 /** VEVENTs a file may hold; a member's calendar is far smaller. */
 const MAX_COMPONENTS = 20_000
 
@@ -197,9 +200,16 @@ function toDate(time: ICAL.Time) {
 /**
  * The events of an ICS calendar that make its owner busy between from and
  * to: recurring events expanded with their exceptions, cancelled ones and
- * ones marked free (TRANSP:TRANSPARENT) left out.
+ * ones marked free (TRANSP:TRANSPARENT) left out. truncated says the file
+ * was too big to read to the end, so busy times may be missing. left is
+ * what remains of the member's MEMBER_STEPS, shared by their files.
  */
-export function icsEvents(text: string, from: Date, to: Date): GoogleEvent[] {
+export function icsEvents(
+  text: string,
+  from: Date,
+  to: Date,
+  left: { steps: number } = { steps: FILE_STEPS }
+): { events: GoogleEvent[]; truncated: boolean } {
   let root: ICAL.Component
   try {
     root = new ICAL.Component(ICAL.parse(text))
@@ -247,10 +257,14 @@ export function icsEvents(text: string, from: Date, to: Date): GoogleEvent[] {
   const components = root.getAllSubcomponents("vevent")
   if (components.length > MAX_COMPONENTS)
     throw new IcsError(`行事曆超過 ${MAX_COMPONENTS} 個活動`)
-  let budget = FILE_STEPS
+  let budget = Math.min(FILE_STEPS, left.steps)
+  const spent = budget
+  let truncated = false
   for (const component of components) {
-    if (budget <= 0) break
-    if (events.length >= MAX_EVENTS) break
+    if (budget <= 0 || events.length >= MAX_EVENTS) {
+      truncated = true
+      break
+    }
     const event = new ICAL.Event(component)
     if (event.isRecurrenceException()) continue
     if (!event.startDate) continue
@@ -261,10 +275,13 @@ export function icsEvents(text: string, from: Date, to: Date): GoogleEvent[] {
       continue
     }
     const iterator = event.iterator()
+    let ended = false
     for (let n = 0; n < MAX_STEPS && budget > 0; n++, budget--) {
       const next = iterator.next()
-      if (!next) break
-      if (toDate(next) >= to) break
+      if (!next || toDate(next) >= to) {
+        ended = true
+        break
+      }
       // An occurrence starting over 60 days before the window cannot reach it.
       if (toDate(next).getTime() < from.getTime() - 60 * 86_400_000) continue
       const details = event.getOccurrenceDetails(next)
@@ -277,6 +294,9 @@ export function icsEvents(text: string, from: Date, to: Date): GoogleEvent[] {
       )
       if (events.length >= MAX_EVENTS) break
     }
+    // Out of steps in the middle of this rule: its later times are unread.
+    if (!ended && budget <= 0) truncated = true
   }
-  return events
+  left.steps -= spent - budget
+  return { events, truncated }
 }
