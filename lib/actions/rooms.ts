@@ -1,6 +1,16 @@
 import { AsyncLocalStorage } from "node:async_hooks"
 
-import { and, asc, eq, gte, inArray, isNotNull, lte, sql } from "drizzle-orm"
+import {
+  and,
+  asc,
+  eq,
+  gte,
+  inArray,
+  isNotNull,
+  lte,
+  or,
+  sql,
+} from "drizzle-orm"
 import { z } from "zod"
 
 import { defineAction } from "@/lib/actions/define"
@@ -664,7 +674,7 @@ export const bookMeeting = defineAction({
   name: "book_meeting",
   title: "新增會議",
   description:
-    "Books a meeting as the member, 新增會議 on /meetings: a CS department room through the lab's shared account (the room /meetings would pick: open for the whole span, free before paid; a paid room only with allow_paid true, since the department charges for it), or no room with online_only. Every booking also gets a meet.winlab.tw room, recorded automatically with a transcript and meeting notes filed in GitLab, and every attendee and the member get a calendar invite by mail. Times are Asia/Taipei HH:MM on the 30-minute grid. A room booking runs between 08:00 and 22:00 (check list_room_availability first). An online_only meeting may be at any time from today to 90 days ahead, 30 to 300 minutes, ending by 24:00, and is refused when it overlaps another meeting the member booked. attendees are portal user ids, emails or usernames; group is a project group's slug from list_project_groups, whose members are invited too unless invite_group_members is false, and which names the project the recording files under. epic (an iid from list_group_epics) needs a group linked to GitLab. include_advisor has no default because it mails the advisor. repeat weekly or biweekly makes it a standing meeting from date on instead (list_standing_meetings): each occurrence is booked 7 days ahead, with a room (free first, else paid) or, with online_only, only its meet.winlab.tw meeting; epic may then only be a sync epic, and the answer is the standing meeting's id, how many occurrences were booked at once and why others were not. Never book the Monday lab meeting here; the portal books it itself. Read back the date, time, room or online, title, attendees, advisor and the recording, and get the member's yes first.",
+    "Books a meeting as the member, 新增會議 on /meetings: a CS department room through the lab's shared account (the room /meetings would pick: open for the whole span, free before paid; a paid room only with allow_paid true, since the department charges for it), or no room with online_only. Every booking also gets a meet.winlab.tw room, recorded automatically with a transcript and meeting notes filed in GitLab, and every attendee and the member get a calendar invite by mail. Times are Asia/Taipei HH:MM on the 30-minute grid. A room booking runs between 08:00 and 22:00 (check list_room_availability first). An online_only meeting may be at any time from today to 90 days ahead, 30 to 300 minutes, ending by 24:00, and is refused when it overlaps another meeting the member booked or an appointment a labmate booked with them. attendees are portal user ids, emails or usernames; group is a project group's slug from list_project_groups, whose members are invited too unless invite_group_members is false, and which names the project the recording files under. epic (an iid from list_group_epics) needs a group linked to GitLab. include_advisor has no default because it mails the advisor. repeat weekly or biweekly makes it a standing meeting from date on instead (list_standing_meetings): each occurrence is booked 7 days ahead, with a room (free first, else paid) or, with online_only, only its meet.winlab.tw meeting; epic may then only be a sync epic, and the answer is the standing meeting's id, how many occurrences were booked at once and why others were not. Never book the Monday lab meeting here; the portal books it itself. Read back the date, time, room or online, title, attendees, advisor and the recording, and get the member's yes first.",
   kind: "mutation",
   input: z.object({
     date: day,
@@ -756,6 +766,8 @@ export const bookMeeting = defineAction({
           )
         if (standing) throw new Error("你的固定會議已經借好這個時段了")
         if (input.online_only) {
+          // Meetings they booked, and appointments labmates booked with
+          // them: both are theirs to attend.
           const mine = await db
             .select({
               title: roomBookings.title,
@@ -764,9 +776,13 @@ export const bookMeeting = defineAction({
               end: roomBookings.endTime,
             })
             .from(roomBookings)
+            .leftJoin(appointments, eq(appointments.bookingId, roomBookings.id))
             .where(
               and(
-                eq(roomBookings.requestedBy, actor.userId),
+                or(
+                  eq(roomBookings.requestedBy, actor.userId),
+                  eq(appointments.ownerId, actor.userId)
+                ),
                 eq(roomBookings.date, input.date),
                 eq(roomBookings.status, "booked")
               )

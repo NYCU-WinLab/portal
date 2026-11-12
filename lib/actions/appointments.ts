@@ -45,6 +45,19 @@ const NOTICE_MINUTES = 120
 /** Slots are offered only from a calendar synced this recently (the sync
  * runs every 5 minutes); a booking syncs the calendar again first. */
 const FRESH_MS = 15 * 60_000
+/** A booking waits this long for that sync. It holds both members' booking
+ * locks, which run out after 3 minutes, and a calendar with many sources
+ * could otherwise take longer than that. */
+const SYNC_WAIT_MS = 60_000
+
+/** The promise's answer, or an error once ms have passed. */
+function within<T>(promise: Promise<T>, ms: number, message: string) {
+  let timer: ReturnType<typeof setTimeout>
+  const late = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(message)), ms)
+  })
+  return Promise.race([promise, late]).finally(() => clearTimeout(timer))
+}
 
 const gridTime = z
   .string()
@@ -378,7 +391,11 @@ export const bookAppointment = defineAction({
     return withBookingLock(first, input.date, () =>
       withBookingLock(second, input.date, async () => {
         // Ask Google again: an event added since the last sync must count.
-        await syncCalendar(owner.id)
+        await within(
+          syncCalendar(owner.id),
+          SYNC_WAIT_MS,
+          `${owner.name} 的行事曆現在同步不了，稍後再試`
+        )
         const fresh = await ownerOf(owner.id)
         if (!fresh || !current(fresh))
           throw new Error(`${owner.name} 的行事曆現在同步不了，稍後再試`)
