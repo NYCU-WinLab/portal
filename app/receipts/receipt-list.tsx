@@ -4,8 +4,8 @@ import { ArrowUpRightIcon } from "lucide-react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 
 import { EmptyState } from "@/components/empty-state"
+import { Toggle } from "@/components/ui/toggle"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
 import {
   Select,
   SelectContent,
@@ -78,16 +78,16 @@ export function ReceiptList({
       <div className="flex flex-wrap items-center gap-2">
         <div role="group" aria-label="狀態" className="flex flex-wrap gap-2">
           {statusFilters.map((option) => (
-            <Button
+            <Toggle
               key={option.key}
-              variant={status === option.key ? "default" : "outline"}
-              aria-pressed={status === option.key}
-              onClick={() =>
+              size="text"
+              pressed={status === option.key}
+              onPressedChange={() =>
                 set("status", option.key === "all" ? null : option.key)
               }
             >
               {option.label}
-            </Button>
+            </Toggle>
           ))}
         </div>
         {projects.length > 0 && (

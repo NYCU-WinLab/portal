@@ -6,6 +6,7 @@ import * as React from "react"
 import { ConfirmDialog } from "@/components/confirm-dialog"
 import { EmptyState } from "@/components/empty-state"
 import { FormDialog, FormField } from "@/components/form-dialog"
+import { Toggle } from "@/components/ui/toggle"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -142,13 +143,10 @@ function PhraseForm({
           {ALL_DAYS.map((day) => {
             const on = days.includes(day)
             return (
-              <Button
+              <Toggle
                 key={day}
-                type="button"
-                size="icon"
-                variant={on ? "default" : "outline"}
-                aria-pressed={on}
-                onClick={() =>
+                pressed={on}
+                onPressedChange={() =>
                   setDays(
                     on
                       ? days.filter((d) => d !== day)
@@ -157,7 +155,7 @@ function PhraseForm({
                 }
               >
                 {WEEKDAYS[day - 1]}
-              </Button>
+              </Toggle>
             )
           })}
         </div>

@@ -7,6 +7,7 @@ import { toast } from "sonner"
 import { AdminMenu } from "@/components/admin-menu"
 import { ConfirmDialog } from "@/components/confirm-dialog"
 import { FormDialog, FormField } from "@/components/form-dialog"
+import { Toggle } from "@/components/ui/toggle"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import type { OptionGroup } from "@/lib/actions/bento-restaurants"
@@ -246,26 +247,24 @@ function OptionsEditor({
                   edit(index, (row) => ({ ...row, name: event.target.value }))
                 }
               />
-              <Button
-                type="button"
-                variant={group.required ? "default" : "outline"}
-                aria-pressed={group.required}
-                onClick={() =>
+              <Toggle
+                size="text"
+                pressed={group.required}
+                onPressedChange={() =>
                   edit(index, (row) => ({ ...row, required: !row.required }))
                 }
               >
                 必選
-              </Button>
-              <Button
-                type="button"
-                variant={group.multiple ? "default" : "outline"}
-                aria-pressed={group.multiple}
-                onClick={() =>
+              </Toggle>
+              <Toggle
+                size="text"
+                pressed={group.multiple}
+                onPressedChange={() =>
                   edit(index, (row) => ({ ...row, multiple: !row.multiple }))
                 }
               >
                 可複選
-              </Button>
+              </Toggle>
               <Button
                 type="button"
                 variant="ghost"
