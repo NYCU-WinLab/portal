@@ -5,6 +5,7 @@ import * as React from "react"
 
 import { EmptyState } from "@/components/empty-state"
 import { type Member, MemberCombobox } from "@/components/member-combobox"
+import { Toggle } from "@/components/ui/toggle"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -269,14 +270,11 @@ export function OrderDialog({
                   className="flex flex-wrap gap-2"
                 >
                   {group.values.map((value) => (
-                    <Button
+                    <Toggle
                       key={value.id}
-                      type="button"
-                      variant={
-                        picked.includes(value.id) ? "default" : "outline"
-                      }
-                      aria-pressed={picked.includes(value.id)}
-                      onClick={() => toggle(group, value.id)}
+                      size="text"
+                      pressed={picked.includes(value.id)}
+                      onPressedChange={() => toggle(group, value.id)}
                     >
                       {value.label}
                       {value.priceDelta !== 0 && (
@@ -285,7 +283,7 @@ export function OrderDialog({
                           {value.priceDelta}
                         </span>
                       )}
-                    </Button>
+                    </Toggle>
                   ))}
                 </div>
               </div>

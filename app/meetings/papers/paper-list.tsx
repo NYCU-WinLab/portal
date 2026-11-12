@@ -5,8 +5,8 @@ import * as React from "react"
 import { toast } from "sonner"
 
 import { EmptyState } from "@/components/empty-state"
+import { Toggle } from "@/components/ui/toggle"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
 import { dateLabel } from "@/lib/leave-dates"
 
@@ -62,14 +62,14 @@ export function PaperList({
           className="flex flex-wrap gap-2"
         >
           {tags.map((tag) => (
-            <Button
+            <Toggle
               key={tag.id}
-              variant={picked.includes(tag.id) ? "default" : "outline"}
-              aria-pressed={picked.includes(tag.id)}
-              onClick={() => toggle(tag.id)}
+              size="text"
+              pressed={picked.includes(tag.id)}
+              onPressedChange={() => toggle(tag.id)}
             >
               {tag.name}
-            </Button>
+            </Toggle>
           ))}
         </div>
       )}

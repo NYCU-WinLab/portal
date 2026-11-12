@@ -6,6 +6,7 @@ import * as React from "react"
 import { AdminMenu, type DialogControl } from "@/components/admin-menu"
 import { ConfirmDialog } from "@/components/confirm-dialog"
 import { FormDialog, FormField } from "@/components/form-dialog"
+import { Toggle } from "@/components/ui/toggle"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -76,19 +77,18 @@ function TagPicker({
         {tags.map((tag) => {
           const on = value.includes(tag.id)
           return (
-            <Button
+            <Toggle
               key={tag.id}
-              type="button"
-              variant={on ? "default" : "outline"}
-              aria-pressed={on}
-              onClick={() =>
+              size="text"
+              pressed={on}
+              onPressedChange={() =>
                 onChange(
                   on ? value.filter((id) => id !== tag.id) : [...value, tag.id]
                 )
               }
             >
               {tag.name}
-            </Button>
+            </Toggle>
           )
         })}
       </div>

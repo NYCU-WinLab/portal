@@ -6,6 +6,7 @@ import * as React from "react"
 import { ConfirmDialog } from "@/components/confirm-dialog"
 import { EmptyState } from "@/components/empty-state"
 import { FormDialog, FormField } from "@/components/form-dialog"
+import { Toggle } from "@/components/ui/toggle"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -42,13 +43,11 @@ function Toggles<T extends string | number>({
         {items.map((item) => {
           const on = value.includes(item.value)
           return (
-            <Button
+            <Toggle
               key={item.value}
-              type="button"
-              size={typeof item.value === "number" ? "icon" : "default"}
-              variant={on ? "default" : "outline"}
-              aria-pressed={on}
-              onClick={() =>
+              size={typeof item.value === "number" ? "icon" : "text"}
+              pressed={on}
+              onPressedChange={() =>
                 onChange(
                   on
                     ? value.filter((v) => v !== item.value)
@@ -59,7 +58,7 @@ function Toggles<T extends string | number>({
               }
             >
               {item.label}
-            </Button>
+            </Toggle>
           )
         })}
       </div>

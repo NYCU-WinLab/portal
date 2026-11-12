@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useRef, useState } from "react"
+import { Toggle } from "@/components/ui/toggle"
 import { Button } from "@/components/ui/button"
 import type { GameResult } from "@/lib/games/types"
 import {
@@ -98,20 +99,15 @@ export function GameTyping({ onComplete, onLevelChange }: GameTypingProps) {
     <div className="flex w-full flex-col gap-4">
       <div className="flex flex-wrap justify-center gap-2">
         {TYPING_LANGUAGES.map((lang) => (
-          <button
+          <Toggle
             key={lang.id}
-            type="button"
-            onClick={() => selectLanguage(lang.id)}
+            size="text"
+            pressed={languageId === lang.id}
+            onPressedChange={() => selectLanguage(lang.id)}
             disabled={state === "done"}
-            aria-pressed={languageId === lang.id}
-            className={`rounded-control border px-3 py-1 text-body font-medium transition-colors ${
-              languageId === lang.id
-                ? "border-foreground bg-foreground text-background"
-                : "border-muted hover:border-foreground"
-            } disabled:opacity-60`}
           >
             {lang.label}
-          </button>
+          </Toggle>
         ))}
       </div>
 

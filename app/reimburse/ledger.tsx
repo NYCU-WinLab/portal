@@ -5,8 +5,8 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { EmptyState } from "@/components/empty-state"
 import type { Member } from "@/components/member-combobox"
 import { SectionHeader } from "@/components/page-header"
+import { Toggle } from "@/components/ui/toggle"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
 import type { LedgerEntry } from "@/lib/actions/reimburse"
 import { dateLabel } from "@/lib/leave-dates"
 
@@ -65,14 +65,14 @@ export function Ledger({
     <div className="flex flex-col gap-12">
       <div role="group" aria-label="篩選" className="flex flex-wrap gap-2">
         {filters.map((option) => (
-          <Button
+          <Toggle
             key={option.key}
-            variant={filter === option.key ? "default" : "outline"}
-            aria-pressed={filter === option.key}
-            onClick={() => setFilter(option.key)}
+            size="text"
+            pressed={filter === option.key}
+            onPressedChange={() => setFilter(option.key)}
           >
             {option.label}
-          </Button>
+          </Toggle>
         ))}
       </div>
       {shown.length === 0 ? (

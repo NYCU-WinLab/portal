@@ -14,6 +14,7 @@ import { ConfirmDialog } from "@/components/confirm-dialog"
 import { EmptyState } from "@/components/empty-state"
 import { FileUpload } from "@/components/file-upload"
 import { FormDialog, FormField } from "@/components/form-dialog"
+import { Toggle } from "@/components/ui/toggle"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -196,10 +197,12 @@ export function SoundList({
         return (
           <li
             key={sound.id}
-            className="flex min-h-14 items-center gap-4 border-b border-border py-2"
+            className="flex min-h-14 flex-wrap items-center gap-x-4 gap-y-2 border-b border-border py-2"
           >
             <PlayButton src={soundSrc(sound)} label={sound.label} />
-            <span className="flex min-w-0 flex-1 flex-col">
+            {/* The name keeps at least 10rem; on a phone the controls
+                move to a second line instead of squeezing it away. */}
+            <span className="flex min-w-0 flex-1 basis-40 flex-col">
               <span className="truncate">{sound.label}</span>
               <span className="truncate text-muted-foreground">
                 {[
@@ -210,69 +213,71 @@ export function SoundList({
                   .join("，")}
               </span>
             </span>
-            {sound.isDefault && !canEditAll && (
-              <Badge variant="muted">預設</Badge>
-            )}
-            {canEditAll && (
-              <Label className="flex shrink-0 items-center gap-2 text-muted-foreground">
-                預設
-                <Switch
-                  checked={sound.isDefault}
-                  onCheckedChange={(checked) =>
-                    report(
-                      markDefault(sound.id, checked),
-                      checked ? "已設為預設" : "已取消預設"
-                    ).catch(() => {})
-                  }
-                />
-              </Label>
-            )}
-            <div className="flex shrink-0 gap-1">
-              {editable && (
-                <>
-                  <FormDialog
-                    trigger={
-                      <Button variant="ghost" size="icon" aria-label="改名">
-                        <PencilIcon />
-                      </Button>
-                    }
-                    title="改名"
-                    submitLabel="儲存"
-                    onSubmit={(data) =>
-                      report(rename(sound.id, text(data, "label")), "已儲存")
-                    }
-                  >
-                    <FormField label="名稱" required>
-                      <Input
-                        name="label"
-                        maxLength={40}
-                        defaultValue={sound.label}
-                      />
-                    </FormField>
-                  </FormDialog>
-                  <ReplaceSound sound={sound} maxSeconds={maxSeconds} />
-                  <ConfirmDialog
-                    trigger={
-                      <Button variant="ghost" size="icon" aria-label="刪除">
-                        <Trash2Icon />
-                      </Button>
-                    }
-                    title={`刪除「${sound.label}」？`}
-                    confirmLabel="刪除"
-                    variant="destructive"
-                    onConfirm={() => report(remove(sound.id), "已刪除")}
-                  />
-                </>
+            <div className="ml-auto flex flex-wrap items-center justify-end gap-x-4 gap-y-2">
+              {sound.isDefault && !canEditAll && (
+                <Badge variant="muted">預設</Badge>
               )}
-              <Button
-                variant={on ? "default" : "outline"}
-                className="w-24"
-                aria-pressed={on}
-                onClick={() => toggle(sound)}
-              >
-                {on ? <CheckIcon /> : <PlusIcon />}
-                {on ? "在清單" : "加入"}
-              </Button>
+              {canEditAll && (
+                <Label className="flex shrink-0 items-center gap-2 text-muted-foreground">
+                  預設
+                  <Switch
+                    checked={sound.isDefault}
+                    onCheckedChange={(checked) =>
+                      report(
+                        markDefault(sound.id, checked),
+                        checked ? "已設為預設" : "已取消預設"
+                      ).catch(() => {})
+                    }
+                  />
+                </Label>
+              )}
+              <div className="flex shrink-0 gap-1">
+                {editable && (
+                  <>
+                    <FormDialog
+                      trigger={
+                        <Button variant="ghost" size="icon" aria-label="改名">
+                          <PencilIcon />
+                        </Button>
+                      }
+                      title="改名"
+                      submitLabel="儲存"
+                      onSubmit={(data) =>
+                        report(rename(sound.id, text(data, "label")), "已儲存")
+                      }
+                    >
+                      <FormField label="名稱" required>
+                        <Input
+                          name="label"
+                          maxLength={40}
+                          defaultValue={sound.label}
+                        />
+                      </FormField>
+                    </FormDialog>
+                    <ReplaceSound sound={sound} maxSeconds={maxSeconds} />
+                    <ConfirmDialog
+                      trigger={
+                        <Button variant="ghost" size="icon" aria-label="刪除">
+                          <Trash2Icon />
+                        </Button>
+                      }
+                      title={`刪除「${sound.label}」？`}
+                      confirmLabel="刪除"
+                      variant="destructive"
+                      onConfirm={() => report(remove(sound.id), "已刪除")}
+                    />
+                  </>
+                )}
+                <Toggle
+                  size="text"
+                  className="w-24"
+                  pressed={on}
+                  onPressedChange={() => toggle(sound)}
+                >
+                  {on ? <CheckIcon /> : <PlusIcon />}
+                  {on ? "在清單" : "加入"}
+                </Toggle>
+              </div>
             </div>
           </li>
         )
