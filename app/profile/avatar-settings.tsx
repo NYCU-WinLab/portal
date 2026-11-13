@@ -239,7 +239,7 @@ export function AvatarSettings({
           {Array.from(name.trim())[0] ?? "?"}
         </AvatarFallback>
       </Avatar>
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         <input
           ref={input}
           type="file"
