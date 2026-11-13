@@ -13,13 +13,13 @@ import { requireActor } from "@/lib/auth/session"
 // The schedule's writes: the same actions MCP runs, then a refresh.
 
 async function call(action: Action, input: unknown) {
-  const actor = await requireActor("/door/schedule")
+  const actor = await requireActor("/door/sounds")
   try {
     await runAction(action, actor, input)
   } catch (error) {
     return { error: errorMessage(error) }
   }
-  revalidatePath("/door/schedule")
+  revalidatePath("/door/sounds")
   return {}
 }
 

@@ -4,16 +4,21 @@ export const doorPage = {
   tip: "實驗室的門",
 }
 
-/** Three corner links: the door button sits behind the Door crumb, and each
- * link opens a group whose pages switch with DoorTabs. Every member gets the
- * sounds, their greetings and their own record; the voice clips, every card
- * and the full log are door admins' alone. API keys moved to /api-keys. */
+/** Four corner links: the door button sits behind the Door crumb. Every
+ * member gets the sounds (the pool and the lab's schedule on one page), their
+ * greetings and their own record; the voice clips, every card and the full
+ * log are door admins' alone. API keys moved to /api-keys. */
 export const doorNav = [
   {
-    label: "聲音",
+    label: "音效",
     href: "/door/sounds",
-    tip: "開門時的音效與問候語",
-    also: ["/door/greetings", "/door/schedule", "/door/voice"],
+    tip: "開門時播的音效",
+  },
+  {
+    label: "問候語",
+    href: "/door/greetings",
+    tip: "開門時門口說的話",
+    also: ["/door/voice"],
   },
   {
     label: "紀錄",
@@ -29,9 +34,7 @@ export const doorNav = [
   },
 ]
 
-export const soundTabs = [
-  { label: "音效", href: "/door/sounds" },
-  { label: "排程", href: "/door/schedule" },
+export const greetingTabs = [
   { label: "問候語", href: "/door/greetings" },
   { label: "語音", href: "/door/voice", admin: "door" as const },
 ]
