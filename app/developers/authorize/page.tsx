@@ -34,10 +34,10 @@ export default async function AuthorizePage({
   const { app, input, scopes } = details
   return (
     <PortalShell layout="spotlight">
-      <div className="flex w-full max-w-md flex-col gap-8">
+      <div className="flex w-full max-w-md flex-col items-center gap-8 text-center">
         <h1 className="text-title font-medium">授權 {app.name}</h1>
         <p className="text-muted-foreground">{app.description}</p>
-        <ul className="flex flex-col">
+        <ul className="flex w-full flex-col">
           {scopes.map((s) => (
             <li key={s} className="flex flex-col border-b border-border py-3">
               <span>{SCOPES[s].label}</span>
@@ -47,7 +47,7 @@ export default async function AuthorizePage({
             </li>
           ))}
         </ul>
-        <p className="break-all text-muted-foreground">
+        <p className="break-words text-muted-foreground">
           維護者 {app.contact_email}，授權後回到{" "}
           {new URL(input.redirect_uri).origin}，最長 30 天，可在 Developers
           頁撤銷。{" "}
@@ -55,12 +55,15 @@ export default async function AuthorizePage({
             href={app.privacy_url}
             target="_blank"
             rel="noopener noreferrer"
-            className="underline underline-offset-4"
+            className="whitespace-nowrap underline underline-offset-4"
           >
             隱私政策
           </a>
         </p>
-        <form action={decide.bind(null, input)} className="flex gap-2">
+        <form
+          action={decide.bind(null, input)}
+          className="flex justify-center gap-2"
+        >
           <Button type="submit" name="decision" value="deny" variant="outline">
             拒絕
           </Button>
