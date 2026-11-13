@@ -48,8 +48,10 @@ export default async function Home() {
   const fresh = announcements.find((post) => isFresh(post.createdAt))
 
   return (
-    <PortalShell>
-      <div className="flex flex-col gap-12">
+    <PortalShell layout="wide">
+      {/* The home page fills a wide screen: each group lays its services in
+          as many columns as fit, and a phone gets one. */}
+      <div className="mx-auto flex w-full max-w-screen-2xl flex-col gap-12 px-2">
         <PageHeader title={`Hi, ${givenName(member.name)}`} />
         <NextMeeting meeting={meeting} />
         {fresh && (
@@ -67,7 +69,7 @@ export default async function Home() {
         {groups.map((group) => (
           <section key={group.title} className="flex flex-col gap-2">
             <SectionHeader title={group.title} />
-            <ul className="flex stagger-rise flex-col">
+            <ul className="grid stagger-rise grid-cols-1 gap-x-8 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
               {group.apps.map((app) => (
                 <li
                   key={app.key}
