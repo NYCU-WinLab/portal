@@ -34,10 +34,10 @@ export default async function DoorVoicePage() {
             {missing.length === 0
               ? "老師的聲音"
               : !job.online
-                ? "老師的聲音，furnace 沒有連線，連上後會繼續"
+                ? "老師的聲音，錄音暫停"
                 : job.text
                   ? `正在錄「${job.text}」，第 ${job.step} 步，共 ${job.steps} 步`
-                  : "老師的聲音，furnace 準備中"}
+                  : "老師的聲音，準備錄音"}
           </FocusLabel>
           <FocusTitle>
             {missing.length === 0 ? (

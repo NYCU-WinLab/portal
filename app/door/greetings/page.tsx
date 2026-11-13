@@ -46,7 +46,7 @@ export default async function DoorGreetingsPage() {
       if (job.text && parts.includes(job.text))
         return [[phrase.id, { step: job.step, steps: job.steps }]]
       if (parts.some((part) => waiting.has(part)))
-        return [[phrase.id, job.online ? "排隊中" : "等 furnace"]]
+        return [[phrase.id, job.online ? "排隊中" : "等錄音"]]
       return []
     })
   )
@@ -101,7 +101,7 @@ export default async function DoorGreetingsPage() {
                 ? `，正在錄「${job.text}」${job.step}/${job.steps}`
                 : job.online
                   ? ""
-                  : "，furnace 沒有連線"}
+                  : "，錄音暫停"}
             </Link>
             ，錄好前門口先用一般語音。
           </p>

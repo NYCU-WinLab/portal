@@ -35,12 +35,7 @@ export default async function GamesPage() {
                 href={`/games/${slug}`}
                 className="flex min-h-14 items-center gap-4 py-2 transition-colors duration-state hover:text-muted-foreground"
               >
-                <span className="w-28 shrink-0 font-medium">
-                  {GAME_META[slug].title}
-                </span>
-                <span className="min-w-0 flex-1 truncate text-muted-foreground">
-                  {GAME_META[slug].description}
-                </span>
+                <span className="font-medium">{GAME_META[slug].title}</span>
               </Link>
             </li>
           ))}

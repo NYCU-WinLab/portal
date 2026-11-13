@@ -42,9 +42,6 @@ export function ReleaseNotes({ notes }: { notes: ReleaseNote[] }) {
                     <span className="min-w-0 flex-1 leading-relaxed">
                       {line}
                     </span>
-                    <span className="shrink-0 font-mono text-muted-foreground">
-                      {note.sha}
-                    </span>
                   </li>
                 ))
             )}
