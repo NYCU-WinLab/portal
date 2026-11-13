@@ -1,10 +1,12 @@
 "use client"
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
+import * as React from "react"
 
 import { EmptyState } from "@/components/empty-state"
 import type { Member } from "@/components/member-combobox"
 import { SectionHeader } from "@/components/page-header"
+import { Button } from "@/components/ui/button"
 import { Toggle } from "@/components/ui/toggle"
 import { Badge } from "@/components/ui/badge"
 import type { LedgerEntry } from "@/lib/actions/reimburse"
@@ -27,6 +29,9 @@ const signed = (entry: LedgerEntry) =>
 // "2026-09" → "2026 年 9 月"
 const monthLabel = (month: string) =>
   `${month.slice(0, 4)} 年 ${Number(month.slice(5))} 月`
+
+// The whole ledger opens on the newest months; the rest wait behind one button.
+const RECENT_MONTHS = 3
 
 // The ledger by month, newest first, filtered on the page.
 export function Ledger({
@@ -60,6 +65,10 @@ export function Ledger({
     const key = entry.date.slice(0, 7)
     months.set(key, [...(months.get(key) ?? []), entry])
   }
+  // A filter is a search through every month, so only 全部 is cut short.
+  const [older, setOlder] = React.useState(false)
+  const all = [...months]
+  const visible = filter === "all" && !older ? all.slice(0, RECENT_MONTHS) : all
 
   return (
     <div className="flex flex-col gap-12">
@@ -78,7 +87,7 @@ export function Ledger({
       {shown.length === 0 ? (
         <EmptyState noun={filter === "owed" ? "未轉帳的支出" : "紀錄"} />
       ) : (
-        [...months].map(([month, rows]) => (
+        visible.map(([month, rows]) => (
           <section key={`${filter}-${month}`} className="flex flex-col gap-2">
             <SectionHeader title={monthLabel(month)} />
             <ul className="flex stagger-rise flex-col">
@@ -123,6 +132,15 @@ export function Ledger({
             </ul>
           </section>
         ))
+      )}
+      {visible.length < all.length && (
+        <Button
+          variant="outline"
+          className="self-center"
+          onClick={() => setOlder(true)}
+        >
+          更早的 {all.length - visible.length} 個月
+        </Button>
       )}
     </div>
   )
