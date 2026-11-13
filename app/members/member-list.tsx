@@ -129,7 +129,7 @@ export function MemberList({ members }: { members: Member[] }) {
                   {m.email && (
                     <a
                       href={`mailto:${m.email}`}
-                      className="min-w-0 truncate text-muted-foreground hover:text-foreground sm:w-64"
+                      className="-my-2 min-w-0 truncate py-2 text-muted-foreground hover:text-foreground sm:w-64"
                     >
                       {m.email}
                     </a>
@@ -138,7 +138,7 @@ export function MemberList({ members }: { members: Member[] }) {
                     {m.phone ? (
                       <a
                         href={`tel:${m.phone}`}
-                        className="hover:text-foreground"
+                        className="-my-2 inline-block py-2 hover:text-foreground"
                       >
                         {m.phone}
                       </a>
