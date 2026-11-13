@@ -39,6 +39,23 @@ const fields = [
   ["studentId", "學號"],
 ] as const
 
+// A Keycloak group as members say it: /lab-member/114 is the cohort and
+// /lab-member/master the status. Groups that only grant access to a system
+// are not shown.
+const statusLabel: Record<string, string> = {
+  teacher: "老師",
+  assistant: "助理",
+  doctoral: "博士",
+  master: "碩士",
+  undergrad: "大學部",
+  alumni: "已畢業",
+}
+function groupLabel(group: string) {
+  const [root, leaf] = group.split("/").filter(Boolean)
+  if (root !== "lab-member" || !leaf) return null
+  return /^\d+$/.test(leaf) ? `${leaf} 級` : (statusLabel[leaf] ?? null)
+}
+
 export default async function ProfilePage() {
   const actor = await requireActor("/profile")
   const [profile, stats, bento, ledger, signature, image, trips, door, avatar] =
@@ -108,13 +125,16 @@ export default async function ProfilePage() {
               </FieldRow>
             ))}
             <FieldRow label="分組">
-              {profile.groups.length ? (
+              {profile.groups.some(groupLabel) ? (
                 <div className="flex flex-wrap gap-2">
-                  {profile.groups.map((group) => (
-                    <Badge key={group} variant="outline">
-                      {group}
-                    </Badge>
-                  ))}
+                  {profile.groups.map(groupLabel).map(
+                    (group) =>
+                      group && (
+                        <Badge key={group} variant="outline">
+                          {group}
+                        </Badge>
+                      )
+                  )}
                 </div>
               ) : (
                 <span className="text-muted-foreground">沒有分組</span>

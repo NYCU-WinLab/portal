@@ -4,6 +4,7 @@ import {
   FocusLabel,
   FocusTitle,
 } from "@/components/focus"
+import { ExpandRow } from "@/components/expand-row"
 import { EmptyState } from "@/components/empty-state"
 import { PageHeader, SectionHeader } from "@/components/page-header"
 import { PortalShell } from "@/components/portal-shell"
@@ -150,15 +151,18 @@ export default async function ApiKeysPage() {
             <FocusHighlight>{mine.length}</FocusHighlight> 把
           </FocusTitle>
         </Focus>
-        <section className="flex flex-col gap-2">
-          <SectionHeader title="用法" />
-          <p className="font-mono break-all text-muted-foreground select-all">
-            {curlLine("wak_…", "now_playing")}
-          </p>
-          <p className="font-mono break-all text-muted-foreground select-all">
-            {listLine("wak_…")}
-          </p>
-        </section>
+        <ul className="flex flex-col">
+          <ExpandRow summary="用法">
+            <div className="flex flex-col gap-2">
+              <p className="font-mono break-all text-muted-foreground select-all">
+                {curlLine("wak_…", "now_playing")}
+              </p>
+              <p className="font-mono break-all text-muted-foreground select-all">
+                {listLine("wak_…")}
+              </p>
+            </div>
+          </ExpandRow>
+        </ul>
         <section className="flex flex-col gap-2">
           <SectionHeader title="我的金鑰" />
           <KeyList keys={mine} owner={false} />

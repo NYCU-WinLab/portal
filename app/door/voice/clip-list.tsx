@@ -62,9 +62,7 @@ export function ClipList({
           {text === job.text ? (
             <VoiceProgress step={job.step} steps={job.steps} />
           ) : (
-            <Badge variant="muted">
-              {job.online ? "排隊中" : "等 furnace"}
-            </Badge>
+            <Badge variant="muted">{job.online ? "排隊中" : "等錄音"}</Badge>
           )}
         </li>
       ))}
