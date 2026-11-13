@@ -10,6 +10,7 @@ import {
 import { FieldList, FieldRow } from "@/components/field-list"
 import { PageHeader, SectionHeader } from "@/components/page-header"
 import { PortalShell } from "@/components/portal-shell"
+import { CodeBlock } from "@/components/ui/code-block"
 import { isAdmin } from "@/lib/actions/authz"
 import { runAction } from "@/lib/actions/define"
 import {
@@ -43,7 +44,7 @@ export default async function DeveloperAppPage({
   if (!found) notFound()
   const { app, requests, activeGrants } = found
   const [integration, admin] = await Promise.all([
-    runAction(getDeveloperIntegration, actor, {}),
+    runAction(getDeveloperIntegration, actor, { id }),
     isAdmin(actor, "portal"),
   ])
   const pending = requests.some((r) => r.status === "pending")
@@ -130,14 +131,14 @@ export default async function DeveloperAppPage({
         )}
         <section className="flex flex-col gap-2">
           <SectionHeader title="串接方式" />
-          <ul className="flex flex-col gap-2 font-mono break-all text-muted-foreground">
-            <li>{integration.authorize}</li>
-            <li>{integration.token}</li>
-            <li>{integration.revoke}</li>
-            {Object.values(integration.resources).map((line) => (
-              <li key={line}>{line}</li>
+          <div className="flex flex-col gap-4">
+            {integration.steps.map((step) => (
+              <CodeBlock key={step.title} title={step.title} code={step.code} />
             ))}
-          </ul>
+          </div>
+        </section>
+        <section className="flex flex-col gap-2">
+          <SectionHeader title="規則" />
           <ul className="flex flex-col gap-1 text-muted-foreground">
             {integration.rules.map((rule) => (
               <li key={rule}>{rule}</li>
