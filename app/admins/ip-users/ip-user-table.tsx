@@ -159,7 +159,7 @@ export function IpUserTable({ entries }: { entries: Entry[] }) {
                 </span>
               )}
             </span>
-            <span className="w-20 shrink-0 text-muted-foreground">
+            <span className="hidden w-20 shrink-0 text-muted-foreground sm:block">
               {IP_USER_CATEGORIES[
                 e.category as keyof typeof IP_USER_CATEGORIES
               ] ?? e.category}
