@@ -467,6 +467,21 @@ export const setDeveloperAppEnabled = defineAction({
   },
 })
 
+export const deleteDeveloperApp = defineAction({
+  name: "delete_developer_app",
+  title: "刪除應用程式",
+  description:
+    "Deletes an application for good (its owner or a portal admin): the client id stops working, and every consent, token and scope request goes with it. It cannot be undone; to stop an application for now, disable it instead. Delete only after the member confirms the application by name.",
+  kind: "mutation",
+  input: z.object({ id: z.uuid() }),
+  run: async (actor, { id }) => {
+    await manageable(actor, id)
+    // Scope requests, grants, codes and tokens cascade from the application.
+    await db.delete(developerApps).where(eq(developerApps.id, id))
+    return { id }
+  },
+})
+
 export const requestDeveloperScopes = defineAction({
   name: "request_developer_scopes",
   title: "申請資料權限",
