@@ -115,6 +115,7 @@ import { listGameLeaderboard, recordGameScore } from "@/lib/actions/games"
 import { deleteIpUser, listIpUsers, saveIpUser } from "@/lib/actions/ip-users"
 import {
   authorizeDeveloperApp,
+  deleteDeveloperApp,
   getDeveloperApp,
   getDeveloperIntegration,
   listDeveloperApps,
@@ -535,6 +536,7 @@ export const actionGroups: { app: ApiApp | null; actions: Action[] }[] = [
       updateDeveloperApp,
       rotateDeveloperSecret,
       setDeveloperAppEnabled,
+      deleteDeveloperApp,
       requestDeveloperScopes,
       listDeveloperScopeRequests,
       reviewDeveloperScopes,

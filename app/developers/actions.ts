@@ -6,6 +6,7 @@ import { redirect } from "next/navigation"
 import { errorMessage, runAction } from "@/lib/actions/define"
 import {
   authorizeDeveloperApp,
+  deleteDeveloperApp,
   registerDeveloperApp,
   requestDeveloperScopes,
   reviewDeveloperScopes,
@@ -41,6 +42,8 @@ export const setEnabled = async (id: string, enabled: boolean) =>
   attempt(async () =>
     runAction(setDeveloperAppEnabled, await actor(), { id, enabled })
   )
+export const deleteApp = async (id: string) =>
+  attempt(async () => runAction(deleteDeveloperApp, await actor(), { id }))
 export const requestScopes = async (input: unknown) =>
   attempt(async () => runAction(requestDeveloperScopes, await actor(), input))
 export const review = async (input: unknown) =>

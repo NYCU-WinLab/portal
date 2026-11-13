@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 
 import { ConfirmDialog } from "@/components/confirm-dialog"
@@ -11,7 +12,13 @@ import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import { report } from "@/lib/report"
 
-import { requestScopes, rotateSecret, setEnabled, updateApp } from "../actions"
+import {
+  deleteApp,
+  requestScopes,
+  rotateSecret,
+  setEnabled,
+  updateApp,
+} from "../actions"
 import { AppFormFields, readDraft, type AppDraft } from "../app-form-fields"
 import { SecretDialog } from "../secret-dialog"
 
@@ -30,6 +37,7 @@ export function AppActions({
   admin: boolean
   canRequest: boolean
 }) {
+  const router = useRouter()
   const [secret, setSecret] = React.useState<string | null>(null)
   const [wantName, setWantName] = React.useState(false)
   const [wantGroups, setWantGroups] = React.useState(false)
@@ -121,6 +129,16 @@ export function AppActions({
           </Button>
         )
       )}
+      <ConfirmDialog
+        trigger={<Button variant="outline">刪除</Button>}
+        title={`刪除「${app.name}」？Client ID 與所有授權會一起刪除，無法復原`}
+        confirmLabel="刪除"
+        variant="destructive"
+        onConfirm={async () => {
+          await report(deleteApp(app.id), "已刪除")
+          router.push("/developers")
+        }}
+      />
       <SecretDialog secret={secret} onClose={() => setSecret(null)} />
     </div>
   )
