@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils"
 
 import { doorNav, doorPage, recordTabs } from "../nav"
 import { DoorTabs } from "../tabs"
+import { SourceSelect } from "./source-select"
 
 export const dynamic = "force-dynamic"
 
@@ -92,7 +93,10 @@ export default async function DoorLogPage({
   return (
     <PortalShell page={doorPage} nav={doorNav}>
       <div className="flex flex-col gap-12">
-        <DoorTabs actor={actor} tabs={recordTabs} current="/door/log" />
+        <div className="flex items-center justify-between gap-4">
+          <DoorTabs actor={actor} tabs={recordTabs} current="/door/log" />
+          <SourceSelect sources={sources} source={source} />
+        </div>
         <PageHeader title="開門紀錄" />
         {today && (
           <Focus>
@@ -106,20 +110,6 @@ export default async function DoorLogPage({
             </FocusTitle>
           </Focus>
         )}
-        <nav className="flex gap-4">
-          {[undefined, ...Object.keys(sources)].map((key) => (
-            <Link
-              key={key ?? "all"}
-              href={link({ source: key })}
-              className={cn(
-                "transition-colors duration-state hover:text-foreground",
-                key === source ? "text-foreground" : "text-muted-foreground"
-              )}
-            >
-              {key ? sources[key as keyof typeof sources] : "全部"}
-            </Link>
-          ))}
-        </nav>
         {events.length === 0 ? (
           <EmptyState noun="開門紀錄" />
         ) : (
