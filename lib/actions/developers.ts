@@ -607,27 +607,79 @@ export const getDeveloperIntegration = defineAction({
   name: "get_developer_integration",
   title: "串接方式",
   description:
-    "How an application signs members in: the authorize, token and revoke endpoints, the resource endpoints per scope, and the rules (S256 PKCE, exact redirect URIs, 10-minute access tokens, single-use refresh tokens, consent for up to 30 days).",
+    "How an application signs members in, as steps to copy: send the member to the authorize page, exchange the code, read the resources per scope, refresh, revoke; then the rules (S256 PKCE, exact redirect URIs, 10-minute access tokens, single-use refresh tokens, consent for up to 30 days). With id (an application the member owns, any for a portal admin) the steps carry its client id, its client type and its approved scopes; without it they show a confidential client with placeholders.",
   kind: "query",
-  input: z.object({}),
-  run: async () => {
+  input: z.object({ id: z.uuid().optional() }),
+  run: async (actor, { id }) => {
+    const app = id ? await manageable(actor, id) : null
     const base = process.env.BETTER_AUTH_URL
+    const client = app?.id ?? "<client id>"
+    const scopes = (app?.approvedScopes ?? Object.keys(SCOPES)).filter(
+      (scope): scope is Scope => Object.hasOwn(SCOPES, scope)
+    )
+    // A confidential client proves itself with its secret; a public one
+    // only names itself.
+    const credentials =
+      app?.clientType === "public"
+        ? `-d client_id=${client}`
+        : `-u ${client}:<secret>`
+    const post = (path: string, ...fields: string[]) =>
+      [`curl ${base}/api/developers/oauth/${path}`, credentials, ...fields]
+        .map((line, index) => (index ? `  ${line}` : line))
+        .join(" \\\n")
     return {
-      authorize: `${base}/developers/authorize?response_type=code&client_id=<id>&redirect_uri=<uri>&scope=profile&state=<state>&code_challenge=<S256>&code_challenge_method=S256`,
-      token: `POST ${base}/api/developers/oauth/token (application/x-www-form-urlencoded; grant_type authorization_code with code, redirect_uri, code_verifier, or refresh_token; client_secret by Basic or form for confidential clients)`,
-      revoke: `POST ${base}/api/developers/oauth/revoke (token=<access or refresh token>)`,
-      resources: Object.fromEntries(
-        Object.entries(SCOPES).map(([scope, meta]) => [
-          scope,
-          `GET ${base}/api/developers/${scope} with Authorization: Bearer <access token>: ${meta.description}`,
-        ])
-      ),
+      steps: [
+        {
+          title: "1. 把成員導到授權頁",
+          code: [
+            `${base}/developers/authorize`,
+            "  ?response_type=code",
+            `  &client_id=${client}`,
+            "  &redirect_uri=<uri>",
+            `  &scope=${scopes.join("+")}`,
+            "  &state=<state>",
+            "  &code_challenge=<S256>",
+            "  &code_challenge_method=S256",
+          ].join("\n"),
+        },
+        {
+          title: "2. 用 code 換 token",
+          code: post(
+            "token",
+            "-d grant_type=authorization_code",
+            "-d code=<code>",
+            "-d redirect_uri=<uri>",
+            "-d code_verifier=<verifier>"
+          ),
+        },
+        {
+          title: "3. 讀資料",
+          code: scopes
+            .map(
+              (scope) =>
+                `# ${SCOPES[scope].label}\ncurl ${base}/api/developers/${scope} \\\n  -H "Authorization: Bearer <access token>"`
+            )
+            .join("\n\n"),
+        },
+        {
+          title: "4. 換新的 token",
+          code: post(
+            "token",
+            "-d grant_type=refresh_token",
+            "-d refresh_token=<refresh token>"
+          ),
+        },
+        {
+          title: "5. 結束授權",
+          code: post("revoke", "-d token=<access or refresh token>"),
+        },
+      ],
       rules: [
-        "S256 PKCE is required; state is required",
-        "redirect_uri must match one registered exactly",
-        "access tokens last 10 minutes; a refresh token works once, and reusing one ends the consent",
-        "a consent lasts at most 30 days and ends when the app's secret, redirect URIs, scopes or status change",
-        "name and groups need a portal admin's approval first",
+        "必須用 S256 PKCE，並帶 state",
+        "redirect_uri 要與註冊的完全相同",
+        "access token 10 分鐘；refresh token 只能用 1 次，重複使用會結束授權",
+        "授權最長 30 天；secret、回呼網址、權限或狀態改變時結束",
+        "姓名與群組要先經 Portal 管理員核准",
       ],
     }
   },
