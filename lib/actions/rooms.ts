@@ -3,6 +3,7 @@ import { AsyncLocalStorage } from "node:async_hooks"
 import {
   and,
   asc,
+  desc,
   eq,
   gte,
   inArray,
@@ -876,6 +877,48 @@ export const getBookingAgenda = defineAction({
       items,
       gitlab,
     }
+  },
+})
+
+export const listInvitedBookings = defineAction({
+  name: "list_invited_bookings",
+  title: "受邀的線上會議",
+  description:
+    "The meet booking ids (room-booking-…, the create request's id) of the online bookings meet made a room for that list a member, by username, among their attendees, newest first, at most 500. An attendee saved without a username (the advisor) matches by the member's email. meet calls this so an invited member can open the meeting's recording even when they never joined the room. Every member sees every booking's attendees in list_meetings, so any member may read it.",
+  kind: "query",
+  input: z.object({ username: z.string().trim().min(1).max(64) }),
+  run: async (_actor, { username }) => {
+    const [member] = await db
+      .select({ email: user.email })
+      .from(user)
+      .where(eq(user.username, username))
+    const invited = [
+      sql`${roomBookings.attendees} @> ${JSON.stringify([{ username }])}::jsonb`,
+      ...(member?.email
+        ? [
+            sql`${roomBookings.attendees} @> ${JSON.stringify([{ email: member.email }])}::jsonb`,
+          ]
+        : []),
+    ]
+    const rows = await db
+      .select({ booking: roomMeetingRequests.requestId })
+      .from(roomMeetingRequests)
+      .innerJoin(
+        roomBookings,
+        eq(roomBookings.id, roomMeetingRequests.bookingId)
+      )
+      .where(
+        and(
+          eq(roomMeetingRequests.kind, "create"),
+          // Only rooms meet made: not Teams requests, not failed tries.
+          eq(roomMeetingRequests.status, "success"),
+          eq(roomMeetingRequests.messageId, "meet"),
+          or(...invited)
+        )
+      )
+      .orderBy(desc(roomBookings.date), desc(roomBookings.startTime))
+      .limit(500)
+    return { bookings: rows.map((row) => row.booking) }
   },
 })
 
