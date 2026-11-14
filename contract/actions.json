@@ -7224,6 +7224,43 @@
     }
   },
   {
+    "name": "list_invited_bookings",
+    "title": "受邀的線上會議",
+    "description": "The meet booking ids (room-booking-…, the create request's id) of the online bookings meet made a room for that list a member, by username, among their attendees, newest first, at most 500. An attendee saved without a username (the advisor) matches by the member's email. meet calls this so an invited member can open the meeting's recording even when they never joined the room. Every member sees every booking's attendees in list_meetings, so any member may read it.",
+    "kind": "query",
+    "app": "meetings",
+    "hash": "edaa34224612857b",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "username": {
+          "maxLength": 64,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "username"
+      ],
+      "type": "object"
+    },
+    "output": {
+      "additionalProperties": false,
+      "properties": {
+        "bookings": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "bookings"
+      ],
+      "type": "object"
+    }
+  },
+  {
     "name": "list_lab_meeting_stats",
     "title": "報告、提問與請假次數",
     "description": "How many times each member presented, asked questions and was away at the Monday lab meeting, each split into what already happened and what is scheduled from today in Taipei. A meetings admin gets every member with any record; anyone else gets only themselves.",
