@@ -988,145 +988,152 @@ export const moveMeeting = defineAction({
     end_time: time,
     allow_paid: z.boolean().default(false),
   }),
-  run: async (actor, input) => {
-    const [booking] = await db
-      .select()
-      .from(roomBookings)
-      .where(
-        and(eq(roomBookings.id, input.id), eq(roomBookings.status, "booked"))
+  // One move or cancel of a booking at a time: each reads the row, works
+  // the department system and meet, then writes, and an interleaving
+  // would leave a room held or meet on an older time.
+  run: (actor, input) =>
+    withLease(`booking ${input.id}`, async () => {
+      const [booking] = await db
+        .select()
+        .from(roomBookings)
+        .where(
+          and(eq(roomBookings.id, input.id), eq(roomBookings.status, "booked"))
+        )
+      if (!booking) throw new Error("找不到這筆預約，或已經取消")
+      if (booking.requestedBy !== actor.userId)
+        throw new Error("只有發起人能改時間")
+      if (booking.meetingId)
+        throw new Error("週一 Lab Meeting 請到 /meetings 由報告人或管理員改")
+      if (booking.seriesId)
+        throw new Error("固定會議的單場不能改時間，請取消這場再另外預約")
+      const [appointment] = await db
+        .select({ bookingId: appointments.bookingId })
+        .from(appointments)
+        .where(eq(appointments.bookingId, booking.id))
+      if (appointment)
+        throw new Error("透過預約時段約的會議不能改時間，請取消後重新預約")
+      const today = todayInTaipei()
+      if (booking.date < today) throw new Error("過去的會議不能改時間")
+      if (
+        booking.date === input.date &&
+        booking.startTime === input.start_time &&
+        booking.endTime === input.end_time
       )
-    if (!booking) throw new Error("找不到這筆預約，或已經取消")
-    if (booking.requestedBy !== actor.userId)
-      throw new Error("只有發起人能改時間")
-    if (booking.meetingId)
-      throw new Error("週一 Lab Meeting 請到 /meetings 由報告人或管理員改")
-    if (booking.seriesId)
-      throw new Error("固定會議的單場不能改時間，請取消這場再另外預約")
-    const [appointment] = await db
-      .select({ bookingId: appointments.bookingId })
-      .from(appointments)
-      .where(eq(appointments.bookingId, booking.id))
-    if (appointment)
-      throw new Error("透過預約時段約的會議不能改時間，請取消後重新預約")
-    const today = todayInTaipei()
-    if (booking.date < today) throw new Error("過去的會議不能改時間")
-    if (
-      booking.date === input.date &&
-      booking.startTime === input.start_time &&
-      booking.endTime === input.end_time
-    )
-      throw new Error("時間沒有變")
-    const hasRoom = Boolean(booking.room)
-    const problem = hasRoom
-      ? spanProblem(input.start_time, input.end_time)
-      : onlineSpanProblem(input.start_time, input.end_time)
-    if (problem) throw new Error(problem)
-    if (input.date < today) throw new Error("不能改到過去的日期")
-    if (!hasRoom && input.date > addDays(today, ONLINE_AHEAD_DAYS))
-      throw new Error(`線上會議最多預約 ${ONLINE_AHEAD_DAYS} 天後`)
-    if (hasRoom && !bookingConfigured())
-      throw new Error("Portal 還沒設定系上借用帳號，現在不能改教室時段")
-    if (await meetingPending(booking.id))
-      throw new Error("線上會議室還在建立，稍後再改")
-    const organizer = await organizerOf(actor.userId)
+        throw new Error("時間沒有變")
+      const hasRoom = Boolean(booking.room)
+      const problem = hasRoom
+        ? spanProblem(input.start_time, input.end_time)
+        : onlineSpanProblem(input.start_time, input.end_time)
+      if (problem) throw new Error(problem)
+      if (input.date < today) throw new Error("不能改到過去的日期")
+      if (!hasRoom && input.date > addDays(today, ONLINE_AHEAD_DAYS))
+        throw new Error(`線上會議最多預約 ${ONLINE_AHEAD_DAYS} 天後`)
+      if (hasRoom && !bookingConfigured())
+        throw new Error("Portal 還沒設定系上借用帳號，現在不能改教室時段")
+      if (await meetingPending(booking.id))
+        throw new Error("線上會議室還在建立，稍後再改")
+      const organizer = await organizerOf(actor.userId)
 
-    const { moved, paid } = await withBookingLock(
-      actor.userId,
-      input.date,
-      async () => {
-        if (!hasRoom)
-          await refuseClash(
-            actor.userId,
-            input.date,
-            input.start_time,
-            input.end_time,
-            booking.id
-          )
-        // Picked from a fresh read, inside the lock, as a new booking is.
-        const room = hasRoom
-          ? roomFor(
-              (await availability([input.date], true))[0].slots,
+      const { moved, paid } = await withBookingLock(
+        actor.userId,
+        input.date,
+        async () => {
+          if (!hasRoom)
+            await refuseClash(
+              actor.userId,
+              input.date,
               input.start_time,
               input.end_time,
-              input.allow_paid,
-              "換個時段"
+              booking.id
             )
-          : null
-        const save = (externalId: string | null) =>
-          db.transaction(async (tx) => {
-            const [row] = await tx
-              .update(roomBookings)
-              .set({
-                date: input.date,
-                startTime: input.start_time,
-                endTime: input.end_time,
-                room: room?.room ?? null,
-                externalId,
-                // A newer sequence, or calendars keep the old time.
-                inviteSequence: sql`${roomBookings.inviteSequence} + 1`,
-              })
-              // A cancel or another move since the read above leaves the
-              // row alone.
-              .where(
-                and(
-                  eq(roomBookings.id, booking.id),
-                  eq(roomBookings.status, "booked"),
-                  eq(roomBookings.date, booking.date),
-                  eq(roomBookings.startTime, booking.startTime),
-                  eq(roomBookings.endTime, booking.endTime)
-                )
+          // Picked from a fresh read, inside the lock, as a new booking is.
+          const room = hasRoom
+            ? roomFor(
+                (await availability([input.date], true))[0].slots,
+                input.start_time,
+                input.end_time,
+                input.allow_paid,
+                "換個時段"
               )
-              .returning()
-            if (!row) throw new Error("這筆預約剛被取消或改過，重新整理再試")
-            await queueMail(tx, inviteMail(row, organizer, "REQUEST", booking))
-            return row
-          })
-        if (!room) return { moved: await save(null), paid: false }
-        const reservation = {
-          room: room.room,
-          start: taipeiIso(input.date, input.start_time),
-          end: taipeiIso(input.date, input.end_time),
-        }
-        const moved = await withLease(
-          `room ${room.room} ${input.date}`,
-          async () => {
-            const externalId = await reserveOrClean(reservation)
-            try {
-              return await save(externalId)
-            } catch (error) {
-              await release(externalId, reservation).catch(() => {})
-              throw error
-            }
+            : null
+          const save = (externalId: string | null) =>
+            db.transaction(async (tx) => {
+              const [row] = await tx
+                .update(roomBookings)
+                .set({
+                  date: input.date,
+                  startTime: input.start_time,
+                  endTime: input.end_time,
+                  room: room?.room ?? null,
+                  externalId,
+                  // A newer sequence, or calendars keep the old time.
+                  inviteSequence: sql`${roomBookings.inviteSequence} + 1`,
+                })
+                // A cancel or another move since the read above leaves the
+                // row alone.
+                .where(
+                  and(
+                    eq(roomBookings.id, booking.id),
+                    eq(roomBookings.status, "booked"),
+                    eq(roomBookings.date, booking.date),
+                    eq(roomBookings.startTime, booking.startTime),
+                    eq(roomBookings.endTime, booking.endTime)
+                  )
+                )
+                .returning()
+              if (!row) throw new Error("這筆預約剛被取消或改過，重新整理再試")
+              await queueMail(
+                tx,
+                inviteMail(row, organizer, "REQUEST", booking)
+              )
+              return row
+            })
+          if (!room) return { moved: await save(null), paid: false }
+          const reservation = {
+            room: room.room,
+            start: taipeiIso(input.date, input.start_time),
+            end: taipeiIso(input.date, input.end_time),
           }
-        )
-        return { moved, paid: room.paid }
-      }
-    )
+          const moved = await withLease(
+            `room ${room.room} ${input.date}`,
+            async () => {
+              const externalId = await reserveOrClean(reservation)
+              try {
+                return await save(externalId)
+              } catch (error) {
+                await release(externalId, reservation).catch(() => {})
+                throw error
+              }
+            }
+          )
+          return { moved, paid: room.paid }
+        }
+      )
 
-    // The new room is held and recorded; only now let the old one go.
-    let roomError: string | null = null
-    if (booking.externalId && booking.room)
-      try {
-        await release(booking.externalId, {
-          room: booking.room,
-          start: taipeiIso(booking.date, booking.startTime),
-          end: taipeiIso(booking.date, booking.endTime),
-        })
-      } catch {
-        roomError = `${dayLabel(booking.date)} ${booking.startTime} 的 ${booking.room} 沒退掉，請到系上借用系統取消`
+      // The new room is held and recorded; only now let the old one go.
+      let roomError: string | null = null
+      if (booking.externalId && booking.room)
+        try {
+          await release(booking.externalId, {
+            room: booking.room,
+            start: taipeiIso(booking.date, booking.startTime),
+            end: taipeiIso(booking.date, booking.endTime),
+          })
+        } catch {
+          roomError = `${dayLabel(booking.date)} ${booking.startTime} 的 ${booking.room} 沒退掉，請到系上借用系統取消`
+        }
+      const meetError = await rescheduleMeeting(moved.id)
+      return {
+        id: moved.id,
+        date: moved.date,
+        start_time: moved.startTime,
+        end_time: moved.endTime,
+        room: moved.room,
+        paid,
+        room_error: roomError,
+        meet_error: meetError,
       }
-    const meetError = await rescheduleMeeting(moved.id)
-    return {
-      id: moved.id,
-      date: moved.date,
-      start_time: moved.startTime,
-      end_time: moved.endTime,
-      room: moved.room,
-      paid,
-      room_error: roomError,
-      meet_error: meetError,
-    }
-  },
+    }),
 })
 
 /**
@@ -1172,23 +1179,33 @@ export async function markCancelled(
  * booking whose invite never went out.
  */
 export async function cancelBooking(
-  booking: Booking,
+  read: Booking,
   cancelledBy: string,
   { notify = true } = {}
 ) {
-  if (booking.externalId && booking.room)
-    await release(booking.externalId, {
-      room: booking.room,
-      start: taipeiIso(booking.date, booking.startTime),
-      end: taipeiIso(booking.date, booking.endTime),
+  // Under the booking's lease, as move_meeting is, and from a fresh read:
+  // a move since the caller read it holds another room.
+  return withLease(`booking ${read.id}`, async () => {
+    const [booking] = await db
+      .select()
+      .from(roomBookings)
+      .where(eq(roomBookings.id, read.id))
+    if (!booking || booking.status !== "booked")
+      throw new Error("這筆預約已經取消")
+    if (booking.externalId && booking.room)
+      await release(booking.externalId, {
+        room: booking.room,
+        start: taipeiIso(booking.date, booking.startTime),
+        end: taipeiIso(booking.date, booking.endTime),
+      })
+    const cancelled = await db.transaction(async (tx) => {
+      const row = await markCancelled(tx, booking, cancelledBy, notify)
+      if (!row) throw new Error("這筆預約已經取消")
+      return row
     })
-  const cancelled = await db.transaction(async (tx) => {
-    const row = await markCancelled(tx, booking, cancelledBy, notify)
-    if (!row) throw new Error("這筆預約已經取消")
-    return row
+    const teamsError = await cancelTeamsMeeting(cancelled)
+    return { cancelled: true, teams_error: teamsError }
   })
-  const teamsError = await cancelTeamsMeeting(cancelled)
-  return { cancelled: true, teams_error: teamsError }
 }
 
 /** For the series page: the bookings that already hold these occurrences. */
