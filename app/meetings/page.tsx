@@ -490,6 +490,19 @@ export default async function MeetingsPage() {
                 title={topicText(entry.booking, owners)}
                 externalUrl={entry.booking.externalUrl}
                 agenda={entry.booking.agenda}
+                today={today}
+                when={
+                  entry.booking.requestedBy === actor.userId &&
+                  !entry.booking.seriesId &&
+                  entry.booking.date >= today
+                    ? {
+                        date: entry.booking.date,
+                        start: entry.booking.startTime,
+                        end: entry.booking.endTime,
+                        room: Boolean(entry.booking.room),
+                      }
+                    : undefined
+                }
               />
             )}
             {entry.booking.requestedBy === actor.userId && (

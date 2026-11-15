@@ -422,20 +422,61 @@ export async function renameTeamsMeeting(bookingId: string) {
     if (!booking || booking.status !== "booked" || !booking.online) return null
     const topic = await teamsTopicState(tx, booking)
     if (topic.state !== "stale") return null
-    const start = taipeiOffsetIso(booking.date, booking.startTime)
-    return {
-      booking,
-      variables: {
-        BOOKING_REQUEST_ID: topic.meeting.requestId,
-        // The same 04000000… GlobalObjectId a cancellation sends.
-        EVENT_ID: topic.meeting.cancelId,
-        MESSAGE_ID: topic.meeting.messageId,
-        START_TIME: start,
-        END_TIME: taipeiOffsetIso(booking.date, booking.endTime),
-        ORIGINAL_START_TIME: start,
-        ...(booking.agenda ? { AGENDA: booking.agenda } : {}),
-      },
-    }
+    return { booking, variables: updateVariables(booking, topic.meeting) }
+  })
+}
+
+const updateVariables = (
+  booking: Booking,
+  meeting: { requestId: string; cancelId: string; messageId: string }
+) => {
+  const start = taipeiOffsetIso(booking.date, booking.startTime)
+  return {
+    BOOKING_REQUEST_ID: meeting.requestId,
+    // The same 04000000… GlobalObjectId a cancellation sends.
+    EVENT_ID: meeting.cancelId,
+    MESSAGE_ID: meeting.messageId,
+    START_TIME: start,
+    END_TIME: taipeiOffsetIso(booking.date, booking.endTime),
+    ORIGINAL_START_TIME: start,
+    ...(booking.agenda ? { AGENDA: booking.agenda } : {}),
+  }
+}
+
+/** Whether a create or update for the booking's meeting is still out: a
+ * move then waits, or the meeting would keep the old time. */
+export async function meetingPending(bookingId: string) {
+  const [row] = await db
+    .select({ requestId: roomMeetingRequests.requestId })
+    .from(roomMeetingRequests)
+    .where(
+      and(
+        eq(roomMeetingRequests.bookingId, bookingId),
+        inArray(roomMeetingRequests.kind, ["create", "update"]),
+        eq(roomMeetingRequests.status, "pending")
+      )
+    )
+    .limit(1)
+  return Boolean(row)
+}
+
+/**
+ * Moves a booking's meet room to the booking's current time, keeping its
+ * link. No meeting made yet asks nothing: a retried create reads the new
+ * time. Returns why the ask failed, or null.
+ */
+export async function rescheduleMeeting(bookingId: string) {
+  if (!meetingsConfigured()) return null
+  return askIf("update", async (tx) => {
+    const [booking] = await tx
+      .select()
+      .from(roomBookings)
+      .where(eq(roomBookings.id, bookingId))
+      .for("update")
+    if (!booking || booking.status !== "booked" || !booking.online) return null
+    const made = await madeMeeting(tx, booking.id)
+    if (!made.meeting) return null
+    return { booking, variables: updateVariables(booking, made.meeting) }
   })
 }
 

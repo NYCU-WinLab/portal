@@ -24,8 +24,10 @@ import {
   bookingAgenda,
   cancelTeamsMeeting,
   joinUrl,
+  meetingPending,
   meetingsOf,
   requestTeamsMeeting,
+  rescheduleMeeting,
 } from "@/lib/actions/rooms-meetings"
 import type { QueuedMail } from "@/lib/mail"
 import { mailBody } from "@/lib/mail-body"
@@ -397,14 +399,19 @@ export function bookingCalendar(
   }
 }
 
+const whenOf = (booking: Pick<Booking, "date" | "startTime" | "endTime">) =>
+  `${dayLabel(booking.date)} ${booking.startTime} 到 ${booking.endTime}`
+
 /** The invite (or cancellation) for a booking, to the organizer and every
- * attendee, with the calendar event attached. */
+ * attendee, with the calendar event attached. movedFrom, the booking
+ * before a move, makes it the notice of the new time. */
 function inviteMail(
   booking: Booking,
   organizer: { name: string; email: string },
-  method: "REQUEST" | "CANCEL"
+  method: "REQUEST" | "CANCEL",
+  movedFrom?: Booking
 ) {
-  const when = `${dayLabel(booking.date)} ${booking.startTime} 到 ${booking.endTime}`
+  const when = whenOf(booking)
   const link =
     booking.online && method === "REQUEST" ? joinUrl(booking.id) : null
   // Someone else's meeting: people join it, and ours only records it.
@@ -416,7 +423,7 @@ function inviteMail(
   return {
     to,
     replyTo: organizer.email,
-    subject: `[WinLab 會議] ${method === "CANCEL" ? "已取消" : "邀請"}：${plainTitle(booking)}（${when}）`,
+    subject: `[WinLab 會議] ${method === "CANCEL" ? "已取消" : movedFrom ? "改時間" : "邀請"}：${plainTitle(booking)}（${when}）`,
     ...mailBody({
       title:
         method === "CANCEL"
@@ -424,6 +431,9 @@ function inviteMail(
           : plainTitle(booking),
       rows: [
         ["時間", when],
+        ...(movedFrom
+          ? ([["原本", whenOf(movedFrom)]] as [string, string][])
+          : []),
         ["地點", placeOf(booking)],
         ["發起人", organizer.name],
         ...(booking.attendees.length
@@ -661,14 +671,55 @@ export function roomFor(
   slots: Slot[],
   start: string,
   end: string,
-  allowPaid: boolean
+  allowPaid: boolean,
+  instead = "換個時段或改成線上"
 ) {
   const picked = pickRoom(slots, start, end)
-  if (!picked)
-    throw new Error("這段時間沒有教室從頭到尾都空著，換個時段或改成線上")
+  if (!picked) throw new Error(`這段時間沒有教室從頭到尾都空著，${instead}`)
   if (picked.paid && !allowPaid)
     throw new Error(`只剩付費教室 ${picked.room}，同意付費才能借`)
   return picked
+}
+
+/**
+ * Refuses an online meeting over one the member already has that day:
+ * meetings they booked, and appointments labmates booked with them, since
+ * both are theirs to attend. except leaves out the booking being moved.
+ */
+async function refuseClash(
+  userId: string,
+  date: string,
+  start: string,
+  end: string,
+  except?: string
+) {
+  const mine = await db
+    .select({
+      id: roomBookings.id,
+      title: roomBookings.title,
+      meetingPrefix: roomBookings.meetingPrefix,
+      start: roomBookings.startTime,
+      end: roomBookings.endTime,
+    })
+    .from(roomBookings)
+    .leftJoin(appointments, eq(appointments.bookingId, roomBookings.id))
+    .where(
+      and(
+        or(
+          eq(roomBookings.requestedBy, userId),
+          eq(appointments.ownerId, userId)
+        ),
+        eq(roomBookings.date, date),
+        eq(roomBookings.status, "booked")
+      )
+    )
+  const clash = mine.find(
+    (row) => row.id !== except && spansOverlap(row, { start, end })
+  )
+  if (clash)
+    throw new Error(
+      `你 ${clash.start} 到 ${clash.end} 已有「${plainTitle(clash)}」`
+    )
 }
 
 export const bookMeeting = defineAction({
@@ -766,39 +817,13 @@ export const bookMeeting = defineAction({
             )
           )
         if (standing) throw new Error("你的固定會議已經借好這個時段了")
-        if (input.online_only) {
-          // Meetings they booked, and appointments labmates booked with
-          // them: both are theirs to attend.
-          const mine = await db
-            .select({
-              title: roomBookings.title,
-              meetingPrefix: roomBookings.meetingPrefix,
-              start: roomBookings.startTime,
-              end: roomBookings.endTime,
-            })
-            .from(roomBookings)
-            .leftJoin(appointments, eq(appointments.bookingId, roomBookings.id))
-            .where(
-              and(
-                or(
-                  eq(roomBookings.requestedBy, actor.userId),
-                  eq(appointments.ownerId, actor.userId)
-                ),
-                eq(roomBookings.date, input.date),
-                eq(roomBookings.status, "booked")
-              )
-            )
-          const clash = mine.find((row) =>
-            spansOverlap(row, {
-              start: input.start_time,
-              end: input.end_time,
-            })
+        if (input.online_only)
+          await refuseClash(
+            actor.userId,
+            input.date,
+            input.start_time,
+            input.end_time
           )
-          if (clash)
-            throw new Error(
-              `你 ${clash.start} 到 ${clash.end} 已有「${plainTitle(clash)}」`
-            )
-        }
         // Picked from a fresh read, not the grid the member clicked
         // minutes ago, and inside the lock.
         const room = input.online_only
@@ -950,6 +975,167 @@ export const cancelMeeting = defineAction({
   },
 })
 
+export const moveMeeting = defineAction({
+  name: "move_meeting",
+  title: "改會議時間",
+  description:
+    "Moves one of the member's own one-off bookings (by id from list_meetings) to another date or time, keeping its title, attendees, agenda, links and meet.winlab.tw room. A room booking gets the room /meetings would pick for the new span (free before paid; a paid room only with allow_paid true) and keeps 08:00 to 22:00; an online-only one keeps its own limits (today to 90 days ahead, 30 to 300 minutes, no overlap with the member's other meetings). The new room is reserved before the old one is released, so a refused move changes nothing. Everyone gets the updated calendar invite by mail. Only the member who booked it; not for the Monday lab meeting, an occurrence of a standing meeting or an appointment booked through book_appointment (cancel and book again). room_error is set when the old department room could not be released: release it by hand in the department system. meet_error is set when meet kept the old time. Read back the new date, time and room, and get the member's yes first.",
+  kind: "mutation",
+  input: z.object({
+    id: z.uuid("id 是預約的 id"),
+    date: day,
+    start_time: time,
+    end_time: time,
+    allow_paid: z.boolean().default(false),
+  }),
+  // One move or cancel of a booking at a time: each reads the row, works
+  // the department system and meet, then writes, and an interleaving
+  // would leave a room held or meet on an older time.
+  run: (actor, input) =>
+    withLease(`booking ${input.id}`, async () => {
+      const [booking] = await db
+        .select()
+        .from(roomBookings)
+        .where(
+          and(eq(roomBookings.id, input.id), eq(roomBookings.status, "booked"))
+        )
+      if (!booking) throw new Error("找不到這筆預約，或已經取消")
+      if (booking.requestedBy !== actor.userId)
+        throw new Error("只有發起人能改時間")
+      if (booking.meetingId)
+        throw new Error("週一 Lab Meeting 請到 /meetings 由報告人或管理員改")
+      if (booking.seriesId)
+        throw new Error("固定會議的單場不能改時間，請取消這場再另外預約")
+      const [appointment] = await db
+        .select({ bookingId: appointments.bookingId })
+        .from(appointments)
+        .where(eq(appointments.bookingId, booking.id))
+      if (appointment)
+        throw new Error("透過預約時段約的會議不能改時間，請取消後重新預約")
+      const today = todayInTaipei()
+      if (booking.date < today) throw new Error("過去的會議不能改時間")
+      if (
+        booking.date === input.date &&
+        booking.startTime === input.start_time &&
+        booking.endTime === input.end_time
+      )
+        throw new Error("時間沒有變")
+      const hasRoom = Boolean(booking.room)
+      const problem = hasRoom
+        ? spanProblem(input.start_time, input.end_time)
+        : onlineSpanProblem(input.start_time, input.end_time)
+      if (problem) throw new Error(problem)
+      if (input.date < today) throw new Error("不能改到過去的日期")
+      if (!hasRoom && input.date > addDays(today, ONLINE_AHEAD_DAYS))
+        throw new Error(`線上會議最多預約 ${ONLINE_AHEAD_DAYS} 天後`)
+      if (hasRoom && !bookingConfigured())
+        throw new Error("Portal 還沒設定系上借用帳號，現在不能改教室時段")
+      if (await meetingPending(booking.id))
+        throw new Error("線上會議室還在建立，稍後再改")
+      const organizer = await organizerOf(actor.userId)
+
+      const { moved, paid } = await withBookingLock(
+        actor.userId,
+        input.date,
+        async () => {
+          if (!hasRoom)
+            await refuseClash(
+              actor.userId,
+              input.date,
+              input.start_time,
+              input.end_time,
+              booking.id
+            )
+          // Picked from a fresh read, inside the lock, as a new booking is.
+          const room = hasRoom
+            ? roomFor(
+                (await availability([input.date], true))[0].slots,
+                input.start_time,
+                input.end_time,
+                input.allow_paid,
+                "換個時段"
+              )
+            : null
+          const save = (externalId: string | null) =>
+            db.transaction(async (tx) => {
+              const [row] = await tx
+                .update(roomBookings)
+                .set({
+                  date: input.date,
+                  startTime: input.start_time,
+                  endTime: input.end_time,
+                  room: room?.room ?? null,
+                  externalId,
+                  // A newer sequence, or calendars keep the old time.
+                  inviteSequence: sql`${roomBookings.inviteSequence} + 1`,
+                })
+                // A cancel or another move since the read above leaves the
+                // row alone.
+                .where(
+                  and(
+                    eq(roomBookings.id, booking.id),
+                    eq(roomBookings.status, "booked"),
+                    eq(roomBookings.date, booking.date),
+                    eq(roomBookings.startTime, booking.startTime),
+                    eq(roomBookings.endTime, booking.endTime)
+                  )
+                )
+                .returning()
+              if (!row) throw new Error("這筆預約剛被取消或改過，重新整理再試")
+              await queueMail(
+                tx,
+                inviteMail(row, organizer, "REQUEST", booking)
+              )
+              return row
+            })
+          if (!room) return { moved: await save(null), paid: false }
+          const reservation = {
+            room: room.room,
+            start: taipeiIso(input.date, input.start_time),
+            end: taipeiIso(input.date, input.end_time),
+          }
+          const moved = await withLease(
+            `room ${room.room} ${input.date}`,
+            async () => {
+              const externalId = await reserveOrClean(reservation)
+              try {
+                return await save(externalId)
+              } catch (error) {
+                await release(externalId, reservation).catch(() => {})
+                throw error
+              }
+            }
+          )
+          return { moved, paid: room.paid }
+        }
+      )
+
+      // The new room is held and recorded; only now let the old one go.
+      let roomError: string | null = null
+      if (booking.externalId && booking.room)
+        try {
+          await release(booking.externalId, {
+            room: booking.room,
+            start: taipeiIso(booking.date, booking.startTime),
+            end: taipeiIso(booking.date, booking.endTime),
+          })
+        } catch {
+          roomError = `${dayLabel(booking.date)} ${booking.startTime} 的 ${booking.room} 沒退掉，請到系上借用系統取消`
+        }
+      const meetError = await rescheduleMeeting(moved.id)
+      return {
+        id: moved.id,
+        date: moved.date,
+        start_time: moved.startTime,
+        end_time: moved.endTime,
+        room: moved.room,
+        paid,
+        room_error: roomError,
+        meet_error: meetError,
+      }
+    }),
+})
+
 /**
  * Marks a booking cancelled inside the caller's transaction, mailing
  * everyone the cancellation when notify. Returns the row, or null when it
@@ -993,23 +1179,37 @@ export async function markCancelled(
  * booking whose invite never went out.
  */
 export async function cancelBooking(
-  booking: Booking,
+  read: Booking,
   cancelledBy: string,
   { notify = true } = {}
 ) {
-  if (booking.externalId && booking.room)
-    await release(booking.externalId, {
-      room: booking.room,
-      start: taipeiIso(booking.date, booking.startTime),
-      end: taipeiIso(booking.date, booking.endTime),
+  // Under the booking's lease, as move_meeting is, and from a fresh read:
+  // a move since the caller read it holds another room.
+  return withLease(`booking ${read.id}`, async () => {
+    const [booking] = await db
+      .select()
+      .from(roomBookings)
+      .where(eq(roomBookings.id, read.id))
+    if (!booking || booking.status !== "booked")
+      throw new Error("這筆預約已經取消")
+    if (booking.externalId && booking.room)
+      await release(booking.externalId, {
+        room: booking.room,
+        start: taipeiIso(booking.date, booking.startTime),
+        end: taipeiIso(booking.date, booking.endTime),
+      })
+    const cancelled = await db.transaction(async (tx) => {
+      const row = await markCancelled(tx, booking, cancelledBy, notify)
+      if (!row) throw new Error("這筆預約已經取消")
+      // A move that outlived the lease holds another room now: keep the
+      // booking, rather than cancel it with that room still held.
+      if (row.externalId !== booking.externalId)
+        throw new Error("這筆預約剛改過時間，重新整理再試")
+      return row
     })
-  const cancelled = await db.transaction(async (tx) => {
-    const row = await markCancelled(tx, booking, cancelledBy, notify)
-    if (!row) throw new Error("這筆預約已經取消")
-    return row
+    const teamsError = await cancelTeamsMeeting(cancelled)
+    return { cancelled: true, teams_error: teamsError }
   })
-  const teamsError = await cancelTeamsMeeting(cancelled)
-  return { cancelled: true, teams_error: teamsError }
 }
 
 /** For the series page: the bookings that already hold these occurrences. */

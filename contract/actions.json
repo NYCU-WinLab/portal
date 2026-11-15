@@ -10277,6 +10277,107 @@
     }
   },
   {
+    "name": "move_meeting",
+    "title": "改會議時間",
+    "description": "Moves one of the member's own one-off bookings (by id from list_meetings) to another date or time, keeping its title, attendees, agenda, links and meet.winlab.tw room. A room booking gets the room /meetings would pick for the new span (free before paid; a paid room only with allow_paid true) and keeps 08:00 to 22:00; an online-only one keeps its own limits (today to 90 days ahead, 30 to 300 minutes, no overlap with the member's other meetings). The new room is reserved before the old one is released, so a refused move changes nothing. Everyone gets the updated calendar invite by mail. Only the member who booked it; not for the Monday lab meeting, an occurrence of a standing meeting or an appointment booked through book_appointment (cancel and book again). room_error is set when the old department room could not be released: release it by hand in the department system. meet_error is set when meet kept the old time. Read back the new date, time and room, and get the member's yes first.",
+    "kind": "mutation",
+    "app": "meetings",
+    "hash": "8e69bb6b815500e4",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "allow_paid": {
+          "default": false,
+          "type": "boolean"
+        },
+        "date": {
+          "type": "string"
+        },
+        "end_time": {
+          "pattern": "^\\d{2}:\\d{2}$",
+          "type": "string"
+        },
+        "id": {
+          "format": "uuid",
+          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+          "type": "string"
+        },
+        "start_time": {
+          "pattern": "^\\d{2}:\\d{2}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "date",
+        "start_time",
+        "end_time"
+      ],
+      "type": "object"
+    },
+    "output": {
+      "additionalProperties": false,
+      "properties": {
+        "date": {
+          "type": "string"
+        },
+        "end_time": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "meet_error": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "paid": {
+          "type": "boolean"
+        },
+        "room": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "room_error": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "start_time": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "date",
+        "start_time",
+        "end_time",
+        "room",
+        "paid",
+        "room_error",
+        "meet_error"
+      ],
+      "type": "object"
+    }
+  },
+  {
     "name": "move_presenter",
     "title": "調整報告順序",
     "description": "Admins only. Moves a member one place up or down within their own status and cohort; the order between cohorts follows Keycloak and cannot be changed here.",

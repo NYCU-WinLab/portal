@@ -9,6 +9,7 @@ import {
   getEpicDeliverables,
   listGroupEpics,
   listRoomAvailability,
+  moveMeeting,
 } from "@/lib/actions/rooms"
 import {
   deleteStandingMeeting,
@@ -70,6 +71,11 @@ export async function deleteSeriesAction(id: string) {
   return attempt("/meetings", () =>
     runAction(deleteStandingMeeting, actor, { id })
   )
+}
+
+export async function moveMeetingAction(input: unknown) {
+  const actor = await requireActor("/meetings")
+  return attempt("/meetings", () => runAction(moveMeeting, actor, input))
 }
 
 export async function updateMeetingAction(input: unknown) {
