@@ -1201,6 +1201,10 @@ export async function cancelBooking(
     const cancelled = await db.transaction(async (tx) => {
       const row = await markCancelled(tx, booking, cancelledBy, notify)
       if (!row) throw new Error("這筆預約已經取消")
+      // A move that outlived the lease holds another room now: keep the
+      // booking, rather than cancel it with that room still held.
+      if (row.externalId !== booking.externalId)
+        throw new Error("這筆預約剛改過時間，重新整理再試")
       return row
     })
     const teamsError = await cancelTeamsMeeting(cancelled)
