@@ -217,6 +217,7 @@ import {
   listRoomAvailability,
   listMeetings,
   listProjectGroups,
+  moveMeeting,
 } from "@/lib/actions/rooms"
 import {
   deleteStandingMeeting,
@@ -414,6 +415,7 @@ export const actionGroups: { app: ApiApp | null; actions: Action[] }[] = [
       getEpicDeliverables,
       bookMeeting,
       cancelMeeting,
+      moveMeeting,
       getBookingAgenda,
       listInvitedBookings,
       listStandingMeetings,
