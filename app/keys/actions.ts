@@ -73,6 +73,7 @@ export async function deleteSshKeyAction(id: string) {
 export async function setSshServiceKeyAction(input: {
   service: string
   id: string
+  used: boolean
 }) {
   const { error } = await run(setSshServiceKey, input)
   return { error }

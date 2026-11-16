@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from "node:crypto"
 
-import { and, asc, count, desc, eq, sql } from "drizzle-orm"
+import { and, asc, count, desc, eq, inArray, sql } from "drizzle-orm"
 import { alias } from "drizzle-orm/pg-core"
 import { z } from "zod"
 
@@ -26,9 +26,10 @@ import {
 } from "@/lib/ssh-keys"
 
 // SSH keys: a member keeps their public keys here; a service's machines
-// read one key per member with the service's read key (readServiceKeys,
-// behind /api/ssh-keys): the key the member picked for that service, or
-// their first key when they picked none. Portal admins make the services
+// read each member's keys with the service's read key (readServiceKeys,
+// behind /api/ssh-keys): the keys the member picked for that service, one
+// for each machine they log in from, or their first key when they picked
+// none. Portal admins make the services
 // and, for one that is not open, name who may use it.
 // Who may log in is decided when a machine reads, not when a key is put in:
 // a grant taken away or a member who left stops being served on the next
@@ -51,6 +52,12 @@ function newToken() {
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0]
 type Change = Omit<typeof sshKeyChanges.$inferInsert, "actorId">
+
+/** One member's key changes run one at a time (until the transaction ends). */
+const lockKeys = (tx: Tx, userId: string) =>
+  tx.execute(
+    sql`select pg_advisory_xact_lock(hashtext(${`ssh_keys:${userId}`}))`
+  )
 
 const record = (tx: Tx, actor: Actor, change: Change) =>
   tx.insert(sshKeyChanges).values({ actorId: actor.userId, ...change })
@@ -116,7 +123,7 @@ export const listMySshKeys = defineAction({
   name: "list_my_ssh_keys",
   title: "我的 SSH 金鑰",
   description:
-    "The signed-in member's SSH public keys (id, label, the machine that holds the private key, what the key is for, type, fingerprint, the public key line, where it came from, when it was added, and the slugs of the services that use it), the member's name and account username, and the services the member may use (slug, name and keyId, the id of the key that service uses). A service uses the key the member picked with set_ssh_service_key, or the member's first key when none was picked.",
+    "The signed-in member's SSH public keys (id, label, the machine that holds the private key, what the key is for, type, fingerprint, the public key line, where it came from, when it was added, and the slugs of the services that use it), the member's name and account username, and the services the member may use (slug, name, keyIds, the ids of the keys that service uses, and keyId, the first of them). A service uses the keys the member turned on with set_ssh_service_key, or the member's first key when none was picked.",
   kind: "query",
   input: z.object({}),
   run: async (actor) => {
@@ -135,9 +142,7 @@ export const listMySshKeys = defineAction({
         .from(sshKeyServices)
         .innerJoin(sshKeys, eq(sshKeys.id, sshKeyServices.keyId))
         .innerJoin(sshServices, eq(sshServices.id, sshKeyServices.serviceId))
-        .where(eq(sshKeys.userId, actor.userId))
-        // Newest first: the pick that counts is the last one made.
-        .orderBy(desc(sshKeyServices.createdAt)),
+        .where(eq(sshKeys.userId, actor.userId)),
       db
         .select({ slug: sshServices.slug, name: sshServices.name })
         .from(sshServices)
@@ -153,14 +158,21 @@ export const listMySshKeys = defineAction({
         )
         .orderBy(asc(sshServices.name)),
     ])
-    // A service uses the key picked for it, or the first key.
-    const used = services.map((service) => ({
-      ...service,
-      keyId:
-        uses.find((use) => use.slug === service.slug)?.keyId ??
-        keys[0]?.id ??
-        null,
-    }))
+    // A service uses the keys picked for it, or the first key. keys is
+    // oldest first, so keyIds comes out in that order too.
+    const used = services.map((service) => {
+      const picked = new Set(
+        uses.filter((use) => use.slug === service.slug).map((use) => use.keyId)
+      )
+      const keyIds = keys
+        .filter((key, index) =>
+          picked.size > 0 ? picked.has(key.id) : index === 0
+        )
+        .map((key) => key.id)
+      // keyId is the first of keyIds, kept for clients written when a
+      // service used one key.
+      return { ...service, keyId: keyIds[0] ?? null, keyIds }
+    })
     return {
       username: owner?.username ?? null,
       name: owner?.name ?? null,
@@ -175,7 +187,7 @@ export const listMySshKeys = defineAction({
         source: key.source,
         createdAt: key.createdAt,
         services: used
-          .filter((service) => service.keyId === key.id)
+          .filter((service) => service.keyIds.includes(key.id))
           .map((service) => service.slug),
       })),
       services: used,
@@ -327,6 +339,7 @@ export const deleteSshKey = defineAction({
   input: z.object({ id: z.uuid() }),
   run: async (actor, { id }) =>
     db.transaction(async (tx) => {
+      await lockKeys(tx, actor.userId)
       const [deleted] = await tx
         .delete(sshKeys)
         .where(and(eq(sshKeys.id, id), eq(sshKeys.userId, actor.userId)))
@@ -343,20 +356,26 @@ export const deleteSshKey = defineAction({
 
 export const setSshServiceKey = defineAction({
   name: "set_ssh_service_key",
-  title: "設定服務用哪把金鑰",
+  title: "設定服務用不用這把金鑰",
   description:
-    "Picks which of the signed-in member's SSH keys a service uses: service is a slug from list_my_ssh_keys' services, id one of the member's keys. It replaces the key picked before; the service's machines accept the new key, and no longer the old one, from their next read. Without a pick a service uses the member's first key. Fails for a service the member may not use or a key that is not the member's.",
+    "Turns one of the signed-in member's SSH keys on or off for a service: service is a slug from list_my_ssh_keys' services, id one of the member's keys, used true (the default) to let the service's machines accept it and false to stop. A service can use several keys, one for each machine the member logs in from; its machines read the change on their next read. A service that was only using the member's first key by default keeps it when another key is turned on. Fails for a service the member may not use, a key that is not the member's, or turning off the last key a service uses. Returns keyIds, the keys the service uses now.",
   kind: "mutation",
   input: z.object({
     service: z.string().trim().min(1).max(32),
     id: z.uuid(),
+    used: z.boolean().default(true),
   }),
-  run: async (actor, { id, service: slug }) =>
+  run: async (actor, { id, service: slug, used }) =>
     db.transaction(async (tx) => {
-      const [key] = await tx
-        .select({ fingerprint: sshKeys.fingerprint })
+      // A member's key changes run one at a time: the keys read below are
+      // the keys this change is decided on, whatever another tab is doing.
+      await lockKeys(tx, actor.userId)
+      const mine = await tx
+        .select({ id: sshKeys.id, fingerprint: sshKeys.fingerprint })
         .from(sshKeys)
-        .where(and(eq(sshKeys.id, id), eq(sshKeys.userId, actor.userId)))
+        .where(eq(sshKeys.userId, actor.userId))
+        .orderBy(...oldestFirst)
+      const key = mine.find((one) => one.id === id)
       if (!key) throw new Error("找不到這把金鑰")
       const [service] = await tx
         .select({
@@ -377,29 +396,62 @@ export const setSshServiceKey = defineAction({
       // not exist.
       if (!service || !(service.open || service.granted))
         throw new Error("你不能用這個服務")
-      // One key per member and service: the pick replaces the last one,
-      // and a member's picks run one at a time so two cannot both stay.
-      await tx.execute(
-        sql`select pg_advisory_xact_lock(hashtext(${`ssh_keys:${actor.userId}`}))`
-      )
-      await tx
-        .delete(sshKeyServices)
+      const rows = await tx
+        .select({ keyId: sshKeyServices.keyId })
+        .from(sshKeyServices)
         .where(
           and(
             eq(sshKeyServices.serviceId, service.id),
-            sql`${sshKeyServices.keyId} in (select id from ssh_keys where user_id = ${actor.userId})`
+            inArray(
+              sshKeyServices.keyId,
+              mine.map((one) => one.id)
+            )
           )
         )
-      await tx
-        .insert(sshKeyServices)
-        .values({ keyId: id, serviceId: service.id })
-      await record(tx, actor, {
-        action: "use_key",
-        userId: actor.userId,
+      const picked = new Set(rows.map((row) => row.keyId))
+      // Without a pick the service uses the first key. Write that down
+      // before changing anything, so turning a second key on adds to the
+      // first instead of replacing it.
+      if (picked.size === 0) {
+        await tx
+          .insert(sshKeyServices)
+          .values({ keyId: mine[0].id, serviceId: service.id })
+        picked.add(mine[0].id)
+      }
+      if (used && !picked.has(id)) {
+        await tx
+          .insert(sshKeyServices)
+          .values({ keyId: id, serviceId: service.id })
+        picked.add(id)
+        await record(tx, actor, {
+          action: "use_key",
+          userId: actor.userId,
+          service: slug,
+          fingerprint: key.fingerprint,
+        })
+      }
+      if (!used && picked.has(id)) {
+        if (picked.size === 1) throw new Error("這個服務至少要留一把金鑰")
+        await tx
+          .delete(sshKeyServices)
+          .where(
+            and(
+              eq(sshKeyServices.serviceId, service.id),
+              eq(sshKeyServices.keyId, id)
+            )
+          )
+        picked.delete(id)
+        await record(tx, actor, {
+          action: "unuse_key",
+          userId: actor.userId,
+          service: slug,
+          fingerprint: key.fingerprint,
+        })
+      }
+      return {
         service: slug,
-        fingerprint: key.fingerprint,
-      })
-      return { service: slug, id }
+        keyIds: mine.filter((one) => picked.has(one.id)).map((one) => one.id),
+      }
     }),
 })
 
@@ -718,12 +770,9 @@ export async function readServiceKeys(
     accounts.map(({ id, username }) => [id, username.toLowerCase()])
   )
   const wanted = username?.toLowerCase()
-  // Rows come oldest key first, so a member's first row is their first key.
-  // One key per member whatever the rows say: the newest pick wins.
-  const members = new Map<
-    string,
-    { first: string; picked?: { line: string; at: Date } }
-  >()
+  // Rows come oldest key first, so a member's first row is their first key
+  // and the picked keys keep that order.
+  const members = new Map<string, { first: string; picked: string[] }>()
   for (const row of rows) {
     const name = usernames.get(row.sub)
     if (!name || (wanted && name !== wanted)) continue
@@ -732,10 +781,8 @@ export async function readServiceKeys(
       ? !!status && status !== "alumni"
       : !!row.granted
     if (!allowed) continue
-    const member: { first: string; picked?: { line: string; at: Date } } =
-      members.get(name) ?? { first: line(row, name) }
-    if (row.pickedAt && (!member.picked || row.pickedAt > member.picked.at))
-      member.picked = { line: line(row, name), at: row.pickedAt }
+    const member = members.get(name) ?? { first: line(row, name), picked: [] }
+    if (row.pickedAt) member.picked.push(line(row, name))
     members.set(name, member)
   }
   return {
@@ -743,7 +790,7 @@ export async function readServiceKeys(
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([username, { first, picked }]) => ({
         username,
-        keys: [picked?.line ?? first],
+        keys: picked.length > 0 ? picked : [first],
       })),
   }
 }

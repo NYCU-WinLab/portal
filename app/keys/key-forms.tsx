@@ -16,6 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
+import { Toggle } from "@/components/ui/toggle"
 import { report } from "@/lib/report"
 
 import {
@@ -214,42 +215,51 @@ export function DeleteKey({ id, label }: { id: string; label: string }) {
   )
 }
 
-/** Which of the member's keys one service uses. */
-export function ServiceKey({
+/** Which of the member's keys one service uses: a button for each key. */
+export function ServiceKeys({
   service,
   keys,
   value,
 }: {
   service: { slug: string; name: string }
   keys: { value: string; label: string }[]
-  value: string
+  value: string[]
 }) {
   const [pending, startTransition] = React.useTransition()
   return (
-    <Select
-      value={value}
-      items={keys}
-      disabled={pending}
-      onValueChange={(id) => {
-        if (!id || id === value) return
-        startTransition(async () => {
-          await report(
-            setSshServiceKeyAction({ service: service.slug, id }),
-            `${service.name} 改用這把`
-          ).catch(() => {})
-        })
-      }}
+    <div
+      role="group"
+      aria-label={`${service.name} 用的金鑰`}
+      className="flex flex-wrap justify-end gap-2"
     >
-      <SelectTrigger aria-label={`${service.name} 用的金鑰`}>
-        <SelectValue />
-      </SelectTrigger>
-      <SelectContent>
-        {keys.map((key) => (
-          <SelectItem key={key.value} value={key.value}>
+      {keys.map((key) => {
+        const on = value.includes(key.value)
+        return (
+          <Toggle
+            key={key.value}
+            size="text"
+            pressed={on}
+            disabled={pending}
+            onPressedChange={(pressed) => {
+              // The server keeps the last key on and says so.
+              startTransition(async () => {
+                await report(
+                  setSshServiceKeyAction({
+                    service: service.slug,
+                    id: key.value,
+                    used: pressed,
+                  }),
+                  pressed
+                    ? `${service.name} 加上 ${key.label}`
+                    : `${service.name} 不再用 ${key.label}`
+                ).catch(() => {})
+              })
+            }}
+          >
             {key.label}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
+          </Toggle>
+        )
+      })}
+    </div>
   )
 }
