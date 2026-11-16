@@ -77,5 +77,8 @@
   "trustedDependencies": [
     "sharp",
     "unrs-resolver"
-  ]
+  ],
+  "patchedDependencies": {
+    "@better-auth/core@1.7.7": "patches/@better-auth%2Fcore@1.7.7.patch"
+  }
 }
