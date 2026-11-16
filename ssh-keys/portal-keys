@@ -1,0 +1,48 @@
+#!/bin/sh
+# portal-keys: sshd's AuthorizedKeysCommand for a machine whose SSH keys come
+# from the portal. Prints the keys the portal lists for the service and keeps
+# a copy, so logging in still works while the portal cannot be reached.
+#
+#   AuthorizedKeysCommand /usr/local/bin/portal-keys %u
+#   AuthorizedKeysCommandUser portal-keys
+#
+# /etc/portal-keys/env sets:
+#   SERVICE=b09            the service's slug on portal.winlab.tw/keys/services
+#   SHARED="p4user"        accounts every member of the service logs in to;
+#                          any other account is read as that member's own
+# /etc/portal-keys/token holds the service's read key (mode 600, owned by the
+# AuthorizedKeysCommandUser).
+set -eu
+
+user=${1:-}
+# sshd passes the name the client asked for, before any authentication.
+case $user in
+  "" | .* | *[!a-z0-9._-]*) exit 0 ;;
+esac
+
+PORTAL=https://portal.winlab.tw
+SERVICE=
+SHARED=
+TOKEN_FILE=/etc/portal-keys/token
+CACHE_DIR=/var/cache/portal-keys
+[ -r "${PORTAL_KEYS_ENV:-/etc/portal-keys/env}" ] && . "${PORTAL_KEYS_ENV:-/etc/portal-keys/env}"
+[ -n "$SERVICE" ] || exit 0
+
+path=$SERVICE/$user
+for shared in $SHARED; do
+  [ "$shared" = "$user" ] && path=$SERVICE
+done
+
+cache=$CACHE_DIR/$user
+tmp=$(mktemp "$CACHE_DIR/.new.XXXXXX")
+trap 'rm -f "$tmp"' EXIT
+code=$(curl -sS --max-time 5 -o "$tmp" -w '%{http_code}' \
+  -H "Authorization: Bearer $(cat "$TOKEN_FILE")" \
+  "$PORTAL/api/ssh-keys/services/$path?format=text") || code=000
+case $code in
+  200) mv "$tmp" "$cache" ;;
+  # The portal refused the read key: nobody is served, cached or not.
+  401 | 403) rm -f "$cache" ;;
+  # Anything else (unreachable, 503): the copy read last stands.
+esac
+cat "$cache" 2>/dev/null || true

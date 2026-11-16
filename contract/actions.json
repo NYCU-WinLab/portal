@@ -803,6 +803,48 @@
     }
   },
   {
+    "name": "add_ssh_key",
+    "title": "新增 SSH 金鑰",
+    "description": "Adds one SSH public key to the signed-in member: the whole line of a .pub file (ssh-ed25519, ssh-rsa, ecdsa-sha2-* or a sk-* hardware key). The label defaults to the line's comment. The key is used nowhere until set_ssh_key_service puts it in a service. Fails for a private key, a line that is no public key, or a key the member already has.",
+    "kind": "mutation",
+    "app": "keys",
+    "hash": "f985a14606bb1671",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "label": {
+          "maxLength": 60,
+          "type": "string"
+        },
+        "public_key": {
+          "maxLength": 8192,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "public_key"
+      ],
+      "type": "object"
+    },
+    "output": {
+      "additionalProperties": false,
+      "properties": {
+        "fingerprint": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "fingerprint"
+      ],
+      "type": "object"
+    }
+  },
+  {
     "name": "book_appointment",
     "title": "預約會議",
     "description": "Books a meeting with a member in one of their free appointment slots (list_appointment_slots): date, start_time and title; it lasts their slot length. It is an ordinary portal meeting organized by the signed-in member with the member booked as the attendee: a meet.winlab.tw room, recorded with a transcript, and calendar invites mailed to both. online_only (default true) books no room; false also books a CS department room (free first, a paid one only with allow_paid). Either side can cancel it with cancel_meeting. Read back the member, date, time, title and room or online, and get a yes first: it mails them.",
@@ -2252,6 +2294,40 @@
       },
       "required": [
         "entryId"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "delete_ssh_key",
+    "title": "刪除 SSH 金鑰",
+    "description": "Deletes one of the signed-in member's SSH keys by id (from list_my_ssh_keys). Every service stops serving it on its next read. Fails when the key is not the member's.",
+    "kind": "mutation",
+    "app": "keys",
+    "hash": "dfea24f3426da00b",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "id": {
+          "format": "uuid",
+          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "type": "object"
+    },
+    "output": {
+      "additionalProperties": false,
+      "properties": {
+        "deleted": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "deleted"
       ],
       "type": "object"
     }
@@ -5567,6 +5643,52 @@
     }
   },
   {
+    "name": "import_ssh_keys",
+    "title": "匯入 SSH 金鑰",
+    "description": "Adds to the signed-in member the public keys a Git host lists for one of its accounts (https://<host>/<username>.keys): host is github, gitlab or winlab-gitlab. Keys the member already has are skipped. Returns how many were added and how many were skipped. Delete the ones not wanted with delete_ssh_key.",
+    "kind": "mutation",
+    "app": "keys",
+    "hash": "776ebb3fcfe82a80",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "host": {
+          "enum": [
+            "github",
+            "gitlab",
+            "winlab-gitlab"
+          ],
+          "type": "string"
+        },
+        "username": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "host",
+        "username"
+      ],
+      "type": "object"
+    },
+    "output": {
+      "additionalProperties": false,
+      "properties": {
+        "added": {
+          "type": "number"
+        },
+        "skipped": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "added",
+        "skipped"
+      ],
+      "type": "object"
+    }
+  },
+  {
     "name": "like_song",
     "title": "按愛心",
     "description": "Like a song by YouTube video id, so it is kept in the caller's own list (list_liked_songs). Likes are private to the caller and belong to the song, not to a queue item. Liking a liked song changes nothing. At most 500 songs per member.",
@@ -8268,6 +8390,47 @@
     }
   },
   {
+    "name": "list_member_ssh_keys",
+    "title": "成員的 SSH 公鑰",
+    "description": "Every SSH public key one lab member keeps on the portal, by their account username: one authorized_keys line each (type, key, username). Use it to encrypt a file to a member (age -R) or to let them into a machine you run. Fails when no member has that username.",
+    "kind": "query",
+    "app": "keys",
+    "hash": "0e056e40fa4d7102",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "username": {
+          "maxLength": 64,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "username"
+      ],
+      "type": "object"
+    },
+    "output": {
+      "additionalProperties": false,
+      "properties": {
+        "keys": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "username": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "username",
+        "keys"
+      ],
+      "type": "object"
+    }
+  },
+  {
     "name": "list_my_appointments",
     "title": "我的預約",
     "description": "The signed-in member's upcoming appointments, soonest first, in both directions: withMe (labmates booked a meeting with them) and byMe (they booked one with a labmate). Each has the booking id (cancel it with cancel_meeting, either side may), date, start and end (Asia/Taipei), startsAt (ISO), the title, and the other member's id (withId) and name (with).",
@@ -8632,6 +8795,95 @@
           "type": "object"
         }
       ]
+    }
+  },
+  {
+    "name": "list_my_ssh_keys",
+    "title": "我的 SSH 金鑰",
+    "description": "The signed-in member's SSH public keys (id, label, type, fingerprint, the public key line, where it came from, when it was added, and the slugs of the services it is used in), and the services the member may use (slug and name). A key used in no service reaches no machine.",
+    "kind": "query",
+    "app": "keys",
+    "hash": "4999167a09ea018e",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {},
+      "type": "object"
+    },
+    "output": {
+      "additionalProperties": false,
+      "properties": {
+        "keys": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "createdAt": {
+                "format": "date-time",
+                "type": "string"
+              },
+              "fingerprint": {
+                "type": "string"
+              },
+              "id": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "publicKey": {
+                "type": "string"
+              },
+              "services": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "source": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "label",
+              "type",
+              "fingerprint",
+              "publicKey",
+              "source",
+              "createdAt",
+              "services"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "services": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "slug": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "slug",
+              "name"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "keys",
+        "services"
+      ],
+      "type": "object"
     }
   },
   {
@@ -12546,6 +12798,50 @@
           "type": "boolean"
         }
       },
+      "type": "object"
+    }
+  },
+  {
+    "name": "set_ssh_key_service",
+    "title": "設定金鑰用在哪個服務",
+    "description": "Puts one of the signed-in member's SSH keys in a service (used true) or takes it out (used false): id from list_my_ssh_keys, service a slug from its services list. The service's machines accept the key from their next read. Fails for a service the member may not use.",
+    "kind": "mutation",
+    "app": "keys",
+    "hash": "eb9a666cbd1a8db9",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "id": {
+          "format": "uuid",
+          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+          "type": "string"
+        },
+        "service": {
+          "maxLength": 32,
+          "minLength": 1,
+          "type": "string"
+        },
+        "used": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "service",
+        "used"
+      ],
+      "type": "object"
+    },
+    "output": {
+      "additionalProperties": false,
+      "properties": {
+        "used": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "used"
+      ],
       "type": "object"
     }
   },
