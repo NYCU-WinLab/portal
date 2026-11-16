@@ -13,7 +13,7 @@ import {
   importSshKeys,
   revokeSshServiceGrant,
   rotateSshServiceKey,
-  setSshServiceKeys,
+  setSshServiceKey,
   updateSshKey,
 } from "@/lib/actions/keys"
 import { requireActor } from "@/lib/auth/session"
@@ -70,11 +70,12 @@ export async function deleteSshKeyAction(id: string) {
   return { error }
 }
 
-export async function setSshServiceKeysAction(input: {
+export async function setSshServiceKeyAction(input: {
   service: string
-  ids: string[]
+  id: string
+  used: boolean
 }) {
-  const { error } = await run(setSshServiceKeys, input)
+  const { error } = await run(setSshServiceKey, input)
   return { error }
 }
 

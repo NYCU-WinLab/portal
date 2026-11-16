@@ -23,7 +23,7 @@ import {
   addSshKeyAction,
   deleteSshKeyAction,
   importSshKeysAction,
-  setSshServiceKeysAction,
+  setSshServiceKeyAction,
   updateSshKeyAction,
 } from "./actions"
 
@@ -241,17 +241,14 @@ export function ServiceKeys({
             pressed={on}
             disabled={pending}
             onPressedChange={(pressed) => {
-              // A service always has a key: the last one stays on.
-              if (!pressed && value.length === 1) {
-                toast.error(`${service.name} 至少要留一把金鑰`)
-                return
-              }
-              const ids = pressed
-                ? [...value, key.value]
-                : value.filter((id) => id !== key.value)
+              // The server keeps the last key on and says so.
               startTransition(async () => {
                 await report(
-                  setSshServiceKeysAction({ service: service.slug, ids }),
+                  setSshServiceKeyAction({
+                    service: service.slug,
+                    id: key.value,
+                    used: pressed,
+                  }),
                   pressed
                     ? `${service.name} 加上 ${key.label}`
                     : `${service.name} 不再用 ${key.label}`
