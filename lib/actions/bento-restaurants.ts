@@ -1,4 +1,13 @@
-import { and, asc, count, desc, eq, inArray, notInArray } from "drizzle-orm"
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  inArray,
+  notInArray,
+  sql,
+} from "drizzle-orm"
 import { z } from "zod"
 
 import { isAdmin } from "@/lib/actions/authz"
@@ -10,6 +19,7 @@ import {
   bentoOptionGroups,
   bentoOptionValues,
   bentoOrders,
+  bentoRatings,
   bentoRestaurants,
 } from "@/lib/db/schema"
 
@@ -75,21 +85,37 @@ export async function loadOptionGroups(
 }
 
 /** A restaurant's dishes, by menu heading then price. */
+/** A restaurant's dishes with their stars: average to 1 decimal and count. */
 export async function loadMenu(restaurantId: string) {
-  return db
+  const ratings = db
+    .select({
+      menuItemId: bentoRatings.menuItemId,
+      rating: sql<number>`round(avg(${bentoRatings.score}), 1)`
+        .mapWith(Number)
+        .as("rating"),
+      ratings: sql<number>`count(*)`.mapWith(Number).as("ratings"),
+    })
+    .from(bentoRatings)
+    .groupBy(bentoRatings.menuItemId)
+    .as("ratings")
+  const rows = await db
     .select({
       id: bentoMenuItems.id,
       category: bentoMenuItems.category,
       name: bentoMenuItems.name,
       price: bentoMenuItems.price,
+      rating: ratings.rating,
+      ratings: ratings.ratings,
     })
     .from(bentoMenuItems)
+    .leftJoin(ratings, eq(ratings.menuItemId, bentoMenuItems.id))
     .where(eq(bentoMenuItems.restaurantId, restaurantId))
     .orderBy(
       asc(bentoMenuItems.category),
       asc(bentoMenuItems.price),
       asc(bentoMenuItems.name)
     )
+  return rows.map((row) => ({ ...row, ratings: row.ratings ?? 0 }))
 }
 
 async function findRestaurant(restaurantId: string) {
@@ -150,7 +176,7 @@ export const getBentoRestaurant = defineAction({
   name: "get_bento_restaurant",
   title: "菜單",
   description:
-    "One restaurant with its menu: dishes (id, category heading, name, price in NT$) and option groups (甜度, 冰量, 加料, 不醬...; required means every dish needs one pick, multiple means several may be picked; priceDelta is added to the dish).",
+    "One restaurant with its menu: dishes (id, category heading, name, price in NT$, rating as the members' average stars 1 to 5 or null when nobody rated it, ratings as how many rated) and option groups (甜度, 冰量, 加料, 不醬...; required means every dish needs one pick, multiple means several may be picked; priceDelta is added to the dish).",
   kind: "query",
   input: z.object({ restaurantId: id }),
   run: async (actor, { restaurantId }) => {

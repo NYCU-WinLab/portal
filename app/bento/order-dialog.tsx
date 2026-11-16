@@ -24,8 +24,16 @@ import { ntd } from "@/lib/money"
 import { report } from "@/lib/report"
 
 import { order } from "./actions"
+import { DishRating } from "./rating"
 
-type Dish = { id: string; category: string; name: string; price: number }
+type Dish = {
+  id: string
+  category: string
+  name: string
+  price: number
+  rating: number | null
+  ratings: number
+}
 
 /** A dish waiting in the cart, with its options picked. */
 type Pick = {
@@ -411,6 +419,10 @@ export function OrderDialog({
                                 × {inCart(item.id)}
                               </span>
                             )}
+                            <DishRating
+                              rating={item.rating}
+                              ratings={item.ratings}
+                            />
                             <span className="shrink-0 text-muted-foreground tabular-nums">
                               {item.price}
                             </span>

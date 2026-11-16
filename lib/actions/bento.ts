@@ -12,6 +12,7 @@ import {
   bentoMenuItems,
   bentoOrderItems,
   bentoOrders,
+  bentoRatings,
   bentoRestaurants,
   user,
 } from "@/lib/db/schema"
@@ -122,10 +123,10 @@ export const getBentoOrder = defineAction({
   name: "get_bento_order",
   title: "訂單內容",
   description:
-    "One lunch order in full: the order (date, batch, status), its restaurant with the menu and option groups to order from, every line (id, member, dish, picked options, price), totals per member, and a tally per dish and option combination as the restaurant would take it.",
+    "One lunch order in full: the order (date, batch, status), its restaurant with the menu (with each dish's average stars) and option groups to order from, every line (id, member, menuItemId, dish, picked options, price), the signed-in member's own stars per menuItemId, totals per member, and a tally per dish and option combination as the restaurant would take it.",
   kind: "query",
   input: z.object({ orderId: id }),
-  run: async (_actor, { orderId }) => {
+  run: async (actor, { orderId }) => {
     const [order] = await db
       .select({
         id: bentoOrders.id,
@@ -138,7 +139,7 @@ export const getBentoOrder = defineAction({
       .from(bentoOrders)
       .where(eq(bentoOrders.id, orderId))
     if (!order) throw new Error("找不到這張訂單")
-    const [[restaurant], sameDay, lines, menu, optionGroups] =
+    const [[restaurant], sameDay, lines, menu, optionGroups, myRatings] =
       await Promise.all([
         db
           .select({
@@ -164,6 +165,7 @@ export const getBentoOrder = defineAction({
             id: bentoOrderItems.id,
             userId: bentoOrderItems.userId,
             member: user.name,
+            menuItemId: bentoOrderItems.menuItemId,
             name: bentoOrderItems.name,
             options: bentoOrderItems.options,
             price: bentoOrderItems.price,
@@ -175,6 +177,22 @@ export const getBentoOrder = defineAction({
           .orderBy(asc(bentoOrderItems.createdAt)),
         loadMenu(order.restaurantId),
         loadOptionGroups(order.restaurantId),
+        db
+          .select({
+            menuItemId: bentoRatings.menuItemId,
+            score: bentoRatings.score,
+          })
+          .from(bentoRatings)
+          .innerJoin(
+            bentoMenuItems,
+            eq(bentoMenuItems.id, bentoRatings.menuItemId)
+          )
+          .where(
+            and(
+              eq(bentoRatings.userId, actor.userId),
+              eq(bentoMenuItems.restaurantId, order.restaurantId)
+            )
+          ),
       ])
 
     const people = new Map<
@@ -234,6 +252,9 @@ export const getBentoOrder = defineAction({
       menu,
       optionGroups,
       lines,
+      myRatings: Object.fromEntries(
+        myRatings.map((row) => [row.menuItemId, row.score])
+      ),
       people: [...people.values()].sort(
         (a, b) => b.total - a.total || a.name.localeCompare(b.name)
       ),
@@ -353,6 +374,39 @@ export const removeBentoOrderItem = defineAction({
       await tx.delete(bentoOrderItems).where(eq(bentoOrderItems.id, lineId))
       return { lineId }
     })
+  },
+})
+
+export const rateBentoDish = defineAction({
+  name: "rate_bento_dish",
+  title: "評分",
+  description:
+    "Gives a dish 1 to 5 stars as the signed-in member, replacing their earlier stars for it. Only a dish the member has ordered before can be rated; menuItemId comes from a line in get_bento_order. Ask the member for the stars; never rate for them.",
+  kind: "mutation",
+  input: z.object({
+    menuItemId: id,
+    score: z.number().int().min(1, "最少 1 顆星").max(5, "最多 5 顆星"),
+  }),
+  run: async (actor, { menuItemId, score }) => {
+    const [ordered] = await db
+      .select({ id: bentoOrderItems.id })
+      .from(bentoOrderItems)
+      .where(
+        and(
+          eq(bentoOrderItems.menuItemId, menuItemId),
+          eq(bentoOrderItems.userId, actor.userId)
+        )
+      )
+      .limit(1)
+    if (!ordered) throw new Error("只能評你點過的菜")
+    await db
+      .insert(bentoRatings)
+      .values({ menuItemId, userId: actor.userId, score })
+      .onConflictDoUpdate({
+        target: [bentoRatings.menuItemId, bentoRatings.userId],
+        set: { score, updatedAt: new Date() },
+      })
+    return { menuItemId, score }
   },
 })
 

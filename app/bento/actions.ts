@@ -8,6 +8,7 @@ import {
   copyBentoOrder,
   createBentoOrder,
   deleteBentoOrder,
+  rateBentoDish,
   removeBentoOrderItem,
   reopenBentoOrder,
 } from "@/lib/actions/bento"
@@ -42,6 +43,8 @@ async function call<T>(action: Action, input: unknown): Promise<Result<T>> {
 export const order = async (input: unknown) => call(addBentoOrderItem, input)
 export const removeLine = async (lineId: string) =>
   call(removeBentoOrderItem, { lineId })
+export const rateDish = async (menuItemId: string, score: number) =>
+  call(rateBentoDish, { menuItemId, score })
 export const copyOrder = async (orderId: string, fromUserId: string) =>
   call<{ lines: number }>(copyBentoOrder, { orderId, fromUserId })
 export const openOrder = async (input: unknown) =>

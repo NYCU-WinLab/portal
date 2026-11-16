@@ -470,6 +470,13 @@
       "when": 1794824706980,
       "tag": "0066_ssh_service_choices",
       "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1794832625524,
+      "tag": "0067_bento_ratings",
+      "breakpoints": true
     }
   ]
 }
