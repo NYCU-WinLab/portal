@@ -11,6 +11,7 @@ import {
   sshKeyChanges,
   sshKeys,
   sshKeyServices,
+  sshServiceChoices,
   sshServiceGrants,
   sshServices,
   user,
@@ -27,9 +28,10 @@ import {
 
 // SSH keys: a member keeps their public keys here; a service's machines
 // read each member's keys with the service's read key (readServiceKeys,
-// behind /api/ssh-keys): the keys the member picked for that service, one
-// for each machine they log in from, or their first key when they picked
-// none. Portal admins make the services
+// behind /api/ssh-keys): the keys the member turned on for that service,
+// one for each machine they log in from. A member who never chose for a
+// service is read their first key; one who chose is read exactly the keys
+// that are on, so deleting the last of them leaves the service none. Portal admins make the services
 // and, for one that is not open, name who may use it.
 // Who may log in is decided when a machine reads, not when a key is put in:
 // a grant taken away or a member who left stops being served on the next
@@ -123,11 +125,11 @@ export const listMySshKeys = defineAction({
   name: "list_my_ssh_keys",
   title: "我的 SSH 金鑰",
   description:
-    "The signed-in member's SSH public keys (id, label, the machine that holds the private key, what the key is for, type, fingerprint, the public key line, where it came from, when it was added, and the slugs of the services that use it), the member's name and account username, and the services the member may use (slug, name, keyIds, the ids of the keys that service uses, and keyId, the first of them). A service uses the keys the member turned on with set_ssh_service_key, or the member's first key when none was picked.",
+    "The signed-in member's SSH public keys (id, label, the machine that holds the private key, what the key is for, type, fingerprint, the public key line, where it came from, when it was added, and the slugs of the services that use it), the member's name and account username, and the services the member may use (slug, name, keyIds, the ids of the keys that service uses, and keyId, the first of them). A service uses the keys the member turned on with set_ssh_service_key. Until the member turns a key on or off for a service it uses their first key; after that it uses exactly the keys that are on, so keyIds can be empty and keyId null.",
   kind: "query",
   input: z.object({}),
   run: async (actor) => {
-    const [[owner], keys, uses, services] = await Promise.all([
+    const [[owner], keys, uses, chosen, services] = await Promise.all([
       db
         .select({ username: user.username, name: user.name })
         .from(user)
@@ -144,6 +146,11 @@ export const listMySshKeys = defineAction({
         .innerJoin(sshServices, eq(sshServices.id, sshKeyServices.serviceId))
         .where(eq(sshKeys.userId, actor.userId)),
       db
+        .select({ slug: sshServices.slug })
+        .from(sshServiceChoices)
+        .innerJoin(sshServices, eq(sshServices.id, sshServiceChoices.serviceId))
+        .where(eq(sshServiceChoices.userId, actor.userId)),
+      db
         .select({ slug: sshServices.slug, name: sshServices.name })
         .from(sshServices)
         .leftJoin(
@@ -158,16 +165,17 @@ export const listMySshKeys = defineAction({
         )
         .orderBy(asc(sshServices.name)),
     ])
-    // A service uses the keys picked for it, or the first key. keys is
-    // oldest first, so keyIds comes out in that order too.
+    // A service uses the keys that are on for it; one the member never
+    // chose for uses the first key. keys is oldest first, so keyIds comes
+    // out in that order too.
     const used = services.map((service) => {
       const picked = new Set(
         uses.filter((use) => use.slug === service.slug).map((use) => use.keyId)
       )
+      const chose =
+        picked.size > 0 || chosen.some((one) => one.slug === service.slug)
       const keyIds = keys
-        .filter((key, index) =>
-          picked.size > 0 ? picked.has(key.id) : index === 0
-        )
+        .filter((key, index) => (chose ? picked.has(key.id) : index === 0))
         .map((key) => key.id)
       // keyId is the first of keyIds, kept for clients written when a
       // service used one key.
@@ -358,7 +366,7 @@ export const setSshServiceKey = defineAction({
   name: "set_ssh_service_key",
   title: "設定服務用不用這把金鑰",
   description:
-    "Turns one of the signed-in member's SSH keys on or off for a service: service is a slug from list_my_ssh_keys' services, id one of the member's keys, used true (the default) to let the service's machines accept it and false to stop. A service can use several keys, one for each machine the member logs in from; its machines read the change on their next read. A service that was only using the member's first key by default keeps it when another key is turned on. Fails for a service the member may not use, a key that is not the member's, or turning off the last key a service uses. Returns keyIds, the keys the service uses now.",
+    "Turns one of the signed-in member's SSH keys on or off for a service: service is a slug from list_my_ssh_keys' services, id one of the member's keys, used true (the default) to let the service's machines accept it and false to stop. A service can use several keys, one for each machine the member logs in from; its machines read the change on their next read. A service that was only using the member's first key by default keeps it when another key is turned on. Once a member has turned a key on or off, the service uses exactly the keys that are on: turning the last one off, or deleting it, leaves the service with none of the member's keys until one is turned on again. Fails for a service the member may not use or a key that is not the member's. Returns keyIds, the keys the service uses now.",
   kind: "mutation",
   input: z.object({
     service: z.string().trim().min(1).max(32),
@@ -409,10 +417,15 @@ export const setSshServiceKey = defineAction({
           )
         )
       const picked = new Set(rows.map((row) => row.keyId))
-      // Without a pick the service uses the first key. Write that down
-      // before changing anything, so turning a second key on adds to the
-      // first instead of replacing it.
-      if (picked.size === 0) {
+      const chose = await tx
+        .insert(sshServiceChoices)
+        .values({ serviceId: service.id, userId: actor.userId })
+        .onConflictDoNothing()
+        .returning({ userId: sshServiceChoices.userId })
+      // Until now the service used the first key by default. Write that
+      // down before changing anything, so turning a second key on adds to
+      // the first instead of replacing it.
+      if (chose.length > 0 && picked.size === 0) {
         await tx
           .insert(sshKeyServices)
           .values({ keyId: mine[0].id, serviceId: service.id })
@@ -431,7 +444,6 @@ export const setSshServiceKey = defineAction({
         })
       }
       if (!used && picked.has(id)) {
-        if (picked.size === 1) throw new Error("這個服務至少要留一把金鑰")
         await tx
           .delete(sshKeyServices)
           .where(
@@ -619,6 +631,14 @@ export const grantSshService = defineAction({
               sql`${sshKeyServices.keyId} in (select id from ssh_keys where user_id = ${user_id})`
             )
           )
+        await tx
+          .delete(sshServiceChoices)
+          .where(
+            and(
+              eq(sshServiceChoices.serviceId, id),
+              eq(sshServiceChoices.userId, user_id)
+            )
+          )
         await record(tx, actor, {
           action: "grant",
           userId: user_id,
@@ -656,6 +676,14 @@ export const revokeSshServiceGrant = defineAction({
           and(
             eq(sshKeyServices.serviceId, id),
             sql`${sshKeyServices.keyId} in (select id from ssh_keys where user_id = ${user_id})`
+          )
+        )
+      await tx
+        .delete(sshServiceChoices)
+        .where(
+          and(
+            eq(sshServiceChoices.serviceId, id),
+            eq(sshServiceChoices.userId, user_id)
           )
         )
       const [service] = await tx
@@ -738,6 +766,7 @@ export async function readServiceKeys(
         type: sshKeys.type,
         blob: sshKeys.blob,
         pickedAt: sshKeyServices.createdAt,
+        chosenAt: sshServiceChoices.createdAt,
         granted: sshServiceGrants.userId,
       })
       .from(sshKeys)
@@ -756,6 +785,13 @@ export async function readServiceKeys(
         )
       )
       .leftJoin(
+        sshServiceChoices,
+        and(
+          eq(sshServiceChoices.serviceId, service.id),
+          eq(sshServiceChoices.userId, sshKeys.userId)
+        )
+      )
+      .leftJoin(
         sshServiceGrants,
         and(
           eq(sshServiceGrants.serviceId, service.id),
@@ -771,8 +807,12 @@ export async function readServiceKeys(
   )
   const wanted = username?.toLowerCase()
   // Rows come oldest key first, so a member's first row is their first key
-  // and the picked keys keep that order.
-  const members = new Map<string, { first: string; picked: string[] }>()
+  // and the keys that are on keep that order. A member who chose is read
+  // exactly those keys; one who has none on is left out.
+  const members = new Map<
+    string,
+    { first: string; chose: boolean; picked: string[] }
+  >()
   for (const row of rows) {
     const name = usernames.get(row.sub)
     if (!name || (wanted && name !== wanted)) continue
@@ -781,16 +821,21 @@ export async function readServiceKeys(
       ? !!status && status !== "alumni"
       : !!row.granted
     if (!allowed) continue
-    const member = members.get(name) ?? { first: line(row, name), picked: [] }
+    const member = members.get(name) ?? {
+      first: line(row, name),
+      chose: !!row.chosenAt,
+      picked: [],
+    }
     if (row.pickedAt) member.picked.push(line(row, name))
     members.set(name, member)
   }
   return {
     members: [...members]
       .sort(([a], [b]) => a.localeCompare(b))
-      .map(([username, { first, picked }]) => ({
+      .map(([username, { first, chose, picked }]) => ({
         username,
-        keys: picked.length > 0 ? picked : [first],
-      })),
+        keys: chose || picked.length > 0 ? picked : [first],
+      }))
+      .filter((member) => member.keys.length > 0),
   }
 }

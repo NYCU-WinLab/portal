@@ -1,6 +1,6 @@
 # SSH keys for machines
 
-Members keep their SSH public keys on `/keys`. A service reads the keys a member turned on for it there, one for each machine they log in from, or their first key when they turned none on. A service is somewhere members log in: a jump host, a platform. Portal admins make services on `/keys/services`; each has a read key its machines fetch the keys with.
+Members keep their SSH public keys on `/keys`. A service reads the keys a member turned on for it there, one for each machine they log in from, or their first key until they turn a key on or off for that service. After that it reads exactly the keys that are on, so a member who deletes the last one is read none. A service is somewhere members log in: a jump host, a platform. Portal admins make services on `/keys/services`; each has a read key its machines fetch the keys with.
 
 ## Read a service's keys
 
