@@ -174,9 +174,22 @@ export default async function OrderPage({
                     {person.lines.map((line) => (
                       <li
                         key={line.id}
-                        className="flex min-h-10 flex-wrap items-center justify-end gap-x-4"
+                        className={cn(
+                          "flex min-h-10 items-center gap-x-4",
+                          // Stars on a closed order wrap under the dish on a phone.
+                          !open &&
+                            person.userId === actor.userId &&
+                            "flex-wrap justify-end"
+                        )}
                       >
-                        <span className="min-w-32 flex-1">
+                        <span
+                          className={cn(
+                            "min-w-0 flex-1",
+                            !open &&
+                              person.userId === actor.userId &&
+                              "min-w-32"
+                          )}
+                        >
                           {dishLabel(line)}
                         </span>
                         {!open &&
