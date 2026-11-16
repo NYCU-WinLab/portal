@@ -181,6 +181,13 @@ export const serviceGroups: { title: string; apps: Service[] }[] = [
         href: "/groups",
       },
       {
+        key: "keys",
+        label: "Keys",
+        name: "SSH 金鑰",
+        emoji: "🗝️",
+        href: "/keys",
+      },
+      {
         key: "profile",
         label: "Profile",
         name: "個人資料",

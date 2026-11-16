@@ -23,6 +23,7 @@ export const apiApps = {
   groups: "群組信",
   invitations: "邀請信",
   avatars: "頭像",
+  keys: "SSH 金鑰",
 } as const
 
 export type ApiApp = keyof typeof apiApps

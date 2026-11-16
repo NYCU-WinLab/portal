@@ -8268,6 +8268,47 @@
     }
   },
   {
+    "name": "list_member_ssh_keys",
+    "title": "成員的 SSH 公鑰",
+    "description": "Every SSH public key one lab member keeps on the portal, by their account username: one authorized_keys line each (type, key, username). Use it to encrypt a file to a member (age -R) or to let them into a machine you run. Fails when no member has that username.",
+    "kind": "query",
+    "app": "keys",
+    "hash": "0e056e40fa4d7102",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "username": {
+          "maxLength": 64,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "username"
+      ],
+      "type": "object"
+    },
+    "output": {
+      "additionalProperties": false,
+      "properties": {
+        "keys": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "username": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "username",
+        "keys"
+      ],
+      "type": "object"
+    }
+  },
+  {
     "name": "list_my_appointments",
     "title": "我的預約",
     "description": "The signed-in member's upcoming appointments, soonest first, in both directions: withMe (labmates booked a meeting with them) and byMe (they booked one with a labmate). Each has the booking id (cancel it with cancel_meeting, either side may), date, start and end (Asia/Taipei), startsAt (ISO), the title, and the other member's id (withId) and name (with).",
@@ -8632,6 +8673,95 @@
           "type": "object"
         }
       ]
+    }
+  },
+  {
+    "name": "list_my_ssh_keys",
+    "title": "我的 SSH 金鑰",
+    "description": "The signed-in member's SSH public keys (id, label, type, fingerprint, the public key line, where it came from, when it was added, and the slugs of the services it is used in), and the services the member may use (slug and name). A key used in no service reaches no machine.",
+    "kind": "query",
+    "app": "keys",
+    "hash": "4999167a09ea018e",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {},
+      "type": "object"
+    },
+    "output": {
+      "additionalProperties": false,
+      "properties": {
+        "keys": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "createdAt": {
+                "format": "date-time",
+                "type": "string"
+              },
+              "fingerprint": {
+                "type": "string"
+              },
+              "id": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "publicKey": {
+                "type": "string"
+              },
+              "services": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "source": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "label",
+              "type",
+              "fingerprint",
+              "publicKey",
+              "source",
+              "createdAt",
+              "services"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "services": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "slug": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "slug",
+              "name"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "keys",
+        "services"
+      ],
+      "type": "object"
     }
   },
   {
