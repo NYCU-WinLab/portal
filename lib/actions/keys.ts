@@ -59,6 +59,11 @@ const record = (tx: Tx, actor: Actor, change: Change) =>
 const line = (key: { type: string; blob: string }, username: string) =>
   `${key.type} ${key.blob} ${username}`
 
+// The one order of a member's keys: an import adds several in one statement
+// with one created_at, so the id settles which is first. The page and the
+// machine read must agree on the first key.
+const oldestFirst = [asc(sshKeys.createdAt), asc(sshKeys.id)] as const
+
 const machineInput = z.string().trim().max(60, "機器最多 60 字")
 const descriptionInput = z.string().trim().max(200, "用途最多 200 字")
 type KeyNotes = { label: string; machine?: string; description?: string }
@@ -124,13 +129,15 @@ export const listMySshKeys = defineAction({
         .select()
         .from(sshKeys)
         .where(eq(sshKeys.userId, actor.userId))
-        .orderBy(asc(sshKeys.createdAt)),
+        .orderBy(...oldestFirst),
       db
         .select({ keyId: sshKeyServices.keyId, slug: sshServices.slug })
         .from(sshKeyServices)
         .innerJoin(sshKeys, eq(sshKeys.id, sshKeyServices.keyId))
         .innerJoin(sshServices, eq(sshServices.id, sshKeyServices.serviceId))
-        .where(eq(sshKeys.userId, actor.userId)),
+        .where(eq(sshKeys.userId, actor.userId))
+        // Newest first: the pick that counts is the last one made.
+        .orderBy(desc(sshKeyServices.createdAt)),
       db
         .select({ slug: sshServices.slug, name: sshServices.name })
         .from(sshServices)
@@ -200,7 +207,7 @@ export const listMemberSshKeys = defineAction({
       })
       .from(sshKeys)
       .where(eq(sshKeys.userId, member.id))
-      .orderBy(asc(sshKeys.createdAt))
+      .orderBy(...oldestFirst)
     return {
       username: member.username,
       name: member.name,
@@ -370,7 +377,11 @@ export const setSshServiceKey = defineAction({
       // not exist.
       if (!service || !(service.open || service.granted))
         throw new Error("你不能用這個服務")
-      // One key per member and service: the pick replaces the last one.
+      // One key per member and service: the pick replaces the last one,
+      // and a member's picks run one at a time so two cannot both stay.
+      await tx.execute(
+        sql`select pg_advisory_xact_lock(hashtext(${`ssh_keys:${actor.userId}`}))`
+      )
       await tx
         .delete(sshKeyServices)
         .where(
@@ -674,7 +685,7 @@ export async function readServiceKeys(
         sub: account.accountId,
         type: sshKeys.type,
         blob: sshKeys.blob,
-        picked: sshKeyServices.keyId,
+        pickedAt: sshKeyServices.createdAt,
         granted: sshServiceGrants.userId,
       })
       .from(sshKeys)
@@ -699,7 +710,7 @@ export async function readServiceKeys(
           eq(sshServiceGrants.userId, sshKeys.userId)
         )
       )
-      .orderBy(asc(sshKeys.createdAt), asc(sshKeys.id)),
+      .orderBy(...oldestFirst),
     realmAccounts(),
     labDirectory(),
   ])
@@ -708,7 +719,11 @@ export async function readServiceKeys(
   )
   const wanted = username?.toLowerCase()
   // Rows come oldest key first, so a member's first row is their first key.
-  const members = new Map<string, { first: string; picked: string[] }>()
+  // One key per member whatever the rows say: the newest pick wins.
+  const members = new Map<
+    string,
+    { first: string; picked?: { line: string; at: Date } }
+  >()
   for (const row of rows) {
     const name = usernames.get(row.sub)
     if (!name || (wanted && name !== wanted)) continue
@@ -717,8 +732,10 @@ export async function readServiceKeys(
       ? !!status && status !== "alumni"
       : !!row.granted
     if (!allowed) continue
-    const member = members.get(name) ?? { first: line(row, name), picked: [] }
-    if (row.picked) member.picked.push(line(row, name))
+    const member: { first: string; picked?: { line: string; at: Date } } =
+      members.get(name) ?? { first: line(row, name) }
+    if (row.pickedAt && (!member.picked || row.pickedAt > member.picked.at))
+      member.picked = { line: line(row, name), at: row.pickedAt }
     members.set(name, member)
   }
   return {
@@ -726,7 +743,7 @@ export async function readServiceKeys(
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([username, { first, picked }]) => ({
         username,
-        keys: picked.length ? picked : [first],
+        keys: [picked?.line ?? first],
       })),
   }
 }
