@@ -14,10 +14,11 @@ import { type KeyHost, keyHostIds, keyHosts } from "@/lib/ssh-keys"
 
 import {
   AddKey,
+  CopyKey,
   DeleteKey,
   EditKey,
   ImportKeys,
-  KeyServices,
+  ServiceKey,
 } from "./key-forms"
 import { day, keysNav, keysPage } from "./nav"
 
@@ -43,7 +44,11 @@ function KeyField({
 
 export default async function KeysPage() {
   const actor = await requireActor("/keys")
-  const { name, keys, services } = await runAction(listMySshKeys, actor, {})
+  const { name, username, keys, services } = await runAction(
+    listMySshKeys,
+    actor,
+    {}
+  )
 
   return (
     <PortalShell page={keysPage} nav={keysNav}>
@@ -96,23 +101,47 @@ export default async function KeysPage() {
                     <KeyField label="建立">{day(key.createdAt)}</KeyField>
                   </dl>
                 </div>
-                <KeyServices
-                  id={key.id}
-                  services={services}
-                  used={key.services}
-                />
-                <EditKey
-                  id={key.id}
-                  value={{
-                    label: key.label,
-                    machine: key.machine ?? "",
-                    description: key.description ?? "",
-                  }}
-                />
-                <DeleteKey id={key.id} label={key.label} />
+                <div className="flex gap-4">
+                  <CopyKey
+                    label={key.label}
+                    line={[key.publicKey, username].filter(Boolean).join(" ")}
+                  />
+                  <EditKey
+                    id={key.id}
+                    value={{
+                      label: key.label,
+                      machine: key.machine ?? "",
+                      description: key.description ?? "",
+                    }}
+                  />
+                  <DeleteKey id={key.id} label={key.label} />
+                </div>
               </li>
             ))}
           </ul>
+        )}
+        {keys.length > 0 && services.length > 0 && (
+          <section className="flex flex-col gap-2">
+            <h2 className="text-muted-foreground">服務用的金鑰</h2>
+            <ul className="flex flex-col">
+              {services.map((service) => (
+                <li
+                  key={service.slug}
+                  className="flex min-h-14 flex-wrap items-center justify-between gap-4 border-b border-border py-3"
+                >
+                  <span className="truncate">{service.name}</span>
+                  <ServiceKey
+                    service={service}
+                    keys={keys.map((key) => ({
+                      value: key.id,
+                      label: key.label,
+                    }))}
+                    value={service.keyId ?? keys[0].id}
+                  />
+                </li>
+              ))}
+            </ul>
+          </section>
         )}
       </div>
     </PortalShell>
