@@ -1,6 +1,6 @@
 "use client"
 
-import { Trash2Icon } from "lucide-react"
+import { PencilIcon, Trash2Icon } from "lucide-react"
 import * as React from "react"
 import { toast } from "sonner"
 
@@ -24,7 +24,56 @@ import {
   deleteSshKeyAction,
   importSshKeysAction,
   setSshKeyServiceAction,
+  updateSshKeyAction,
 } from "./actions"
+
+type KeyNotes = { label: string; machine: string; description: string }
+
+const notes = (data: FormData): KeyNotes => ({
+  label: String(data.get("label") ?? ""),
+  machine: String(data.get("machine") ?? ""),
+  description: String(data.get("description") ?? ""),
+})
+
+/** What a key says about itself: its name, where it lives, what it is for. */
+function NoteFields({
+  value,
+  required,
+}: {
+  value?: KeyNotes
+  required?: boolean
+}) {
+  return (
+    <>
+      <FormField label="名稱" required={required}>
+        <Input
+          name="label"
+          maxLength={60}
+          required={required}
+          defaultValue={value?.label}
+          placeholder="loki"
+        />
+      </FormField>
+      <FormField label="機器">
+        <Input
+          name="machine"
+          maxLength={60}
+          defaultValue={value?.machine}
+          placeholder="MacBook Air"
+        />
+      </FormField>
+      <FormField label="用途">
+        <Textarea
+          name="description"
+          rows={2}
+          maxLength={200}
+          defaultValue={value?.description}
+          placeholder="個人筆電，開機器給我時用這把"
+        />
+      </FormField>
+    </>
+  )
+}
 
 export function AddKey() {
   return (
@@ -36,7 +85,7 @@ export function AddKey() {
         report(
           addSshKeyAction({
             public_key: String(data.get("public_key") ?? ""),
-            label: String(data.get("label") ?? ""),
+            ...notes(data),
           }),
           "已新增"
         )
@@ -51,9 +100,26 @@ export function AddKey() {
           className="font-mono break-all"
         />
       </FormField>
-      <FormField label="名稱">
-        <Input name="label" maxLength={60} placeholder="MacBook" />
-      </FormField>
+      <NoteFields />
+    </FormDialog>
+  )
+}
+
+export function EditKey({ id, value }: { id: string; value: KeyNotes }) {
+  return (
+    <FormDialog
+      trigger={
+        <Button variant="ghost" size="icon" aria-label={`修改 ${value.label}`}>
+          <PencilIcon />
+        </Button>
+      }
+      title="修改金鑰"
+      submitLabel="儲存"
+      onSubmit={(data) =>
+        report(updateSshKeyAction({ id, ...notes(data) }), "已儲存")
+      }
+    >
+      <NoteFields value={value} required />
     </FormDialog>
   )
 }

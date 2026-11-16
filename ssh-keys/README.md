@@ -45,9 +45,10 @@ A machine that cannot reach the portal serves the list it read last for one day 
 Any member can read another member's public keys, with an API key allowed into SSH 金鑰 (`/api-keys`) or the `list_member_ssh_keys` tool. Such a key only reads: adding a key or putting one in a service takes the page or MCP.
 
 ```sh
-curl -H "Authorization: Bearer wak_…" "https://portal.winlab.tw/api/ssh-keys/members/<username>?format=text" |
-  age -R - -o secret.age secret.txt
+curl -H "Authorization: Bearer wak_…" "https://portal.winlab.tw/api/ssh-keys/members/<username>?format=text" >> ~/.ssh/authorized_keys
 ```
+
+Without `format=text` the answer is JSON, and `details` says for each key its label, the machine that holds it and what the member says it is for.
 
 ## Carrel
 

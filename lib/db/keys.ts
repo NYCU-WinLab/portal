@@ -15,7 +15,9 @@ import { user } from "@/lib/db/auth-schema"
 
 // A member's SSH public key: its type and base64 blob, never a comment or
 // options (lib/ssh-keys.ts). A member cannot hold the same key twice.
-// source is "paste" or the host it was imported from.
+// source is "paste" or the host it was imported from. machine is the
+// computer that holds the private key and description what the key is for:
+// both are the member's own words, shown to whoever reads their keys.
 export const sshKeys = pgTable(
   "ssh_keys",
   {
@@ -24,6 +26,8 @@ export const sshKeys = pgTable(
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
     label: text().notNull(),
+    machine: text(),
+    description: text(),
     type: text().notNull(),
     blob: text().notNull(),
     fingerprint: text().notNull(),

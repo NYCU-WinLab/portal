@@ -63,6 +63,7 @@ import {
   revokeSshServiceGrant,
   rotateSshServiceKey,
   setSshKeyService,
+  updateSshKey,
 } from "@/lib/actions/keys"
 import type { Action } from "@/lib/actions/define"
 import type { ApiApp } from "@/lib/api-apps"
@@ -582,6 +583,7 @@ export const actionGroups: { app: ApiApp | null; actions: Action[] }[] = [
       // Adding a key and putting it in a service is how a member gets into
       // a machine, so a leaked API key must not be able to do it.
       addSshKey,
+      updateSshKey,
       importSshKeys,
       deleteSshKey,
       setSshKeyService,
