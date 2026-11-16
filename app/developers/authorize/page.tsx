@@ -34,7 +34,7 @@ export default async function AuthorizePage({
   const { app, input, scopes } = details
   return (
     <PortalShell layout="spotlight">
-      <div className="flex w-full max-w-md flex-col items-center gap-8 text-center">
+      <div className="mx-auto flex w-full max-w-md flex-col items-center gap-8 text-center">
         <h1 className="text-title font-medium">授權 {app.name}</h1>
         <p className="text-muted-foreground">{app.description}</p>
         <ul className="flex w-full flex-col">
