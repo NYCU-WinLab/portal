@@ -24,6 +24,7 @@ import { ntd } from "@/lib/money"
 import { report } from "@/lib/report"
 
 import { order } from "./actions"
+import { RemoveLineButton } from "./orders/[id]/order-actions"
 import { DishRating } from "./rating"
 
 type Dish = {
@@ -319,6 +320,7 @@ export function OrderDialog({
                       <span className="shrink-0 tabular-nums">
                         {line.price}
                       </span>
+                      <RemoveLineButton lineId={line.id} name={line.name} />
                     </li>
                   ))}
                 </ul>
