@@ -4,7 +4,7 @@ export const SCOPES = {
   profile: {
     label: "帳號與 Email",
     restricted: false,
-    description: "取得你的帳號名稱與電子郵件。",
+    description: "取得你的帳號名稱、帳號 ID 與電子郵件。",
   },
   name: { label: "姓名", restricted: true, description: "取得你的姓名。" },
   groups: {
@@ -89,6 +89,19 @@ export function memberGroups(
     ...new Set(
       groups
         .filter((g) => /^\/(lab-member|winlab-projects)\/[^/]+$/.test(g.path))
+        .map((g) => g.name)
+    ),
+  ]
+}
+
+/** The project groups (/winlab-projects/<name>) by name, as carrel names its tenants. */
+export function memberProjects(
+  groups: { name: string; path: string }[]
+): string[] {
+  return [
+    ...new Set(
+      groups
+        .filter((g) => /^\/winlab-projects\/[^/]+$/.test(g.path))
         .map((g) => g.name)
     ),
   ]

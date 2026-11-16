@@ -24,6 +24,7 @@ import {
   approvedScopes,
   authorizeInput,
   memberGroups,
+  memberProjects,
   profileResponse,
   SCOPES,
   type AuthorizationInput,
@@ -193,18 +194,22 @@ export async function memberData(userId: string, scope: Scope) {
   if (!link) throw new Error("Member unavailable")
   const member = await getKeycloakUser(link.sub)
   if (!member.enabled) throw new Error("Member unavailable")
-  if (scope === "profile") return profileResponse(member)
+  if (scope === "profile") return { sub: link.sub, ...profileResponse(member) }
   if (scope === "name")
     return {
+      sub: link.sub,
       username: member.username,
       name:
         member.attributes?.chinese_name?.[0] ||
         [member.firstName, member.lastName].filter(Boolean).join(" ") ||
         null,
     }
+  const groups = await keycloakUserGroups(link.sub)
   return {
+    sub: link.sub,
     username: member.username,
-    groups: memberGroups(await keycloakUserGroups(link.sub)),
+    groups: memberGroups(groups),
+    projects: memberProjects(groups),
   }
 }
 
