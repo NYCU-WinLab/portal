@@ -11,12 +11,25 @@ export type AgendaItem = {
   url?: string
 }
 
-/** "- A\n* B\n1. C" as lines, markers and blanks dropped, ≤ 200 chars each. */
+// "- A", "* B", "1. C", "2) D", "3、E"; not "1.5 倍".
+const MARKER = /^(?:[-*\u2022]\s+|\d+[.)、]\s*(?!\d))/
+
+/**
+ * The agenda field as items, ≤ 200 chars each. People also write notes in
+ * it (where to meet, a link, a notice), so when any line is a list item
+ * ("- A", "* B", "1. C"), only the list items at the left margin count and
+ * the other lines are notes. A field with no list is one item per line.
+ * HTML comments and Markdown headings are never items.
+ */
 export function agendaLines(text: string | null): string[] {
   if (!text) return []
-  return text
+  const lines = text
+    .replace(/<!--[\s\S]*?-->/g, "")
     .split("\n")
-    .map((line) => line.replace(/^\s*(?:[-*]|\d+[.)])\s*/, "").trim())
+    .filter((line) => line.trim() && !/^\s*#{1,6}\s/.test(line))
+  const listed = lines.filter((line) => MARKER.test(line))
+  return (listed.length > 0 ? listed : lines)
+    .map((line) => line.trim().replace(MARKER, "").trim())
     .filter(Boolean)
     .map((line) => line.slice(0, 200))
 }
