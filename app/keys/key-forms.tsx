@@ -1,6 +1,6 @@
 "use client"
 
-import { PencilIcon, Trash2Icon } from "lucide-react"
+import { CheckIcon, CopyIcon, PencilIcon, Trash2Icon } from "lucide-react"
 import * as React from "react"
 import { toast } from "sonner"
 
@@ -16,14 +16,13 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import { Toggle } from "@/components/ui/toggle"
 import { report } from "@/lib/report"
 
 import {
   addSshKeyAction,
   deleteSshKeyAction,
   importSshKeysAction,
-  setSshKeyServiceAction,
+  setSshServiceKeyAction,
   updateSshKeyAction,
 } from "./actions"
 
@@ -171,6 +170,34 @@ export function ImportKeys({
   )
 }
 
+/** Copies the key's authorized_keys line, to paste into a machine. */
+export function CopyKey({ label, line }: { label: string; line: string }) {
+  const [copied, setCopied] = React.useState(false)
+  React.useEffect(() => {
+    if (!copied) return
+    const timer = setTimeout(() => setCopied(false), 2000)
+    return () => clearTimeout(timer)
+  }, [copied])
+  return (
+    <Button
+      variant="ghost"
+      size="icon"
+      aria-label={`複製 ${label} 的公鑰`}
+      onClick={() =>
+        navigator.clipboard.writeText(line).then(
+          () => {
+            setCopied(true)
+            toast.success("已複製公鑰")
+          },
+          () => toast.error("複製失敗")
+        )
+      }
+    >
+      {copied ? <CheckIcon /> : <CopyIcon />}
+    </Button>
+  )
+}
+
 export function DeleteKey({ id, label }: { id: string; label: string }) {
   return (
     <ConfirmDialog
@@ -187,42 +214,42 @@ export function DeleteKey({ id, label }: { id: string; label: string }) {
   )
 }
 
-/** One toggle per service the member may use: on means the service's
- * machines accept this key. */
-export function KeyServices({
-  id,
-  services,
-  used,
+/** Which of the member's keys one service uses. */
+export function ServiceKey({
+  service,
+  keys,
+  value,
 }: {
-  id: string
-  services: { slug: string; name: string }[]
-  used: string[]
+  service: { slug: string; name: string }
+  keys: { value: string; label: string }[]
+  value: string
 }) {
   const [pending, startTransition] = React.useTransition()
   return (
-    <div className="flex flex-wrap gap-2">
-      {services.map((service) => (
-        <Toggle
-          key={service.slug}
-          size="text"
-          disabled={pending}
-          pressed={used.includes(service.slug)}
-          onPressedChange={(next) =>
-            startTransition(async () => {
-              await report(
-                setSshKeyServiceAction({
-                  id,
-                  service: service.slug,
-                  used: next,
-                }),
-                next ? `${service.name} 已啟用` : `${service.name} 已停用`
-              ).catch(() => {})
-            })
-          }
-        >
-          {service.name}
-        </Toggle>
-      ))}
-    </div>
+    <Select
+      value={value}
+      items={keys}
+      disabled={pending}
+      onValueChange={(id) => {
+        if (!id || id === value) return
+        startTransition(async () => {
+          await report(
+            setSshServiceKeyAction({ service: service.slug, id }),
+            `${service.name} 改用這把`
+          ).catch(() => {})
+        })
+      }}
+    >
+      <SelectTrigger aria-label={`${service.name} 用的金鑰`}>
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {keys.map((key) => (
+          <SelectItem key={key.value} value={key.value}>
+            {key.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   )
 }

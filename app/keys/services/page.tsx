@@ -58,7 +58,6 @@ export default async function KeyServicesPage() {
                         service.open
                           ? "所有成員"
                           : `指定 ${service.grants.length} 人`,
-                        `${service.keys} 把金鑰`,
                         service.lastReadAt
                           ? `上次讀取 ${day(service.lastReadAt)}`
                           : "還沒讀過",

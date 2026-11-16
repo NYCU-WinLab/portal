@@ -1,6 +1,6 @@
 # SSH keys for machines
 
-Members keep their SSH public keys on `/keys` and choose which services use each. A service is somewhere members log in: a jump host, a platform. Portal admins make services on `/keys/services`; each has a read key its machines fetch the keys with.
+Members keep their SSH public keys on `/keys`. A service reads one key per member: the one they picked for it there, or their first key when they picked none. A service is somewhere members log in: a jump host, a platform. Portal admins make services on `/keys/services`; each has a read key its machines fetch the keys with.
 
 ## Read a service's keys
 
@@ -42,7 +42,7 @@ A machine that cannot reach the portal serves the list it read last for one day 
 
 ## Read a member's keys
 
-Any member can read another member's public keys, with an API key allowed into SSH 金鑰 (`/api-keys`) or the `list_member_ssh_keys` tool. Such a key only reads: adding a key or putting one in a service takes the page or MCP.
+Any member can read another member's public keys, with an API key allowed into SSH 金鑰 (`/api-keys`) or the `list_member_ssh_keys` tool. Such a key only reads: adding a key or picking one for a service takes the page or MCP.
 
 ```sh
 curl -H "Authorization: Bearer wak_…" "https://portal.winlab.tw/api/ssh-keys/members/<username>?format=text" >> ~/.ssh/authorized_keys
