@@ -13,6 +13,7 @@ import {
   getBentoOrder,
   getBentoStats,
   listBentoOrders,
+  rateBentoDish,
   removeBentoOrderItem,
   reopenBentoOrder,
 } from "@/lib/actions/bento"
@@ -452,6 +453,7 @@ export const actionGroups: { app: ApiApp | null; actions: Action[] }[] = [
       getBentoStats,
       addBentoOrderItem,
       removeBentoOrderItem,
+      rateBentoDish,
       copyBentoOrder,
       createBentoOrder,
       closeBentoOrder,

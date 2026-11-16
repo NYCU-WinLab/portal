@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/dialog"
 import type { OptionGroup } from "@/lib/actions/bento-restaurants"
 
-import { MenuList } from "./menu-list"
+import { type Dish, MenuList } from "./menu-list"
 
 const link = "underline-offset-4 hover:underline"
 
@@ -30,7 +30,7 @@ export function RestaurantLinks({
     mapUrl: string | null
     menuImage: number | null
   }
-  menu?: { id: string; category: string; name: string; price: number }[]
+  menu?: Dish[]
   optionGroups?: OptionGroup[]
 }) {
   const image =

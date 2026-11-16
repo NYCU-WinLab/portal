@@ -8,6 +8,7 @@ import {
   integer,
   jsonb,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   uuid,
@@ -140,4 +141,24 @@ export const bentoOrderItems = pgTable(
     createdAt: timestamp({ withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [index().on(table.orderId), index().on(table.userId)]
+)
+
+// A member's 1 to 5 stars for a dish they have ordered; one per member and
+// dish, changed in place. Removing the dish from the menu removes its stars.
+export const bentoRatings = pgTable(
+  "bento_ratings",
+  {
+    menuItemId: uuid()
+      .notNull()
+      .references(() => bentoMenuItems.id, { onDelete: "cascade" }),
+    userId: uuid()
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    score: integer().notNull(),
+    updatedAt: timestamp({ withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.menuItemId, table.userId] }),
+    check("bento_ratings_score", sql`${table.score} between 1 and 5`),
+  ]
 )

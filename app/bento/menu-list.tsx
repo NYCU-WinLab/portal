@@ -1,6 +1,15 @@
 import type { OptionGroup } from "@/lib/actions/bento-restaurants"
 
-type Dish = { id: string; category: string; name: string; price: number }
+import { DishRating } from "./rating"
+
+export type Dish = {
+  id: string
+  category: string
+  name: string
+  price: number
+  rating: number | null
+  ratings: number
+}
 
 // A restaurant's menu as members read it: option groups, then dishes under
 // their headings. Shared by the restaurants page and an order's 菜單.
@@ -50,6 +59,7 @@ export function MenuList({
                 className="flex min-h-10 items-center gap-4 border-b border-border"
               >
                 <span className="min-w-0 flex-1">{dish.name}</span>
+                <DishRating rating={dish.rating} ratings={dish.ratings} />
                 <span className="shrink-0 text-muted-foreground tabular-nums">
                   {dish.price}
                 </span>

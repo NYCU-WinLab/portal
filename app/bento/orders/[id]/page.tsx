@@ -23,6 +23,7 @@ import { cn } from "@/lib/utils"
 
 import { bentoNav, bentoPage } from "../../nav"
 import { OrderDialog } from "../../order-dialog"
+import { RateDish } from "../../rating"
 import { RestaurantLinks } from "../../restaurant-links"
 import { CopyButton, OrderAdmin, RemoveLineButton } from "./order-actions"
 
@@ -173,11 +174,20 @@ export default async function OrderPage({
                     {person.lines.map((line) => (
                       <li
                         key={line.id}
-                        className="flex min-h-10 items-center gap-4"
+                        className="flex min-h-10 flex-wrap items-center justify-end gap-x-4"
                       >
-                        <span className="min-w-0 flex-1">
+                        <span className="min-w-32 flex-1">
                           {dishLabel(line)}
                         </span>
+                        {!open &&
+                          person.userId === actor.userId &&
+                          line.menuItemId && (
+                            <RateDish
+                              menuItemId={line.menuItemId}
+                              name={line.name}
+                              score={data.myRatings[line.menuItemId] ?? null}
+                            />
+                          )}
                         {person.lines.length > 1 && (
                           <span className="shrink-0 text-muted-foreground tabular-nums">
                             {line.price}
