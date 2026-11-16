@@ -50,6 +50,8 @@ curl -H "Authorization: Bearer wak_…" "https://portal.winlab.tw/api/ssh-keys/m
 
 Without `format=text` the answer is JSON, and `details` says for each key its label, the machine that holds it and what the member says it is for.
 
+The 成員 page (`/keys/members`) and the `list_ssh_key_members` tool list every member who keeps keys, with the same details, so you can find whose key to put on a machine you open for them.
+
 ## Carrel
 
 Carrel reads `/api/ssh-keys/services/carrel/<username>` for each member of a tenant with its own read key. Tenant membership stays in Carrel; the portal answers per member.

@@ -242,6 +242,62 @@ export const listMemberSshKeys = defineAction({
   },
 })
 
+export const listSshKeyMembers = defineAction({
+  name: "list_ssh_key_members",
+  title: "有 SSH 公鑰的成員",
+  description:
+    "Every lab member who keeps SSH public keys on the portal, by name, each with their keys oldest first: line is one authorized_keys line (type, key, username), beside its label, the machine that holds the private key, what the member says it is for, and its fingerprint. Use it to find whose key to put on a machine you open for them; list_member_ssh_keys reads one member by username.",
+  kind: "query",
+  input: z.object({}),
+  run: async () => {
+    const rows = await db
+      .select({
+        username: user.username,
+        name: user.name,
+        type: sshKeys.type,
+        blob: sshKeys.blob,
+        label: sshKeys.label,
+        machine: sshKeys.machine,
+        description: sshKeys.description,
+        fingerprint: sshKeys.fingerprint,
+      })
+      .from(sshKeys)
+      .innerJoin(user, eq(user.id, sshKeys.userId))
+      .orderBy(asc(user.name), asc(user.id), ...oldestFirst)
+    const members: {
+      username: string
+      name: string
+      keys: {
+        line: string
+        label: string
+        machine: string | null
+        description: string | null
+        type: string
+        fingerprint: string
+      }[]
+    }[] = []
+    for (const row of rows) {
+      // A key is served under the account's username; an account without
+      // one has no line to give.
+      if (!row.username) continue
+      let member = members.at(-1)
+      if (member?.username !== row.username) {
+        member = { username: row.username, name: row.name, keys: [] }
+        members.push(member)
+      }
+      member.keys.push({
+        line: line(row, row.username),
+        label: row.label,
+        machine: row.machine,
+        description: row.description,
+        type: row.type,
+        fingerprint: row.fingerprint,
+      })
+    }
+    return { members }
+  },
+})
+
 export const addSshKey = defineAction({
   name: "add_ssh_key",
   title: "新增 SSH 金鑰",
