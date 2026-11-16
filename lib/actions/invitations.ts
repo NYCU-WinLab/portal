@@ -67,7 +67,7 @@ const title = z
     return !/[@:\/\\]/.test(plain) && !DOTTED.test(plain)
   }, "標題不能有網址或信箱")
 
-const ACCESS = { view: "僅檢視", comment: "可註解" } as const
+const ACCESS = { view: "僅檢視", comment: "可註解", edit: "可編輯" } as const
 
 const when = new Intl.DateTimeFormat("zh-TW", {
   timeZone: "Asia/Taipei",
@@ -83,17 +83,18 @@ export const sendInvitation = defineAction({
   name: "send_invitation",
   title: "寄邀請信",
   description:
-    "Mails someone an invitation to open a link in a lab service (viewer.winlab.tw or meet.winlab.tw only), from the lab's mail address, in a fixed text that names the service. title names what the link opens (one line of plain words: no link, address, slash, colon or dotted word such as a file extension), access the access the link gives (view or comment), expiresAt when the link stops working. At most 30 an hour for a member, 300 for a service key.",
+    "Mails someone an invitation to open a link in a lab service (viewer.winlab.tw or meet.winlab.tw only), from the lab's mail address, in a fixed text that names the service. title names what the link opens (one line of plain words: no link, address, slash, colon or dotted word such as a file extension), access the access the link gives (view, comment or edit), expiresAt when the link stops working. member true says the person is a lab member who opens the link by signing in with their lab account, so the mail does not call the link a pass. At most 30 an hour for a member, 300 for a service key.",
   kind: "mutation",
   input: z.object({
     to: z.email("收件人信箱格式不對"),
     url: linkInto,
     title,
-    access: z.enum(["view", "comment"]).optional(),
+    access: z.enum(["view", "comment", "edit"]).optional(),
     expiresAt: z.iso
       .datetime({ offset: true })
       .refine((value) => Date.parse(value) > Date.now(), "失效時間已經過了")
       .optional(),
+    member: z.boolean().optional(),
   }),
   run: async (actor, input) => {
     const service = SERVICES[new URL(input.url).hostname]
@@ -132,10 +133,12 @@ export const sendInvitation = defineAction({
         ...mailBody({
           title: input.title,
           rows,
-          paragraphs: [
-            `你收到一份 ${service} 的邀請。`,
-            "這個連結就是你的通行證，請不要轉給別人。",
-          ],
+          paragraphs: input.member
+            ? [`你在 ${service} 收到一份共用。`, "用實驗室帳號登入就能打開。"]
+            : [
+                `你收到一份 ${service} 的邀請。`,
+                "這個連結就是你的通行證，請不要轉給別人。",
+              ],
           action: { label: `在 ${service} 打開`, url: input.url },
         }),
       })

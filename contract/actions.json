@@ -11510,17 +11510,18 @@
   {
     "name": "send_invitation",
     "title": "寄邀請信",
-    "description": "Mails someone an invitation to open a link in a lab service (viewer.winlab.tw or meet.winlab.tw only), from the lab's mail address, in a fixed text that names the service. title names what the link opens (one line of plain words: no link, address, slash, colon or dotted word such as a file extension), access the access the link gives (view or comment), expiresAt when the link stops working. At most 30 an hour for a member, 300 for a service key.",
+    "description": "Mails someone an invitation to open a link in a lab service (viewer.winlab.tw or meet.winlab.tw only), from the lab's mail address, in a fixed text that names the service. title names what the link opens (one line of plain words: no link, address, slash, colon or dotted word such as a file extension), access the access the link gives (view, comment or edit), expiresAt when the link stops working. member true says the person is a lab member who opens the link by signing in with their lab account, so the mail does not call the link a pass. At most 30 an hour for a member, 300 for a service key.",
     "kind": "mutation",
     "app": "invitations",
-    "hash": "ada5d7ba43300308",
+    "hash": "fc1d9f53e1b7fe85",
     "input": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
         "access": {
           "enum": [
             "view",
-            "comment"
+            "comment",
+            "edit"
           ],
           "type": "string"
         },
@@ -11528,6 +11529,9 @@
           "format": "date-time",
           "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
           "type": "string"
+        },
+        "member": {
+          "type": "boolean"
         },
         "title": {
           "maxLength": 80,
