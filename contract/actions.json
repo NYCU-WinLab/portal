@@ -10116,6 +10116,97 @@
     }
   },
   {
+    "name": "list_ssh_key_members",
+    "title": "有 SSH 公鑰的成員",
+    "description": "Every lab member who keeps SSH public keys on the portal, by name, each with their keys oldest first: line is one authorized_keys line (type, key, username), beside its label, the machine that holds the private key, what the member says it is for, and its fingerprint. Use it to find whose key to put on a machine you open for them; list_member_ssh_keys reads one member by username.",
+    "kind": "query",
+    "app": "keys",
+    "hash": "a9d9b0cfc0b1fe18",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {},
+      "type": "object"
+    },
+    "output": {
+      "additionalProperties": false,
+      "properties": {
+        "members": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "keys": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "description": {
+                      "anyOf": [
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "fingerprint": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "line": {
+                      "type": "string"
+                    },
+                    "machine": {
+                      "anyOf": [
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "line",
+                    "label",
+                    "machine",
+                    "description",
+                    "type",
+                    "fingerprint"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "name": {
+                "type": "string"
+              },
+              "username": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "username",
+              "name",
+              "keys"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "members"
+      ],
+      "type": "object"
+    }
+  },
+  {
     "name": "list_standing_meetings",
     "title": "固定會議",
     "description": "Every standing meeting on /meetings: title, weekday (0 Sunday), start time, duration, every week or every other week (anchorDate is a day it meets on, fixing which weeks), attendees, whether the advisor is invited, whether it is active, who made it, and its next occurrence with the room already held for it (booked false until the daily run books it, 7 days ahead). Every member sees every series; only its creator can pause or delete it, and its creator or any member of its project group can edit its external link and agenda with update_meeting.",

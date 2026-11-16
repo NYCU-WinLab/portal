@@ -58,6 +58,7 @@ import {
   importSshKeys,
   listMemberSshKeys,
   listMySshKeys,
+  listSshKeyMembers,
   listSshKeyChanges,
   listSshServices,
   revokeSshServiceGrant,
@@ -591,7 +592,7 @@ export const actionGroups: { app: ApiApp | null; actions: Action[] }[] = [
   },
   {
     app: "keys",
-    actions: [listMySshKeys, listMemberSshKeys],
+    actions: [listMySshKeys, listMemberSshKeys, listSshKeyMembers],
   },
   {
     app: "music",
