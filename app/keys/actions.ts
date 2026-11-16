@@ -14,6 +14,7 @@ import {
   revokeSshServiceGrant,
   rotateSshServiceKey,
   setSshKeyService,
+  updateSshKey,
 } from "@/lib/actions/keys"
 import { requireActor } from "@/lib/auth/session"
 
@@ -37,8 +38,20 @@ async function run<Input extends z.ZodObject, Output>(
 export async function addSshKeyAction(input: {
   public_key: string
   label: string
+  machine: string
+  description: string
 }) {
   const { error } = await run(addSshKey, input)
+  return { error }
+}
+
+export async function updateSshKeyAction(input: {
+  id: string
+  label: string
+  machine: string
+  description: string
+}) {
+  const { error } = await run(updateSshKey, input)
   return { error }
 }
 

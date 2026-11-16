@@ -8270,10 +8270,10 @@
   {
     "name": "list_member_ssh_keys",
     "title": "成員的 SSH 公鑰",
-    "description": "Every SSH public key one lab member keeps on the portal, by their account username: one authorized_keys line each (type, key, username). Use it to encrypt a file to a member (age -R) or to let them into a machine you run. Fails when no member has that username.",
+    "description": "Every SSH public key one lab member keeps on the portal, by their account username. keys is one authorized_keys line each (type, key, username); details says for each, in the same order, its label, the machine that holds the private key, what the member says it is for, and its fingerprint. Use it to let a member into a machine you run, picking the key by machine and purpose. Fails when no member has that username.",
     "kind": "query",
     "app": "keys",
-    "hash": "0e056e40fa4d7102",
+    "hash": "67d94811e44ef695",
     "input": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
@@ -8291,11 +8291,55 @@
     "output": {
       "additionalProperties": false,
       "properties": {
+        "details": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "description": {
+                "anyOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              },
+              "fingerprint": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "machine": {
+                "anyOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "label",
+              "machine",
+              "description",
+              "fingerprint"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
         "keys": {
           "items": {
             "type": "string"
           },
           "type": "array"
+        },
+        "name": {
+          "type": "string"
         },
         "username": {
           "type": "string"
@@ -8303,7 +8347,9 @@
       },
       "required": [
         "username",
-        "keys"
+        "name",
+        "keys",
+        "details"
       ],
       "type": "object"
     }
@@ -8678,10 +8724,10 @@
   {
     "name": "list_my_ssh_keys",
     "title": "我的 SSH 金鑰",
-    "description": "The signed-in member's SSH public keys (id, label, type, fingerprint, the public key line, where it came from, when it was added, and the slugs of the services it is used in), and the services the member may use (slug and name). A key used in no service reaches no machine.",
+    "description": "The signed-in member's SSH public keys (id, label, the machine that holds the private key, what the key is for, type, fingerprint, the public key line, where it came from, when it was added, and the slugs of the services it is used in), the member's account username, and the services the member may use (slug and name). A key used in no service reaches no machine.",
     "kind": "query",
     "app": "keys",
-    "hash": "4999167a09ea018e",
+    "hash": "b87c7eacdaaa296f",
     "input": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {},
@@ -8698,6 +8744,16 @@
                 "format": "date-time",
                 "type": "string"
               },
+              "description": {
+                "anyOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              },
               "fingerprint": {
                 "type": "string"
               },
@@ -8706,6 +8762,16 @@
               },
               "label": {
                 "type": "string"
+              },
+              "machine": {
+                "anyOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
               },
               "publicKey": {
                 "type": "string"
@@ -8726,6 +8792,8 @@
             "required": [
               "id",
               "label",
+              "machine",
+              "description",
               "type",
               "fingerprint",
               "publicKey",
@@ -8755,9 +8823,20 @@
             "type": "object"
           },
           "type": "array"
+        },
+        "username": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ]
         }
       },
       "required": [
+        "username",
         "keys",
         "services"
       ],

@@ -1,5 +1,4 @@
 import { EmptyState } from "@/components/empty-state"
-import { ExpandRow } from "@/components/expand-row"
 import {
   Focus,
   FocusHighlight,
@@ -13,8 +12,14 @@ import { listMySshKeys } from "@/lib/actions/keys"
 import { requireActor } from "@/lib/auth/session"
 import { type KeyHost, keyHostIds, keyHosts } from "@/lib/ssh-keys"
 
-import { AddKey, DeleteKey, ImportKeys, KeyServices } from "./key-forms"
-import { day, keysNav, keysPage, memberLine } from "./nav"
+import {
+  AddKey,
+  DeleteKey,
+  EditKey,
+  ImportKeys,
+  KeyServices,
+} from "./key-forms"
+import { day, keysNav, keysPage } from "./nav"
 
 export const dynamic = "force-dynamic"
 
@@ -22,7 +27,7 @@ const hosts = keyHostIds.map((id) => ({ value: id, label: keyHosts[id].label }))
 
 export default async function KeysPage() {
   const actor = await requireActor("/keys")
-  const { keys, services } = await runAction(listMySshKeys, actor, {})
+  const { username, keys, services } = await runAction(listMySshKeys, actor, {})
 
   return (
     <PortalShell page={keysPage} nav={keysNav}>
@@ -54,6 +59,14 @@ export default async function KeysPage() {
                 <span className="flex min-w-0 flex-1 basis-64 flex-col">
                   <span className="truncate">{key.label}</span>
                   <span className="truncate font-mono text-muted-foreground">
+                    {[username, key.machine].filter(Boolean).join("@")}
+                  </span>
+                  {key.description && (
+                    <span className="text-muted-foreground">
+                      {key.description}
+                    </span>
+                  )}
+                  <span className="truncate font-mono text-muted-foreground">
                     {key.type} {key.fingerprint}
                   </span>
                   <span className="text-muted-foreground">
@@ -71,18 +84,19 @@ export default async function KeysPage() {
                   services={services}
                   used={key.services}
                 />
+                <EditKey
+                  id={key.id}
+                  value={{
+                    label: key.label,
+                    machine: key.machine ?? "",
+                    description: key.description ?? "",
+                  }}
+                />
                 <DeleteKey id={key.id} label={key.label} />
               </li>
             ))}
           </ul>
         )}
-        <ul className="flex flex-col">
-          <ExpandRow summary="加密檔案給成員">
-            <p className="font-mono break-all text-muted-foreground select-all">
-              {memberLine("wak_…", "帳號")}
-            </p>
-          </ExpandRow>
-        </ul>
       </div>
     </PortalShell>
   )

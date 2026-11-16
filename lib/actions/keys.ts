@@ -58,9 +58,13 @@ const record = (tx: Tx, actor: Actor, change: Change) =>
 const line = (key: { type: string; blob: string }, username: string) =>
   `${key.type} ${key.blob} ${username}`
 
+const machineInput = z.string().trim().max(60, "機器最多 60 字")
+const descriptionInput = z.string().trim().max(200, "用途最多 200 字")
+type KeyNotes = { label: string; machine?: string; description?: string }
+
 async function addKeys(
   actor: Actor,
-  keys: (ParsedKey & { label: string })[],
+  keys: (ParsedKey & KeyNotes)[],
   source: string
 ) {
   return db.transaction(async (tx) => {
@@ -79,6 +83,8 @@ async function addKeys(
             keys.map((key) => ({
               userId: actor.userId,
               label: key.label,
+              machine: key.machine || null,
+              description: key.description || null,
               type: key.type,
               blob: key.blob,
               fingerprint: key.fingerprint,
@@ -104,11 +110,15 @@ export const listMySshKeys = defineAction({
   name: "list_my_ssh_keys",
   title: "我的 SSH 金鑰",
   description:
-    "The signed-in member's SSH public keys (id, label, type, fingerprint, the public key line, where it came from, when it was added, and the slugs of the services it is used in), and the services the member may use (slug and name). A key used in no service reaches no machine.",
+    "The signed-in member's SSH public keys (id, label, the machine that holds the private key, what the key is for, type, fingerprint, the public key line, where it came from, when it was added, and the slugs of the services it is used in), the member's account username, and the services the member may use (slug and name). A key used in no service reaches no machine.",
   kind: "query",
   input: z.object({}),
   run: async (actor) => {
-    const [keys, uses, services] = await Promise.all([
+    const [[owner], keys, uses, services] = await Promise.all([
+      db
+        .select({ username: user.username })
+        .from(user)
+        .where(eq(user.id, actor.userId)),
       db
         .select()
         .from(sshKeys)
@@ -136,9 +146,12 @@ export const listMySshKeys = defineAction({
         .orderBy(asc(sshServices.name)),
     ])
     return {
+      username: owner?.username ?? null,
       keys: keys.map((key) => ({
         id: key.id,
         label: key.label,
+        machine: key.machine,
+        description: key.description,
         type: key.type,
         fingerprint: key.fingerprint,
         publicKey: `${key.type} ${key.blob}`,
@@ -157,23 +170,37 @@ export const listMemberSshKeys = defineAction({
   name: "list_member_ssh_keys",
   title: "成員的 SSH 公鑰",
   description:
-    "Every SSH public key one lab member keeps on the portal, by their account username: one authorized_keys line each (type, key, username). Use it to encrypt a file to a member (age -R) or to let them into a machine you run. Fails when no member has that username.",
+    "Every SSH public key one lab member keeps on the portal, by their account username. keys is one authorized_keys line each (type, key, username); details says for each, in the same order, its label, the machine that holds the private key, what the member says it is for, and its fingerprint. Use it to let a member into a machine you run, picking the key by machine and purpose. Fails when no member has that username.",
   kind: "query",
   input: z.object({ username: z.string().trim().min(1).max(64) }),
   run: async (_actor, { username }) => {
     const [member] = await db
-      .select({ id: user.id, username: user.username })
+      .select({ id: user.id, username: user.username, name: user.name })
       .from(user)
       .where(sql`lower(${user.username}) = ${username.toLowerCase()}`)
     if (!member?.username) throw new Error("找不到這個成員")
     const keys = await db
-      .select({ type: sshKeys.type, blob: sshKeys.blob })
+      .select({
+        type: sshKeys.type,
+        blob: sshKeys.blob,
+        label: sshKeys.label,
+        machine: sshKeys.machine,
+        description: sshKeys.description,
+        fingerprint: sshKeys.fingerprint,
+      })
       .from(sshKeys)
       .where(eq(sshKeys.userId, member.id))
       .orderBy(asc(sshKeys.createdAt))
     return {
       username: member.username,
+      name: member.name,
       keys: keys.map((key) => line(key, member.username!)),
+      details: keys.map((key) => ({
+        label: key.label,
+        machine: key.machine,
+        description: key.description,
+        fingerprint: key.fingerprint,
+      })),
     }
   },
 })
@@ -182,11 +209,13 @@ export const addSshKey = defineAction({
   name: "add_ssh_key",
   title: "新增 SSH 金鑰",
   description:
-    "Adds one SSH public key to the signed-in member: the whole line of a .pub file (ssh-ed25519, ssh-rsa, ecdsa-sha2-* or a sk-* hardware key). The label defaults to the line's comment. The key is used nowhere until set_ssh_key_service puts it in a service. Fails for a private key, a line that is no public key, or a key the member already has.",
+    "Adds one SSH public key to the signed-in member: the whole line of a .pub file (ssh-ed25519, ssh-rsa, ecdsa-sha2-* or a sk-* hardware key). The label defaults to the line's comment; machine names the computer that holds the private key and description says what the key is for, both shown to members who read this member's keys. The key is used nowhere until set_ssh_key_service puts it in a service. Fails for a private key, a line that is no public key, or a key the member already has.",
   kind: "mutation",
   input: z.object({
     public_key: z.string().trim().min(1, "請貼上公鑰").max(8192, "公鑰太長"),
     label: z.string().trim().max(60, "名稱最多 60 字").optional(),
+    machine: machineInput.optional(),
+    description: descriptionInput.optional(),
   }),
   run: async (actor, input) => {
     if (input.public_key.includes("PRIVATE KEY"))
@@ -194,7 +223,18 @@ export const addSshKey = defineAction({
     const key = parsePublicKey(input.public_key)
     if (!key) throw new Error("這不是 SSH 公鑰，請貼上 .pub 檔的整行內容")
     const label = (input.label || key.comment || key.type).slice(0, 60)
-    const [added] = await addKeys(actor, [{ ...key, label }], "paste")
+    const [added] = await addKeys(
+      actor,
+      [
+        {
+          ...key,
+          label,
+          machine: input.machine,
+          description: input.description,
+        },
+      ],
+      "paste"
+    )
     if (!added) throw new Error("這把金鑰已經加過了")
     return { id: added.id, fingerprint: added.fingerprint }
   },
@@ -221,6 +261,43 @@ export const importSshKeys = defineAction({
       host
     )
     return { added: added.length, skipped: found.length - added.length }
+  },
+})
+
+export const updateSshKey = defineAction({
+  name: "update_ssh_key",
+  title: "修改 SSH 金鑰的說明",
+  description:
+    "Changes what one of the signed-in member's SSH keys says about itself, by id (from list_my_ssh_keys): its label, the machine that holds the private key, and what the key is for. A field left out stays; an empty machine or description clears it. The key itself and the services it is used in do not change. Fails when the key is not the member's.",
+  kind: "mutation",
+  input: z.object({
+    id: z.uuid(),
+    label: z
+      .string()
+      .trim()
+      .min(1, "請填名稱")
+      .max(60, "名稱最多 60 字")
+      .optional(),
+    machine: machineInput.optional(),
+    description: descriptionInput.optional(),
+  }),
+  run: async (actor, { id, label, machine, description }) => {
+    const [updated] = await db
+      .update(sshKeys)
+      .set({
+        // Never an empty set: an update with nothing to change still
+        // answers whether the key is the member's.
+        id,
+        ...(label !== undefined && { label }),
+        ...(machine !== undefined && { machine: machine || null }),
+        ...(description !== undefined && {
+          description: description || null,
+        }),
+      })
+      .where(and(eq(sshKeys.id, id), eq(sshKeys.userId, actor.userId)))
+      .returning({ id: sshKeys.id })
+    if (!updated) throw new Error("找不到這把金鑰")
+    return { updated: true }
   },
 })
 

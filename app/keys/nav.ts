@@ -20,10 +20,6 @@ export const keysNav = [
 export const serviceLine = (token: string, slug: string) =>
   `curl -H "Authorization: Bearer ${token}" "https://portal.winlab.tw/api/ssh-keys/services/${slug}?format=text"`
 
-/** The line that encrypts a file to a member with their keys. */
-export const memberLine = (token: string, username: string) =>
-  `curl -H "Authorization: Bearer ${token}" "https://portal.winlab.tw/api/ssh-keys/members/${username}?format=text" | age -R - -o secret.age secret.txt`
-
 export const day = (date: Date) =>
   date.toLocaleDateString("zh-TW", {
     timeZone: "Asia/Taipei",

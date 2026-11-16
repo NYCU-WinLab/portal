@@ -6,7 +6,7 @@ import { keysResponse } from "../../respond"
 
 // GET /api/ssh-keys/members/<username>: every public key one member keeps
 // on the portal, for a member's API key allowed into the keys app. Text
-// goes straight into `age -R -` or an authorized_keys file.
+// goes straight into an authorized_keys file.
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ username: string }> }
