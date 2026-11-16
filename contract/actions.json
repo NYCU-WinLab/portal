@@ -8724,10 +8724,10 @@
   {
     "name": "list_my_ssh_keys",
     "title": "我的 SSH 金鑰",
-    "description": "The signed-in member's SSH public keys (id, label, the machine that holds the private key, what the key is for, type, fingerprint, the public key line, where it came from, when it was added, and the slugs of the services it is used in), the member's account username, and the services the member may use (slug and name). A key used in no service reaches no machine.",
+    "description": "The signed-in member's SSH public keys (id, label, the machine that holds the private key, what the key is for, type, fingerprint, the public key line, where it came from, when it was added, and the slugs of the services it is used in), the member's name and account username, and the services the member may use (slug and name). A key used in no service reaches no machine.",
     "kind": "query",
     "app": "keys",
-    "hash": "b87c7eacdaaa296f",
+    "hash": "d5810221237cb2c5",
     "input": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {},
@@ -8805,6 +8805,16 @@
           },
           "type": "array"
         },
+        "name": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
         "services": {
           "items": {
             "additionalProperties": false,
@@ -8837,6 +8847,7 @@
       },
       "required": [
         "username",
+        "name",
         "keys",
         "services"
       ],

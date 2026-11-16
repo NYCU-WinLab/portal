@@ -110,13 +110,13 @@ export const listMySshKeys = defineAction({
   name: "list_my_ssh_keys",
   title: "我的 SSH 金鑰",
   description:
-    "The signed-in member's SSH public keys (id, label, the machine that holds the private key, what the key is for, type, fingerprint, the public key line, where it came from, when it was added, and the slugs of the services it is used in), the member's account username, and the services the member may use (slug and name). A key used in no service reaches no machine.",
+    "The signed-in member's SSH public keys (id, label, the machine that holds the private key, what the key is for, type, fingerprint, the public key line, where it came from, when it was added, and the slugs of the services it is used in), the member's name and account username, and the services the member may use (slug and name). A key used in no service reaches no machine.",
   kind: "query",
   input: z.object({}),
   run: async (actor) => {
     const [[owner], keys, uses, services] = await Promise.all([
       db
-        .select({ username: user.username })
+        .select({ username: user.username, name: user.name })
         .from(user)
         .where(eq(user.id, actor.userId)),
       db
@@ -147,6 +147,7 @@ export const listMySshKeys = defineAction({
     ])
     return {
       username: owner?.username ?? null,
+      name: owner?.name ?? null,
       keys: keys.map((key) => ({
         id: key.id,
         label: key.label,
