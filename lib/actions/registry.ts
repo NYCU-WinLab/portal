@@ -62,7 +62,7 @@ import {
   listSshServices,
   revokeSshServiceGrant,
   rotateSshServiceKey,
-  setSshServiceKey,
+  setSshServiceKeys,
   updateSshKey,
 } from "@/lib/actions/keys"
 import type { Action } from "@/lib/actions/define"
@@ -586,7 +586,7 @@ export const actionGroups: { app: ApiApp | null; actions: Action[] }[] = [
       updateSshKey,
       importSshKeys,
       deleteSshKey,
-      setSshServiceKey,
+      setSshServiceKeys,
     ],
   },
   {

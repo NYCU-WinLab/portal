@@ -18,7 +18,7 @@ import {
   DeleteKey,
   EditKey,
   ImportKeys,
-  ServiceKey,
+  ServiceKeys,
 } from "./key-forms"
 import { day, keysNav, keysPage } from "./nav"
 
@@ -130,13 +130,13 @@ export default async function KeysPage() {
                   className="flex min-h-14 flex-wrap items-center justify-between gap-4 border-b border-border py-3"
                 >
                   <span className="truncate">{service.name}</span>
-                  <ServiceKey
+                  <ServiceKeys
                     service={service}
                     keys={keys.map((key) => ({
                       value: key.id,
                       label: key.label,
                     }))}
-                    value={service.keyId ?? keys[0].id}
+                    value={service.keyIds}
                   />
                 </li>
               ))}

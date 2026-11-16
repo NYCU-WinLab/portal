@@ -8724,10 +8724,10 @@
   {
     "name": "list_my_ssh_keys",
     "title": "我的 SSH 金鑰",
-    "description": "The signed-in member's SSH public keys (id, label, the machine that holds the private key, what the key is for, type, fingerprint, the public key line, where it came from, when it was added, and the slugs of the services that use it), the member's name and account username, and the services the member may use (slug, name and keyId, the id of the key that service uses). A service uses the key the member picked with set_ssh_service_key, or the member's first key when none was picked.",
+    "description": "The signed-in member's SSH public keys (id, label, the machine that holds the private key, what the key is for, type, fingerprint, the public key line, where it came from, when it was added, and the slugs of the services that use it), the member's name and account username, and the services the member may use (slug, name and keyIds, the ids of the keys that service uses). A service uses the keys the member picked with set_ssh_service_keys, or the member's first key when none was picked.",
     "kind": "query",
     "app": "keys",
-    "hash": "545a58c2f7253249",
+    "hash": "823c2b10dc89de30",
     "input": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {},
@@ -8819,15 +8819,11 @@
           "items": {
             "additionalProperties": false,
             "properties": {
-              "keyId": {
-                "anyOf": [
-                  {
-                    "type": "null"
-                  },
-                  {
-                    "type": "string"
-                  }
-                ]
+              "keyIds": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
               },
               "name": {
                 "type": "string"
@@ -8837,7 +8833,7 @@
               }
             },
             "required": [
-              "keyId",
+              "keyIds",
               "slug",
               "name"
             ],
