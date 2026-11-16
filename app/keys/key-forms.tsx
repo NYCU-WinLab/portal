@@ -241,7 +241,6 @@ export function ServiceKeys({
             pressed={on}
             disabled={pending}
             onPressedChange={(pressed) => {
-              // The server keeps the last key on and says so.
               startTransition(async () => {
                 await report(
                   setSshServiceKeyAction({

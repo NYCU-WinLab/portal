@@ -96,7 +96,9 @@ export const sshKeyServices = pgTable(
 
 // A member who has turned a key on or off for a service has chosen: from
 // then on the service reads exactly the keys that are on, even none. With no
-// row here a service reads the member's first key.
+// row here a service reads the member's first key. The row outlives a
+// grant taken away: a member given the service again turns a key on
+// themselves.
 export const sshServiceChoices = pgTable(
   "ssh_service_choices",
   {

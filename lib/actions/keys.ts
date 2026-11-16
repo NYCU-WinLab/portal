@@ -603,6 +603,7 @@ export const grantSshService = defineAction({
   input: z.object({ id: z.uuid(), user_id: z.uuid() }),
   run: async (actor, { id, user_id }) =>
     db.transaction(async (tx) => {
+      await lockKeys(tx, user_id)
       const [service] = await tx
         .select({ slug: sshServices.slug, open: sshServices.open })
         .from(sshServices)
@@ -622,21 +623,15 @@ export const grantSshService = defineAction({
       if (granted.length) {
         // A grant starts with none of the member's keys in the service: a
         // key put in while an earlier grant was being taken away would
-        // otherwise come back with this one.
+        // otherwise come back with this one. A member who chose before
+        // stays chosen, so a key they turned off does not come back as the
+        // default either: they turn one on again themselves.
         await tx
           .delete(sshKeyServices)
           .where(
             and(
               eq(sshKeyServices.serviceId, id),
               sql`${sshKeyServices.keyId} in (select id from ssh_keys where user_id = ${user_id})`
-            )
-          )
-        await tx
-          .delete(sshServiceChoices)
-          .where(
-            and(
-              eq(sshServiceChoices.serviceId, id),
-              eq(sshServiceChoices.userId, user_id)
             )
           )
         await record(tx, actor, {
@@ -659,6 +654,7 @@ export const revokeSshServiceGrant = defineAction({
   input: z.object({ id: z.uuid(), user_id: z.uuid() }),
   run: async (actor, { id, user_id }) =>
     db.transaction(async (tx) => {
+      await lockKeys(tx, user_id)
       const [revoked] = await tx
         .delete(sshServiceGrants)
         .where(
@@ -676,14 +672,6 @@ export const revokeSshServiceGrant = defineAction({
           and(
             eq(sshKeyServices.serviceId, id),
             sql`${sshKeyServices.keyId} in (select id from ssh_keys where user_id = ${user_id})`
-          )
-        )
-      await tx
-        .delete(sshServiceChoices)
-        .where(
-          and(
-            eq(sshServiceChoices.serviceId, id),
-            eq(sshServiceChoices.userId, user_id)
           )
         )
       const [service] = await tx
@@ -728,8 +716,9 @@ export const listSshKeyChanges = defineAction({
 })
 
 /**
- * What a service's machines read: each member allowed in, with the key
- * they picked for the service, or their first key when they picked none.
+ * What a service's machines read: each member allowed in, with the keys
+ * they turned on for the service. A member who never chose is read their
+ * first key; one who chose and has none on is left out.
  * Not an action: the caller is a machine holding
  * the service's read key, with no session.
  *
