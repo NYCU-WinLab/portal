@@ -2826,10 +2826,10 @@
   {
     "name": "get_bento_order",
     "title": "訂單內容",
-    "description": "One lunch order in full: the order (date, batch, status), its restaurant with the menu and option groups to order from, every line (id, member, dish, picked options, price), totals per member, and a tally per dish and option combination as the restaurant would take it.",
+    "description": "One lunch order in full: the order (date, batch, status), its restaurant with the menu (with each dish's average stars) and option groups to order from, every line (id, member, menuItemId, dish, picked options, price), the signed-in member's own stars per menuItemId, totals per member, and a tally per dish and option combination as the restaurant would take it.",
     "kind": "query",
     "app": "bento",
-    "hash": "d4c0ee71b195897b",
+    "hash": "21e53d718f5eaf66",
     "input": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
@@ -2907,6 +2907,16 @@
               "member": {
                 "type": "string"
               },
+              "menuItemId": {
+                "anyOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              },
               "name": {
                 "type": "string"
               },
@@ -2940,6 +2950,7 @@
               "id",
               "userId",
               "member",
+              "menuItemId",
               "name",
               "options",
               "price",
@@ -2964,17 +2975,32 @@
               },
               "price": {
                 "type": "number"
+              },
+              "rating": {
+                "type": "number"
+              },
+              "ratings": {
+                "type": "number"
               }
             },
             "required": [
+              "ratings",
               "id",
               "category",
               "name",
-              "price"
+              "price",
+              "rating"
             ],
             "type": "object"
           },
           "type": "array"
+        },
+        "myRatings": {
+          "additionalProperties": {
+            "type": "number"
+          },
+          "properties": {},
+          "type": "object"
         },
         "optionGroups": {
           "items": {
@@ -3097,6 +3123,16 @@
                     "member": {
                       "type": "string"
                     },
+                    "menuItemId": {
+                      "anyOf": [
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "type": "string"
+                        }
+                      ]
+                    },
                     "name": {
                       "type": "string"
                     },
@@ -3130,6 +3166,7 @@
                     "id",
                     "userId",
                     "member",
+                    "menuItemId",
                     "name",
                     "options",
                     "price",
@@ -3224,6 +3261,7 @@
         "menu",
         "optionGroups",
         "lines",
+        "myRatings",
         "people",
         "dishes",
         "totals"
@@ -3234,10 +3272,10 @@
   {
     "name": "get_bento_restaurant",
     "title": "菜單",
-    "description": "One restaurant with its menu: dishes (id, category heading, name, price in NT$) and option groups (甜度, 冰量, 加料, 不醬...; required means every dish needs one pick, multiple means several may be picked; priceDelta is added to the dish).",
+    "description": "One restaurant with its menu: dishes (id, category heading, name, price in NT$, rating as the members' average stars 1 to 5 or null when nobody rated it, ratings as how many rated) and option groups (甜度, 冰量, 加料, 不醬...; required means every dish needs one pick, multiple means several may be picked; priceDelta is added to the dish).",
     "kind": "query",
     "app": "bento",
-    "hash": "c146823afbc3fb4d",
+    "hash": "fc01ba490d8d0ef4",
     "input": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
@@ -3270,13 +3308,21 @@
               },
               "price": {
                 "type": "number"
+              },
+              "rating": {
+                "type": "number"
+              },
+              "ratings": {
+                "type": "number"
               }
             },
             "required": [
+              "ratings",
               "id",
               "category",
               "name",
-              "price"
+              "price",
+              "rating"
             ],
             "type": "object"
           },
@@ -11035,6 +11081,50 @@
       },
       "required": [
         "itemId"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "rate_bento_dish",
+    "title": "評分",
+    "description": "Gives a dish 1 to 5 stars as the signed-in member, replacing their earlier stars for it. Only a dish the member has ordered before can be rated; menuItemId comes from a line in get_bento_order. Ask the member for the stars; never rate for them.",
+    "kind": "mutation",
+    "app": "bento",
+    "hash": "ebe20de544cd5a51",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "menuItemId": {
+          "format": "uuid",
+          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+          "type": "string"
+        },
+        "score": {
+          "maximum": 5,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "menuItemId",
+        "score"
+      ],
+      "type": "object"
+    },
+    "output": {
+      "additionalProperties": false,
+      "properties": {
+        "menuItemId": {
+          "type": "string"
+        },
+        "score": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "menuItemId",
+        "score"
       ],
       "type": "object"
     }
