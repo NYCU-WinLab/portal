@@ -1,0 +1,21 @@
+diff --git a/dist/instrumentation/tracer.mjs b/dist/instrumentation/tracer.mjs
+index bdfc2c2a1073fa3aa103cb38d7c52c9fc59ac706..3556e698d079328e8c5597097a197bc529d18edb 100644
+--- a/dist/instrumentation/tracer.mjs
++++ b/dist/instrumentation/tracer.mjs
+@@ -7,12 +7,14 @@ const INSTRUMENTATION_VERSION = "1.7.7";
+ /**
+ * Better-auth uses `throw ctx.redirect(url)` for flow control (e.g. OAuth
+ * callbacks). These are APIErrors with 3xx status codes and should not be
+-* recorded as span errors.
++* recorded as span errors. Patched for portal: 4xx APIErrors are answers to a
++* bad request (an expired refresh token), not server faults, so they are not
++* span errors either; the status code stays on the span.
+ */
+ function isRedirectError(err) {
+ 	if (err != null && typeof err === "object" && "name" in err && err.name === "APIError" && "statusCode" in err) {
+ 		const status = err.statusCode;
+-		return status >= 300 && status < 400;
++		return status >= 300 && status < 500;
+ 	}
+ 	return false;
+ }
