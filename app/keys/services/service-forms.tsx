@@ -129,7 +129,7 @@ export function RotateServiceKey({ id, name }: { id: string; name: string }) {
             <RefreshCwIcon />
           </Button>
         }
-        title={`重發「${name}」的讀取金鑰？舊金鑰會立刻失效`}
+        title={`重發「${name}」的讀取金鑰？`}
         confirmLabel="重發"
         onConfirm={async () =>
           setIssued(issue(await rotateSshServiceKeyAction(id), "已重發"))
@@ -148,7 +148,7 @@ export function DeleteService({ id, name }: { id: string; name: string }) {
           <Trash2Icon />
         </Button>
       }
-      title={`刪除「${name}」？機器會立刻讀不到名單`}
+      title={`刪除「${name}」？`}
       confirmLabel="刪除"
       variant="destructive"
       onConfirm={() => report(deleteSshServiceAction(id), "已刪除")}
@@ -201,7 +201,7 @@ export function RevokeGrant({
           <XIcon />
         </Button>
       }
-      title={`移除 ${name}？他放在這裡的金鑰會一起拿掉`}
+      title={`移除 ${name}？`}
       confirmLabel="移除"
       onConfirm={() =>
         report(revokeSshServiceGrantAction({ id, user_id: userId }), "已移除")

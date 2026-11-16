@@ -579,18 +579,17 @@ export const actionGroups: { app: ApiApp | null; actions: Action[] }[] = [
       grantSshService,
       revokeSshServiceGrant,
       listSshKeyChanges,
-    ],
-  },
-  {
-    app: "keys",
-    actions: [
-      listMySshKeys,
-      listMemberSshKeys,
+      // Adding a key and putting it in a service is how a member gets into
+      // a machine, so a leaked API key must not be able to do it.
       addSshKey,
       importSshKeys,
       deleteSshKey,
       setSshKeyService,
     ],
+  },
+  {
+    app: "keys",
+    actions: [listMySshKeys, listMemberSshKeys],
   },
   {
     app: "music",

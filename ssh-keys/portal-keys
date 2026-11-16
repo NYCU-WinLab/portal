@@ -8,8 +8,12 @@
 #
 # /etc/portal-keys/env sets:
 #   SERVICE=b09            the service's slug on portal.winlab.tw/keys/services
-#   SHARED="p4user"        accounts every member of the service logs in to;
-#                          any other account is read as that member's own
+#   SHARED="p4user"        accounts every member of the service logs in to
+#   OWN=yes                also let a member in to the local account that
+#                          has their username (uid 1000 or above); off
+#                          unless set
+#   MAX_AGE=1440           minutes the last list is served while the portal
+#                          cannot be reached (default one day)
 # /etc/portal-keys/token holds the service's read key (mode 600, owned by the
 # AuthorizedKeysCommandUser).
 set -eu
@@ -23,15 +27,25 @@ esac
 PORTAL=https://portal.winlab.tw
 SERVICE=
 SHARED=
+OWN=no
 TOKEN_FILE=/etc/portal-keys/token
 CACHE_DIR=/var/cache/portal-keys
+MAX_AGE=1440
 [ -r "${PORTAL_KEYS_ENV:-/etc/portal-keys/env}" ] && . "${PORTAL_KEYS_ENV:-/etc/portal-keys/env}"
 [ -n "$SERVICE" ] || exit 0
 
-path=$SERVICE/$user
+path=
 for shared in $SHARED; do
   [ "$shared" = "$user" ] && path=$SERVICE
 done
+if [ -z "$path" ]; then
+  # A member's own account: only when asked for, and never a system
+  # account, so nobody logs in to root by holding its name on the portal.
+  [ "$OWN" = yes ] || exit 0
+  uid=$(id -u "$user" 2>/dev/null) || exit 0
+  [ "$uid" -ge 1000 ] || exit 0
+  path=$SERVICE/$user
+fi
 
 cache=$CACHE_DIR/$user
 tmp=$(mktemp "$CACHE_DIR/.new.XXXXXX")
@@ -40,9 +54,20 @@ code=$(curl -sS --max-time 5 -o "$tmp" -w '%{http_code}' \
   -H "Authorization: Bearer $(cat "$TOKEN_FILE")" \
   "$PORTAL/api/ssh-keys/services/$path?format=text") || code=000
 case $code in
-  200) mv "$tmp" "$cache" ;;
+  200)
+    # This login is answered with what this request read, never with a copy
+    # another login wrote meanwhile.
+    cat "$tmp"
+    mv "$tmp" "$cache"
+    exit 0
+    ;;
   # The portal refused the read key: nobody is served, cached or not.
-  401 | 403) rm -f "$cache" ;;
-  # Anything else (unreachable, 503): the copy read last stands.
+  401 | 403)
+    rm -f "$cache"
+    exit 0
+    ;;
 esac
-cat "$cache" 2>/dev/null || true
+# Unreachable, or 503: the copy read last stands, but only for MAX_AGE
+# minutes after it was read, so an outage cannot keep someone in for good.
+[ -n "$(find "$cache" -mmin "-$MAX_AGE" 2>/dev/null)" ] && cat "$cache"
+exit 0

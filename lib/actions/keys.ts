@@ -467,12 +467,24 @@ export const grantSshService = defineAction({
         .values({ serviceId: id, userId: user_id, grantedBy: actor.userId })
         .onConflictDoNothing()
         .returning({ userId: sshServiceGrants.userId })
-      if (granted.length)
+      if (granted.length) {
+        // A grant starts with none of the member's keys in the service: a
+        // key put in while an earlier grant was being taken away would
+        // otherwise come back with this one.
+        await tx
+          .delete(sshKeyServices)
+          .where(
+            and(
+              eq(sshKeyServices.serviceId, id),
+              sql`${sshKeyServices.keyId} in (select id from ssh_keys where user_id = ${user_id})`
+            )
+          )
         await record(tx, actor, {
           action: "grant",
           userId: user_id,
           service: service.slug,
         })
+      }
       return { granted: true }
     }),
 })
@@ -497,8 +509,7 @@ export const revokeSshServiceGrant = defineAction({
         )
         .returning({ serviceId: sshServiceGrants.serviceId })
       if (!revoked) throw new Error("這個成員沒有這個服務")
-      // Their keys leave with the grant, so granting again later does not
-      // quietly bring old keys back.
+      // Their keys leave with the grant.
       await tx
         .delete(sshKeyServices)
         .where(

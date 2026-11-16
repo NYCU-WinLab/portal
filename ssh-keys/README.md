@@ -36,13 +36,13 @@ printf 'AuthorizedKeysCommand /usr/local/bin/portal-keys %%u\nAuthorizedKeysComm
 sudo sshd -t && sudo systemctl reload ssh
 ```
 
-`SHARED` lists the accounts every member of the service logs in to (B09's `p4user`). Any other account name is looked up as the member with that username. Check a login with a key before turning `PasswordAuthentication` off.
+`SHARED` lists the accounts every member of the service logs in to (B09's `p4user`); no other account is answered. Add `OWN=yes` to also let a member in to the local account that has their username. It skips accounts under uid 1000, but an account such as `ubuntu` or `admin` is then open to whoever holds that username in Keycloak, so set it only on a machine whose accounts are all members'. Check a login with a key before turning `PasswordAuthentication` off.
 
-A machine that cannot reach the portal serves its last copy for as long as the outage lasts; to cut a member off during one, delete `/var/cache/portal-keys/<account>`. When the portal refuses the read key (`401`, `403`), the copy is deleted and nobody gets in until the machine holds a working key.
+A machine that cannot reach the portal serves the list it read last for one day (`MAX_AGE`, in minutes, in `/etc/portal-keys/env`), then nobody. To cut a member off during an outage, delete `/var/cache/portal-keys/<account>`. When the portal refuses the read key (`401`, `403`), the copy is deleted and nobody gets in until the machine holds a working key.
 
 ## Read a member's keys
 
-Any member can read another member's public keys, with an API key allowed into SSH 金鑰 (`/api-keys`) or the `list_member_ssh_keys` tool:
+Any member can read another member's public keys, with an API key allowed into SSH 金鑰 (`/api-keys`) or the `list_member_ssh_keys` tool. Such a key only reads: adding a key or putting one in a service takes the page or MCP.
 
 ```sh
 curl -H "Authorization: Bearer wak_…" "https://portal.winlab.tw/api/ssh-keys/members/<username>?format=text" |
