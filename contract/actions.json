@@ -8724,7 +8724,7 @@
   {
     "name": "list_my_ssh_keys",
     "title": "我的 SSH 金鑰",
-    "description": "The signed-in member's SSH public keys (id, label, the machine that holds the private key, what the key is for, type, fingerprint, the public key line, where it came from, when it was added, and the slugs of the services that use it), the member's name and account username, and the services the member may use (slug, name, keyIds, the ids of the keys that service uses, and keyId, the first of them). A service uses the keys the member turned on with set_ssh_service_key, or the member's first key when none was picked.",
+    "description": "The signed-in member's SSH public keys (id, label, the machine that holds the private key, what the key is for, type, fingerprint, the public key line, where it came from, when it was added, and the slugs of the services that use it), the member's name and account username, and the services the member may use (slug, name, keyIds, the ids of the keys that service uses, and keyId, the first of them). A service uses the keys the member turned on with set_ssh_service_key. Until the member turns a key on or off for a service it uses their first key; after that it uses exactly the keys that are on, so keyIds can be empty and keyId null.",
     "kind": "query",
     "app": "keys",
     "hash": "f096b0bfe29b40a8",

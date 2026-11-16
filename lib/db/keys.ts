@@ -94,6 +94,25 @@ export const sshKeyServices = pgTable(
   (table) => [primaryKey({ columns: [table.keyId, table.serviceId] })]
 )
 
+// A member who has turned a key on or off for a service has chosen: from
+// then on the service reads exactly the keys that are on, even none. With no
+// row here a service reads the member's first key. The row outlives a
+// grant taken away: a member given the service again turns a key on
+// themselves.
+export const sshServiceChoices = pgTable(
+  "ssh_service_choices",
+  {
+    serviceId: uuid()
+      .notNull()
+      .references(() => sshServices.id, { onDelete: "cascade" }),
+    userId: uuid()
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    createdAt: timestamp({ withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.serviceId, table.userId] })]
+)
+
 // Every change to who can log in where: keys added and deleted, keys put in
 // and taken out of a service, services made, deleted and re-keyed, grants.
 // userId is the member it is about; service and fingerprint are copies, so
