@@ -117,7 +117,7 @@ export const searchMusic = defineAction({
   name: "search_music",
   title: "搜尋歌曲",
   description:
-    "Search YouTube Music for songs, or resolve a pasted link: YouTube / YouTube Music, a Bilibili video (bilibili.com, b23.tv) or a live Twitch channel (twitch.tv). A song link returns that song; a playlist link returns the playlist (id, title, song count) and its first songs. Add results with add_song or add_playlist.",
+    "Search YouTube Music for songs and videos (music videos, covers, live takes), or resolve a pasted link: YouTube / YouTube Music, a Bilibili video (bilibili.com, b23.tv) or a live Twitch channel (twitch.tv). A song link returns that song; a playlist link returns the playlist (id, title, song count) and its first songs. Add results with add_song or add_playlist.",
   kind: "query",
   input: z.object({
     query: z.string().trim().min(1, "輸入歌名或連結").max(300),

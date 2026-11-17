@@ -53,15 +53,55 @@ function musicItem(item: any): Track | null {
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
-/** Songs on YouTube Music matching the query, best first. */
-export async function searchSongs(query: string, limit = 12): Promise<Track[]> {
+async function searchType(
+  query: string,
+  type: "song" | "video"
+): Promise<Track[]> {
   const yt = await youtube()
-  const result = await yt.music.search(query, { type: "song" })
+  const result = await yt.music.search(query, { type })
   const shelf = result.contents?.[0] as { contents?: unknown[] } | undefined
   return (shelf?.contents ?? [])
     .map(musicItem)
     .filter((track): track is Track => track !== null)
-    .slice(0, limit)
+}
+
+/** Letters and digits only, lowercased: "Tán-Bô (Live)" -> "tánbôlive". */
+function bare(text: string): string {
+  return text.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "")
+}
+
+/** Most videos one search mixes in among the songs. */
+const SEARCH_VIDEOS = 4
+
+/** Songs and videos on YouTube Music matching the query, best first. A new
+ * release is often only a music video for its first weeks, and covers and
+ * live takes are only videos, so the top videos sit between the songs. A
+ * video of a song already listed (same title, same artist) is left out. */
+export async function searchSongs(query: string, limit = 12): Promise<Track[]> {
+  const [songs, videos] = await Promise.all([
+    searchType(query, "song"),
+    searchType(query, "video").catch(() => [] as Track[]),
+  ])
+  const extra = videos
+    .filter(
+      (video) =>
+        !songs.some((song) => {
+          const title = bare(song.title)
+          const artist = bare(song.artist.split(",")[0] ?? "")
+          return (
+            title !== "" &&
+            bare(video.title).includes(title) &&
+            (artist === "" || bare(video.artist).includes(artist))
+          )
+        })
+    )
+    .slice(0, SEARCH_VIDEOS)
+  const tracks: Track[] = []
+  for (let i = 0; i < Math.max(songs.length, extra.length); i++) {
+    if (songs[i]) tracks.push(songs[i])
+    if (extra[i]) tracks.push(extra[i])
+  }
+  return tracks.slice(0, limit)
 }
 
 /** What YouTube Music would play after this song, in its order. */
