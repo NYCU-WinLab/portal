@@ -903,7 +903,8 @@ export async function readServiceKeys(
 export async function readCertificatePrincipals(
   email: string
 ): Promise<
-  { member: false } | { member: true; subject: string; services: string[] }
+  | { member: false }
+  | { member: true; subject: string; username: string; services: string[] }
 > {
   const wanted = email.toLowerCase()
   const [accounts, directory] = await Promise.all([
@@ -912,7 +913,7 @@ export async function readCertificatePrincipals(
   ])
   const matches = accounts.filter((a) => a.email?.toLowerCase() === wanted)
   if (matches.length !== 1) return { member: false }
-  const [{ id: sub }] = matches
+  const [{ id: sub, username }] = matches
   const status = directory.get(sub)?.status
   const current = !!status && status !== "alumni"
 
@@ -937,6 +938,7 @@ export async function readCertificatePrincipals(
   return {
     member: true,
     subject: createHash("sha256").update(sub).digest("hex"),
+    username: username.toLowerCase(),
     services: services.map((s) => s.slug),
   }
 }
