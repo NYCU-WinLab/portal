@@ -65,7 +65,7 @@ async function searchType(
     .filter((track): track is Track => track !== null)
 }
 
-/** Letters and digits only, lowercased: "等無 (Tán-Bô)" -> "等無tánbô". */
+/** Letters and digits only, lowercased: "Tán-Bô (Live)" -> "tánbôlive". */
 function bare(text: string): string {
   return text.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "")
 }
