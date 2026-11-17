@@ -32,6 +32,7 @@ function refuse(
     "http.status": status,
     "action.name": attributes.action,
     "api_key.id": attributes.key,
+    "refusal.reason": error.slice(0, 100),
   })
   return apiError(
     status,

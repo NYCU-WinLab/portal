@@ -43,7 +43,9 @@ export async function traced<T>(
 }
 
 /** A request refused before any action ran (bad key, wrong app, limit), as
- * a span of its own, so a key hammering a limit shows up in Sensorium. */
+ * a span of its own, so a key hammering a limit shows up in Sensorium.
+ * Refusals are the service doing its job, so only a limit (429) gets ERROR
+ * status; the rest stay queryable by http.status without raising span.error. */
 export function recordRefusal(
   name: string,
   attributes: Record<string, string | number | boolean | undefined>
@@ -53,6 +55,7 @@ export function recordRefusal(
       Object.entries(attributes).filter(([, value]) => value !== undefined)
     ) as Record<string, string | number | boolean>,
   })
-  span.setStatus({ code: SpanStatusCode.ERROR })
+  if (attributes["http.status"] === 429)
+    span.setStatus({ code: SpanStatusCode.ERROR })
   span.end()
 }
