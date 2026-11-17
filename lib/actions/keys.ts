@@ -884,3 +884,59 @@ export async function readServiceKeys(
       .filter((member) => member.keys.length > 0),
   }
 }
+
+/**
+ * The service principals for a member's SSH certificate, asked by the lab CA
+ * (ca.winlab.tw) through its webhook while it signs. Not an action: the
+ * caller is the CA, which cannot authenticate itself (step-ca loads no
+ * webhook secret from its config), and the email comes from the request the
+ * member sent. The answer carries a hash of the Keycloak account id it
+ * found; the CA refuses unless it matches the member's signed token, so a
+ * stale or wrong email lookup signs nothing.
+ *
+ * Same rule as readServiceKeys: the account must be enabled and a person;
+ * an open service takes current lab members (not alumni), any other only
+ * the members granted. Keys play no part: a certificate replaces them. An
+ * account allowed in no service gets a certificate only as a current lab
+ * member. Keycloak being unreachable throws, so the CA signs nothing.
+ */
+export async function readCertificatePrincipals(
+  email: string
+): Promise<
+  { member: false } | { member: true; subject: string; services: string[] }
+> {
+  const wanted = email.toLowerCase()
+  const [accounts, directory] = await Promise.all([
+    realmAccounts(),
+    labDirectory(),
+  ])
+  const matches = accounts.filter((a) => a.email?.toLowerCase() === wanted)
+  if (matches.length !== 1) return { member: false }
+  const [{ id: sub }] = matches
+  const status = directory.get(sub)?.status
+  const current = !!status && status !== "alumni"
+
+  const [member] = await db
+    .select({ userId: account.userId })
+    .from(account)
+    .where(and(eq(account.accountId, sub), eq(account.providerId, "keycloak")))
+  const granted = sql`${sshServiceGrants.userId} is not null`
+  const services = await db
+    .select({ slug: sshServices.slug })
+    .from(sshServices)
+    .leftJoin(
+      sshServiceGrants,
+      and(
+        eq(sshServiceGrants.serviceId, sshServices.id),
+        eq(sshServiceGrants.userId, member?.userId ?? sql`null`)
+      )
+    )
+    .where(current ? sql`${sshServices.open} or ${granted}` : granted)
+    .orderBy(asc(sshServices.slug))
+  if (!current && services.length === 0) return { member: false }
+  return {
+    member: true,
+    subject: createHash("sha256").update(sub).digest("hex"),
+    services: services.map((s) => s.slug),
+  }
+}
