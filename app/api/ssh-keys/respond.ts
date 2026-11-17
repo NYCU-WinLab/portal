@@ -15,6 +15,7 @@ export function refuse(status: number, error: string, service?: string) {
   recordRefusal("ssh keys refused", {
     "http.status": status,
     "ssh.service": service?.slice(0, 32),
+    "refusal.reason": error.slice(0, 100),
   })
   return Response.json(
     { error },
