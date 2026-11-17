@@ -4,21 +4,35 @@ import { emitErrorLog, recordRefusal } from "@/lib/otel"
 // POST /api/ssh-ca/webhook: the lab CA's ENRICHING webhook (step-ca). While
 // it signs a member's SSH certificate it sends the request the member made;
 // the key ID is the member's email. The answer lists the services that email
-// may log in to, as svc:<slug> principals, and repeats the email so the CA
-// can refuse when it is not the one in the member's signed token.
+// may log in to, as svc:<slug> principals, with the email and a sha256 of
+// the Keycloak account id it found, so the CA can refuse when they are not
+// the ones in the member's signed token.
 //
 // Anyone can call this (step-ca cannot sign its requests with a secret it
-// loads from its config), so it answers nothing but those principals, and
-// each caller address gets a few calls a minute.
+// loads from its config), so it answers nothing but those, and each caller
+// address gets a few calls a minute. The CA's own addresses
+// (SSH_CA_ADDRESSES, comma separated) are not limited: every member's
+// signing comes from them.
 
 const LIMIT = 20
 const WINDOW_MS = 60_000
+const MAX_ADDRESSES = 10_000
 const calls = new Map<string, { count: number; until: number }>()
+const caAddresses = new Set(
+  (process.env.SSH_CA_ADDRESSES ?? "")
+    .split(",")
+    .map((a) => a.trim())
+    .filter(Boolean)
+)
 
 function limited(ip: string) {
+  if (caAddresses.has(ip)) return false
   const now = Date.now()
-  if (calls.size > 10_000)
+  if (calls.size >= MAX_ADDRESSES && !calls.has(ip)) {
     for (const [key, entry] of calls) if (entry.until <= now) calls.delete(key)
+    // Still full: this many addresses in a minute is an attack; new ones wait.
+    if (calls.size >= MAX_ADDRESSES) return true
+  }
   const entry = calls.get(ip)
   if (!entry || entry.until <= now) {
     calls.set(ip, { count: 1, until: now + WINDOW_MS })
@@ -73,6 +87,7 @@ export async function POST(request: Request) {
       allow: true,
       data: {
         email,
+        subject: result.subject,
         principals: result.services.map((slug) => `svc:${slug}`),
       },
     },

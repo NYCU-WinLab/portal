@@ -890,18 +890,21 @@ export async function readServiceKeys(
  * (ca.winlab.tw) through its webhook while it signs. Not an action: the
  * caller is the CA, which cannot authenticate itself (step-ca loads no
  * webhook secret from its config), and the email comes from the request the
- * member sent. The CA compares the email answered here with the one in the
- * member's signed Keycloak token, so this only says which services an email
- * may use, and must not say more.
+ * member sent. The answer carries a hash of the Keycloak account id it
+ * found; the CA refuses unless it matches the member's signed token, so a
+ * stale or wrong email lookup signs nothing.
  *
- * Same rule as readServiceKeys: the account must be enabled and a current
- * lab member (not alumni); an open service takes every such member, any
- * other only the members granted. Keys play no part: a certificate replaces
- * them. Keycloak being unreachable throws, so the CA signs nothing.
+ * Same rule as readServiceKeys: the account must be enabled and a person;
+ * an open service takes current lab members (not alumni), any other only
+ * the members granted. Keys play no part: a certificate replaces them. An
+ * account allowed in no service gets a certificate only as a current lab
+ * member. Keycloak being unreachable throws, so the CA signs nothing.
  */
 export async function readCertificatePrincipals(
   email: string
-): Promise<{ member: false } | { member: true; services: string[] }> {
+): Promise<
+  { member: false } | { member: true; subject: string; services: string[] }
+> {
   const wanted = email.toLowerCase()
   const [accounts, directory] = await Promise.all([
     realmAccounts(),
@@ -911,12 +914,13 @@ export async function readCertificatePrincipals(
   if (matches.length !== 1) return { member: false }
   const [{ id: sub }] = matches
   const status = directory.get(sub)?.status
-  if (!status || status === "alumni") return { member: false }
+  const current = !!status && status !== "alumni"
 
   const [member] = await db
     .select({ userId: account.userId })
     .from(account)
     .where(and(eq(account.accountId, sub), eq(account.providerId, "keycloak")))
+  const granted = sql`${sshServiceGrants.userId} is not null`
   const services = await db
     .select({ slug: sshServices.slug })
     .from(sshServices)
@@ -927,7 +931,12 @@ export async function readCertificatePrincipals(
         eq(sshServiceGrants.userId, member?.userId ?? sql`null`)
       )
     )
-    .where(sql`${sshServices.open} or ${sshServiceGrants.userId} is not null`)
+    .where(current ? sql`${sshServices.open} or ${granted}` : granted)
     .orderBy(asc(sshServices.slug))
-  return { member: true, services: services.map((s) => s.slug) }
+  if (!current && services.length === 0) return { member: false }
+  return {
+    member: true,
+    subject: createHash("sha256").update(sub).digest("hex"),
+    services: services.map((s) => s.slug),
+  }
 }
