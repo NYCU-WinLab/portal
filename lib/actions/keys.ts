@@ -871,14 +871,35 @@ export async function readServiceKeys(
       .where(eq(sshServiceGrants.serviceId, service.id)),
   ])
   const granted = new Set(grants.map((g) => g.sub))
-  const certified = accounts
-    .filter(({ id }) => {
-      const status = directory.get(id)?.status
-      return service.open ? !!status && status !== "alumni" : granted.has(id)
+  // Only the every-member list carries the certificate line.
+  const candidates = username
+    ? []
+    : accounts.filter(({ id, username: name }) => {
+        const status = directory.get(id)?.status
+        return (
+          (service.open ? !!status && status !== "alumni" : granted.has(id)) &&
+          CERTIFIED_NAME.test(name.toLowerCase()) &&
+          name.toLowerCase() !== RESERVED_NAME
+        )
+      })
+  // The cached lists only propose; each member on the line is confirmed
+  // live, so a member disabled or moved to alumni is out at the next read.
+  // Keycloak being unreachable throws, like the rest of this read.
+  const confirmed = await mapLimit(candidates, 8, async (candidate) => {
+    const live = await findKeycloakUser(candidate.id)
+    if (live?.enabled !== true) return null
+    if (live.username.toLowerCase() !== candidate.username.toLowerCase())
+      return null
+    const paths = await getKeycloakUserGroupPaths(candidate.id)
+    if (paths.some((path) => path === "/system" || path.startsWith("/system/")))
+      return null
+    const current = paths.some((path) => {
+      const status = LAB_STATUS_GROUP.exec(path)?.[1]
+      return !!status && status !== "alumni" && isLabStatus(status)
     })
-    .map(({ username }) => username.toLowerCase())
-    .filter((name) => CERTIFIED_NAME.test(name))
-    .sort()
+    return !service.open || current ? candidate.username.toLowerCase() : null
+  })
+  const certified = confirmed.filter((name) => name !== null).sort()
   const usernames = new Map(
     accounts.map(({ id, username }) => [id, username.toLowerCase()])
   )
@@ -920,6 +941,28 @@ export async function readServiceKeys(
 
 /** A username that can stand in an authorized_keys principals="" list. */
 const CERTIFIED_NAME = /^[a-z0-9][a-z0-9._-]{0,63}$/
+
+/** The principal of every member's `--add-user` certificate: never a member. */
+const RESERVED_NAME = "add-user-disabled"
+
+/** map with at most `limit` calls running at once, results in input order. */
+async function mapLimit<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T) => Promise<R>
+) {
+  const results: R[] = new Array(items.length)
+  let next = 0
+  await Promise.all(
+    Array.from({ length: Math.min(limit, items.length) }, async () => {
+      while (next < items.length) {
+        const i = next++
+        results[i] = await fn(items[i])
+      }
+    })
+  )
+  return results
+}
 
 /**
  * The service principals for a member's SSH certificate, asked by the lab CA
