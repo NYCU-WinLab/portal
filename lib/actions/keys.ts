@@ -789,13 +789,19 @@ export const listSshKeyChanges = defineAction({
  * service takes current lab members (not alumni), any other only the
  * members granted. Keycloak being unreachable throws, so a machine keeps
  * the last list it read instead of an empty one.
+ *
+ * certified names every member allowed in, keys or not, for the lab CA line
+ * of the every-member list: a certificate carries the member's username, so
+ * a member taken out of the service is refused at the next login even with
+ * a certificate signed before.
  */
 export async function readServiceKeys(
   token: string,
   slug: string,
   username?: string
 ): Promise<
-  { refused: 401 | 403 } | { members: { username: string; keys: string[] }[] }
+  | { refused: 401 | 403 }
+  | { members: { username: string; keys: string[] }[]; certified: string[] }
 > {
   if (!SERVICE_TOKEN.test(token)) return { refused: 401 }
   const [service] = await db
@@ -810,7 +816,7 @@ export async function readServiceKeys(
   if (!service) return { refused: 401 }
   if (service.slug !== slug) return { refused: 403 }
 
-  const [rows, accounts, directory] = await Promise.all([
+  const [rows, accounts, directory, grants] = await Promise.all([
     db
       .select({
         sub: account.accountId,
@@ -852,7 +858,27 @@ export async function readServiceKeys(
       .orderBy(...oldestFirst),
     realmAccounts(),
     labDirectory(),
+    db
+      .select({ sub: account.accountId })
+      .from(sshServiceGrants)
+      .innerJoin(
+        account,
+        and(
+          eq(account.userId, sshServiceGrants.userId),
+          eq(account.providerId, "keycloak")
+        )
+      )
+      .where(eq(sshServiceGrants.serviceId, service.id)),
   ])
+  const granted = new Set(grants.map((g) => g.sub))
+  const certified = accounts
+    .filter(({ id }) => {
+      const status = directory.get(id)?.status
+      return service.open ? !!status && status !== "alumni" : granted.has(id)
+    })
+    .map(({ username }) => username.toLowerCase())
+    .filter((name) => CERTIFIED_NAME.test(name))
+    .sort()
   const usernames = new Map(
     accounts.map(({ id, username }) => [id, username.toLowerCase()])
   )
@@ -888,8 +914,12 @@ export async function readServiceKeys(
         keys: chose || picked.length > 0 ? picked : [first],
       }))
       .filter((member) => member.keys.length > 0),
+    certified,
   }
 }
+
+/** A username that can stand in an authorized_keys principals="" list. */
+const CERTIFIED_NAME = /^[a-z0-9][a-z0-9._-]{0,63}$/
 
 /**
  * The service principals for a member's SSH certificate, asked by the lab CA

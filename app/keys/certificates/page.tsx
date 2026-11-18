@@ -34,6 +34,7 @@ const machines = [
   "自己在 Carrel 開的機器",
   "所在專案在 Carrel 開的機器",
   "擁有者在 Carrel 加入你的機器",
+  "「服務」分頁開放給你的共用帳號，例如 B09 跳板",
 ]
 
 export default async function KeyCertificatesPage() {

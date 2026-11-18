@@ -3,6 +3,23 @@ import { emitErrorLog } from "@/lib/otel"
 
 import { bearer, keysResponse, refuse } from "../respond"
 
+/** The lab CA's user key (ca.winlab.tw/ssh/roots, userKey). */
+const LAB_USER_CA =
+  "ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBEypPi2eUS00sJeJA9ebfrquCmA8reWrgdWSL4yGkfm4bKEuRyPmVJoM72JdUwzhH/v3VWkAkfPQ6sxMtzgruck="
+
+/** One authorized_keys line that admits a lab certificate of a member the
+ * service lets in now: a certificate names its member's username, and the
+ * line lists exactly the members allowed at this read, so a member taken
+ * out is refused at the next login like a removed key. A shared account
+ * (B09's p4user) then takes certificates with no change on the machine.
+ * Not on the one-member list: that serves a member's own account. */
+const certificateLine = (members: string[]) =>
+  members.length > 0
+    ? [
+        `cert-authority,principals="${members.join(",")}" ${LAB_USER_CA} lab-ssh-ca`,
+      ]
+    : []
+
 /** A service's keys for the machine holding its read key: every member's,
  * or one member's when username is given. */
 export async function serviceKeys(
@@ -29,10 +46,11 @@ export async function serviceKeys(
         : "this key reads another service",
       service
     )
-  const { members } = result
+  const { members, certified } = result
+  const keys = members.flatMap((member) => member.keys)
   return keysResponse(
     request,
-    members.flatMap((member) => member.keys),
+    username ? keys : [...certificateLine(certified), ...keys],
     username
       ? (members[0] ?? { username: username.toLowerCase(), keys: [] })
       : members
