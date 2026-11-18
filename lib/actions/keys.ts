@@ -906,12 +906,13 @@ export async function readServiceKeys(
  * account allowed in no service gets a certificate only as a current lab
  * member. Keycloak being unreachable throws, so the CA signs nothing.
  *
- * With forCA (the call that leads to a signature), the account and its
- * groups are read live instead of from the 10-minute caches: a disabled
+ * The email finds the account in the 10-minute cache; the account and its
+ * groups are then read live, for every caller: a disabled or deleted
  * account, a changed email or username, a /system account or a member who
- * just left gets nothing at once. Only then do a current member's Keycloak
- * groups /winlab-projects/<name> come back as projects: anyone else could
- * ask which projects an email is in.
+ * just left gets nothing at once, whether or not the caller is recognized
+ * as the CA. Only with forCA do a current member's Keycloak groups
+ * /winlab-projects/<name> come back as projects: anyone else could ask
+ * which projects an email is in.
  */
 export async function readCertificatePrincipals(
   email: string,
@@ -927,34 +928,26 @@ export async function readCertificatePrincipals(
     }
 > {
   const wanted = email.toLowerCase()
-  const [accounts, directory] = await Promise.all([
-    realmAccounts(),
-    labDirectory(),
-  ])
+  const accounts = await realmAccounts()
   const matches = accounts.filter((a) => a.email?.toLowerCase() === wanted)
   if (matches.length !== 1) return { member: false }
   const [{ id: sub, username }] = matches
-  const status = directory.get(sub)?.status
-  let current = !!status && status !== "alumni"
-  let paths: string[] = []
-  if (forCA) {
-    const [live, livePaths] = await Promise.all([
-      findKeycloakUser(sub),
-      getKeycloakUserGroupPaths(sub),
-    ])
-    if (
-      live?.enabled !== true ||
-      live.email?.toLowerCase() !== wanted ||
-      live.username.toLowerCase() !== username.toLowerCase() ||
-      livePaths.includes("/system")
-    )
-      return { member: false }
-    paths = livePaths
-    current = paths.some((path) => {
-      const status = LAB_STATUS_GROUP.exec(path)?.[1]
-      return !!status && status !== "alumni" && isLabStatus(status)
-    })
-  }
+  // Read live, never from the cache: this answer may sign a certificate.
+  // The account first, so a deleted one is a plain no, not a 503.
+  const live = await findKeycloakUser(sub)
+  if (
+    live?.enabled !== true ||
+    live.email?.toLowerCase() !== wanted ||
+    live.username.toLowerCase() !== username.toLowerCase()
+  )
+    return { member: false }
+  const paths = await getKeycloakUserGroupPaths(sub)
+  if (paths.some((path) => path === "/system" || path.startsWith("/system/")))
+    return { member: false }
+  const current = paths.some((path) => {
+    const status = LAB_STATUS_GROUP.exec(path)?.[1]
+    return !!status && status !== "alumni" && isLabStatus(status)
+  })
 
   const [member] = await db
     .select({ userId: account.userId })
@@ -975,14 +968,15 @@ export async function readCertificatePrincipals(
     .orderBy(asc(sshServices.slug))
   if (!current && services.length === 0) return { member: false }
   // Carrel project tenants: a current member of /winlab-projects/<name> may
-  // log in to that project's machines. paths is empty unless forCA. Names
+  // log in to that project's machines; only the CA learns them. Names
   // outside the CA's pattern are left out rather than passed on.
-  const projects = current
-    ? paths.flatMap((path) => {
-        const name = PROJECT_GROUP.exec(path)?.[1]
-        return name ? [name] : []
-      })
-    : []
+  const projects =
+    current && forCA
+      ? paths.flatMap((path) => {
+          const name = PROJECT_GROUP.exec(path)?.[1]
+          return name ? [name] : []
+        })
+      : []
   return {
     member: true,
     subject: createHash("sha256").update(sub).digest("hex"),

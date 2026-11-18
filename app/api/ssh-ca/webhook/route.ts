@@ -31,8 +31,8 @@ export async function POST(request: Request) {
 
   let result: Awaited<ReturnType<typeof readCertificatePrincipals>>
   try {
-    // Live account check and project groups only for the CA: anyone else
-    // could ask which projects an email is in, and only the CA signs.
+    // Project groups only for the CA: anyone else could ask which projects
+    // an email is in.
     result = await readCertificatePrincipals(email, {
       forCA: fromCA(request),
     })
