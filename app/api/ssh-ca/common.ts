@@ -22,6 +22,10 @@ const caAddresses = new Set(
 export const callerAddress = (request: Request) =>
   request.headers.get("x-forwarded-for")?.split(",").at(-1)?.trim() || "unknown"
 
+/** The lab CA itself: only it learns a member's project groups. */
+export const fromCA = (request: Request) =>
+  caAddresses.has(callerAddress(request))
+
 export function limited(ip: string) {
   if (caAddresses.has(ip)) return false
   const now = Date.now()
