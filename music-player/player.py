@@ -159,7 +159,8 @@ class Api:
                 response.raise_for_status()
 
     async def audio_failed(self, video_id, error):
-        """Tells the browsers that wait for a song that none is coming."""
+        """Tells the browsers that wait for a song that none is coming; False
+        when the portal could not be told."""
         try:
             async with self.session.post(
                 f"{self.base}/api/music/player/audio",
@@ -169,8 +170,11 @@ class Api:
             ) as response:
                 if response.status >= 300:
                     log.warning("audio failed %s: HTTP %s", video_id, response.status)
+                    return False
         except Exception as e:  # noqa: BLE001  the portal's own timer ends the wait
             log.warning("audio failed %s: %s", video_id, e)
+            return False
+        return True
 
     async def answers(self, base):
         """Returns once base sends a player state; asks every PROBE_EVERY_S."""
@@ -637,7 +641,9 @@ class Player:
         except Exception as e:  # noqa: BLE001
             message = str(e) or type(e).__name__
             log.warning("upload %s: %s", video_id, message)
-            await self.api.audio_failed(video_id, message)
+            if not await self.api.audio_failed(video_id, message):
+                # The portal still lists the song, so the next state tries it again.
+                self.uploads.pop(video_id, None)
 
     async def switch(self, base):
         """Follows another server. The old server's song stops first, so none of
