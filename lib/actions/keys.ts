@@ -18,6 +18,7 @@ import {
 } from "@/lib/db/schema"
 import {
   getKeycloakUserGroupPaths,
+  labStatuses,
   labDirectory,
   realmAccounts,
 } from "@/lib/keycloak"
@@ -902,11 +903,14 @@ export async function readServiceKeys(
  * an open service takes current lab members (not alumni), any other only
  * the members granted. Keys play no part: a certificate replaces them. An
  * account allowed in no service gets a certificate only as a current lab
- * member. A current member's Keycloak groups /winlab-projects/<name> come
- * back as projects. Keycloak being unreachable throws, so the CA signs
+ * member. With withProjects (only for the CA), a current member's Keycloak
+ * groups /winlab-projects/<name> come back as projects. Keycloak being unreachable throws, so the CA signs
  * nothing.
  */
-export async function readCertificatePrincipals(email: string): Promise<
+export async function readCertificatePrincipals(
+  email: string,
+  { withProjects = false }: { withProjects?: boolean } = {}
+): Promise<
   | { member: false }
   | {
       member: true
@@ -946,10 +950,18 @@ export async function readCertificatePrincipals(email: string): Promise<
     .orderBy(asc(sshServices.slug))
   if (!current && services.length === 0) return { member: false }
   // Carrel project tenants: a current member of /winlab-projects/<name> may
-  // log in to that project's machines. Names outside the CA's pattern are
-  // left out rather than passed on.
-  const projects = current
-    ? (await getKeycloakUserGroupPaths(sub)).flatMap((path) => {
+  // log in to that project's machines. Both the groups and the membership
+  // come from this live read, not the cached directory, so a member who
+  // leaves gets no project the moment Keycloak says so. Names outside the
+  // CA's pattern are left out rather than passed on.
+  const paths =
+    current && withProjects ? await getKeycloakUserGroupPaths(sub) : []
+  const stillCurrent = paths.some((path) => {
+    const status = LAB_STATUS_GROUP.exec(path)?.[1]
+    return !!status && status !== "alumni" && isLabStatus(status)
+  })
+  const projects = stillCurrent
+    ? paths.flatMap((path) => {
         const name = PROJECT_GROUP.exec(path)?.[1]
         return name ? [name] : []
       })
@@ -964,3 +976,6 @@ export async function readCertificatePrincipals(email: string): Promise<
 }
 
 const PROJECT_GROUP = /^\/winlab-projects\/([a-z0-9][a-z0-9-]{0,62})$/
+const LAB_STATUS_GROUP = /^\/lab-member\/([a-z]+)$/
+const isLabStatus = (name: string) =>
+  (labStatuses as readonly string[]).includes(name)

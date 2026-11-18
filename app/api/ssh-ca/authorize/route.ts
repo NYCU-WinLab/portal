@@ -19,7 +19,8 @@ import {
 //   member cannot sign certificates for the months after they leave;
 // - how long it lasts: at most the provisioner's 24 hours;
 // - what it names: a user certificate whose principals are the member's
-//   username and services, as the enriching webhook answered.
+//   username, services and (for the CA only) project groups, as the
+//   enriching webhook answered.
 
 const MAX_LIFETIME_S = 24 * 3600 + 60
 const SKEW_S = 300
@@ -82,20 +83,20 @@ export async function POST(request: Request) {
   if (!EMAIL.test(email)) return deny()
   let result: Awaited<ReturnType<typeof readCertificatePrincipals>>
   try {
-    result = await readCertificatePrincipals(email)
+    result = await readCertificatePrincipals(email, {
+      withProjects: fromCA(request),
+    })
   } catch (error) {
     emitErrorLog(error, { route: "ssh-ca-authorize" })
     return refuse(503, "member directory unavailable", "authorize")
   }
   if (!result.member || RESERVED.has(result.username)) return deny()
-  // Project principals only for the CA: anyone else could ask this route
-  // whether an email is in a project.
+  // Project principals only for the CA (withProjects above): anyone else
+  // could ask this route whether an email is in a project.
   const allowed = new Set([
     result.username,
     ...result.services.map((slug) => `svc:${slug}`),
-    ...(fromCA(request)
-      ? result.projects.map((name) => `project:${name}`)
-      : []),
+    ...result.projects.map((name) => `project:${name}`),
   ])
   if (!principals.every((p) => allowed.has(p))) return deny()
   return Response.json({ allow: true }, { headers: noStore })

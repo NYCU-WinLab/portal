@@ -31,7 +31,11 @@ export async function POST(request: Request) {
 
   let result: Awaited<ReturnType<typeof readCertificatePrincipals>>
   try {
-    result = await readCertificatePrincipals(email)
+    // Project groups only for the CA: anyone else could ask which projects
+    // an email is in.
+    result = await readCertificatePrincipals(email, {
+      withProjects: fromCA(request),
+    })
   } catch (error) {
     // Keycloak could not say who is a member: the CA signs nothing.
     emitErrorLog(error, { route: "ssh-ca-webhook" })
@@ -47,9 +51,7 @@ export async function POST(request: Request) {
         subject: result.subject,
         principals: [
           ...result.services.map((slug) => `svc:${slug}`),
-          ...(fromCA(request)
-            ? result.projects.map((name) => `project:${name}`)
-            : []),
+          ...result.projects.map((name) => `project:${name}`),
         ],
       },
     },
