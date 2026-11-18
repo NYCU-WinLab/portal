@@ -8,6 +8,7 @@ export const keysPage = {
 export const keysNav = [
   { label: "我的金鑰", href: "/keys", tip: "登入機器用的 SSH 金鑰" },
   { label: "成員", href: "/keys/members", tip: "其他成員的公鑰" },
+  { label: "憑證", href: "/keys/certificates", tip: "用實驗室帳號登入機器" },
   {
     label: "服務",
     href: "/keys/services",

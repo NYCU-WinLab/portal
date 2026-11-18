@@ -35,8 +35,9 @@ export const config = {
   // reader's bridge (its own secret), the SSH key lists machines and API
   // keys read (a bearer key), calendar subscription links (a key in
   // the path), the about and privacy pages Google links to, discovery documents and static files,
-  // including the door's home-screen manifest and icons.
+  // including the door's home-screen manifest and icons, and the lab SSH
+  // certificate setup script (public/ssh-ca/setup.sh).
   matcher: [
-    "/((?!(?:sign-in|consent|privacy|about|api/auth|api/keycloak/backchannel-logout|api/door/(?:events|greetings|meeting|sounds|voice|open)|api/rooms|api/actions|api/ssh-keys|api/ssh-ca|api/calendar/feed|api/music/player|api/developers|rooms/join|mcp|\\.well-known|_next/static|_next/image)(?:/|$)|icon\\.png$|apple-icon\\.png$|door/(?:manifest\\.webmanifest|[\\w-]+\\.png)$).*)",
+    "/((?!(?:sign-in|consent|privacy|about|api/auth|api/keycloak/backchannel-logout|api/door/(?:events|greetings|meeting|sounds|voice|open)|api/rooms|api/actions|api/ssh-keys|api/ssh-ca|api/calendar/feed|api/music/player|api/developers|rooms/join|mcp|\\.well-known|_next/static|_next/image)(?:/|$)|icon\\.png$|apple-icon\\.png$|ssh-ca/setup\\.sh$|door/(?:manifest\\.webmanifest|[\\w-]+\\.png)$).*)",
   ],
 }
