@@ -17,6 +17,7 @@ import {
   user,
 } from "@/lib/db/schema"
 import {
+  findKeycloakUser,
   getKeycloakUserGroupPaths,
   labStatuses,
   labDirectory,
@@ -903,13 +904,18 @@ export async function readServiceKeys(
  * an open service takes current lab members (not alumni), any other only
  * the members granted. Keys play no part: a certificate replaces them. An
  * account allowed in no service gets a certificate only as a current lab
- * member. With withProjects (only for the CA), a current member's Keycloak
- * groups /winlab-projects/<name> come back as projects. Keycloak being unreachable throws, so the CA signs
- * nothing.
+ * member. Keycloak being unreachable throws, so the CA signs nothing.
+ *
+ * With forCA (the call that leads to a signature), the account and its
+ * groups are read live instead of from the 10-minute caches: a disabled
+ * account, a changed email or username, a /system account or a member who
+ * just left gets nothing at once. Only then do a current member's Keycloak
+ * groups /winlab-projects/<name> come back as projects: anyone else could
+ * ask which projects an email is in.
  */
 export async function readCertificatePrincipals(
   email: string,
-  { withProjects = false }: { withProjects?: boolean } = {}
+  { forCA = false }: { forCA?: boolean } = {}
 ): Promise<
   | { member: false }
   | {
@@ -929,7 +935,26 @@ export async function readCertificatePrincipals(
   if (matches.length !== 1) return { member: false }
   const [{ id: sub, username }] = matches
   const status = directory.get(sub)?.status
-  const current = !!status && status !== "alumni"
+  let current = !!status && status !== "alumni"
+  let paths: string[] = []
+  if (forCA) {
+    const [live, livePaths] = await Promise.all([
+      findKeycloakUser(sub),
+      getKeycloakUserGroupPaths(sub),
+    ])
+    if (
+      live?.enabled !== true ||
+      live.email?.toLowerCase() !== wanted ||
+      live.username.toLowerCase() !== username.toLowerCase() ||
+      livePaths.includes("/system")
+    )
+      return { member: false }
+    paths = livePaths
+    current = paths.some((path) => {
+      const status = LAB_STATUS_GROUP.exec(path)?.[1]
+      return !!status && status !== "alumni" && isLabStatus(status)
+    })
+  }
 
   const [member] = await db
     .select({ userId: account.userId })
@@ -950,17 +975,9 @@ export async function readCertificatePrincipals(
     .orderBy(asc(sshServices.slug))
   if (!current && services.length === 0) return { member: false }
   // Carrel project tenants: a current member of /winlab-projects/<name> may
-  // log in to that project's machines. Both the groups and the membership
-  // come from this live read, not the cached directory, so a member who
-  // leaves gets no project the moment Keycloak says so. Names outside the
-  // CA's pattern are left out rather than passed on.
-  const paths =
-    current && withProjects ? await getKeycloakUserGroupPaths(sub) : []
-  const stillCurrent = paths.some((path) => {
-    const status = LAB_STATUS_GROUP.exec(path)?.[1]
-    return !!status && status !== "alumni" && isLabStatus(status)
-  })
-  const projects = stillCurrent
+  // log in to that project's machines. paths is empty unless forCA. Names
+  // outside the CA's pattern are left out rather than passed on.
+  const projects = current
     ? paths.flatMap((path) => {
         const name = PROJECT_GROUP.exec(path)?.[1]
         return name ? [name] : []

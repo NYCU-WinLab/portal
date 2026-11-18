@@ -31,10 +31,10 @@ export async function POST(request: Request) {
 
   let result: Awaited<ReturnType<typeof readCertificatePrincipals>>
   try {
-    // Project groups only for the CA: anyone else could ask which projects
-    // an email is in.
+    // Live account check and project groups only for the CA: anyone else
+    // could ask which projects an email is in, and only the CA signs.
     result = await readCertificatePrincipals(email, {
-      withProjects: fromCA(request),
+      forCA: fromCA(request),
     })
   } catch (error) {
     // Keycloak could not say who is a member: the CA signs nothing.
