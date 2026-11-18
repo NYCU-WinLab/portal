@@ -43,7 +43,7 @@ export function audioType(ext: string) {
 
 /** The most one file may be. A song is a few MB; this only stops a runaway. */
 function maxBytes() {
-  return Number(process.env.MUSIC_AUDIO_MAX_BYTES) || 100 * 1024 * 1024
+  return Number(process.env.MUSIC_AUDIO_MAX_BYTES) || 20 * 1024 * 1024
 }
 
 export type AudioFile = { path: string; type: string; size: number }
