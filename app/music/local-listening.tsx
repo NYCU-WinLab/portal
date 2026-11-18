@@ -105,7 +105,7 @@ function useFile(id: string | null) {
 const SILENCE =
   "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA="
 
-export function Listen({
+export function LocalListening({
   playing,
   upcoming,
 }: {

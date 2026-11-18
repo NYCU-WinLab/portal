@@ -25,7 +25,7 @@ import { cn } from "@/lib/utils"
 import { autoplay, pause, previous, skip, volume } from "./actions"
 import { Lyrics } from "./lyrics"
 import { LikeButton } from "./like-button"
-import { Listen } from "./listen"
+import { LocalListening } from "./local-listening"
 import { ok } from "./ok"
 import { addedLine, Cover, duration } from "./song"
 
@@ -132,7 +132,7 @@ export function NowPlaying({
           />
           自動推薦
         </label>
-        <Listen playing={playing} upcoming={upcoming} />
+        <LocalListening playing={playing} upcoming={upcoming} />
       </div>
     </section>
   )
