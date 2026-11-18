@@ -16,7 +16,11 @@ import {
   sshServices,
   user,
 } from "@/lib/db/schema"
-import { labDirectory, realmAccounts } from "@/lib/keycloak"
+import {
+  getKeycloakUserGroupPaths,
+  labDirectory,
+  realmAccounts,
+} from "@/lib/keycloak"
 import {
   hostedKeys,
   hostUsername,
@@ -898,13 +902,19 @@ export async function readServiceKeys(
  * an open service takes current lab members (not alumni), any other only
  * the members granted. Keys play no part: a certificate replaces them. An
  * account allowed in no service gets a certificate only as a current lab
- * member. Keycloak being unreachable throws, so the CA signs nothing.
+ * member. A current member's Keycloak groups /winlab-projects/<name> come
+ * back as projects. Keycloak being unreachable throws, so the CA signs
+ * nothing.
  */
-export async function readCertificatePrincipals(
-  email: string
-): Promise<
+export async function readCertificatePrincipals(email: string): Promise<
   | { member: false }
-  | { member: true; subject: string; username: string; services: string[] }
+  | {
+      member: true
+      subject: string
+      username: string
+      services: string[]
+      projects: string[]
+    }
 > {
   const wanted = email.toLowerCase()
   const [accounts, directory] = await Promise.all([
@@ -935,10 +945,22 @@ export async function readCertificatePrincipals(
     .where(current ? sql`${sshServices.open} or ${granted}` : granted)
     .orderBy(asc(sshServices.slug))
   if (!current && services.length === 0) return { member: false }
+  // Carrel project tenants: a current member of /winlab-projects/<name> may
+  // log in to that project's machines. Names outside the CA's pattern are
+  // left out rather than passed on.
+  const projects = current
+    ? (await getKeycloakUserGroupPaths(sub)).flatMap((path) => {
+        const name = PROJECT_GROUP.exec(path)?.[1]
+        return name ? [name] : []
+      })
+    : []
   return {
     member: true,
     subject: createHash("sha256").update(sub).digest("hex"),
     username: username.toLowerCase(),
     services: services.map((s) => s.slug),
+    projects: [...new Set(projects)].sort(),
   }
 }
+
+const PROJECT_GROUP = /^\/winlab-projects\/([a-z0-9][a-z0-9-]{0,62})$/

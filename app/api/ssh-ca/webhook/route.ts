@@ -4,6 +4,7 @@ import { emitErrorLog } from "@/lib/otel"
 import {
   callerAddress,
   EMAIL,
+  fromCA,
   limited,
   noStore,
   readBody,
@@ -13,7 +14,8 @@ import {
 // POST /api/ssh-ca/webhook: the lab CA's ENRICHING webhook (step-ca). While
 // it signs a member's SSH certificate it sends the request the member made;
 // the key ID is the member's email. The answer lists the services that email
-// may log in to, as svc:<slug> principals, with the email and a sha256 of
+// may log in to, as svc:<slug> principals, and to the CA alone also the
+// member's Carrel projects as project:<name>, with the email and a sha256 of
 // the Keycloak account id it found, so the CA can refuse when they are not
 // the ones in the member's signed token. It answers nothing else.
 export async function POST(request: Request) {
@@ -43,7 +45,12 @@ export async function POST(request: Request) {
       data: {
         email,
         subject: result.subject,
-        principals: result.services.map((slug) => `svc:${slug}`),
+        principals: [
+          ...result.services.map((slug) => `svc:${slug}`),
+          ...(fromCA(request)
+            ? result.projects.map((name) => `project:${name}`)
+            : []),
+        ],
       },
     },
     { headers: noStore }

@@ -4,6 +4,7 @@ import { emitErrorLog } from "@/lib/otel"
 import {
   callerAddress,
   EMAIL,
+  fromCA,
   limited,
   noStore,
   readBody,
@@ -87,9 +88,14 @@ export async function POST(request: Request) {
     return refuse(503, "member directory unavailable", "authorize")
   }
   if (!result.member || RESERVED.has(result.username)) return deny()
+  // Project principals only for the CA: anyone else could ask this route
+  // whether an email is in a project.
   const allowed = new Set([
     result.username,
     ...result.services.map((slug) => `svc:${slug}`),
+    ...(fromCA(request)
+      ? result.projects.map((name) => `project:${name}`)
+      : []),
   ])
   if (!principals.every((p) => allowed.has(p))) return deny()
   return Response.json({ allow: true }, { headers: noStore })
