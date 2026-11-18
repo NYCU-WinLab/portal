@@ -172,7 +172,15 @@ export function ImportKeys({
 }
 
 /** Copies the key's authorized_keys line, to paste into a machine. */
-export function CopyKey({ label, line }: { label: string; line: string }) {
+export function CopyKey({
+  label,
+  line,
+  what = "公鑰",
+}: {
+  label: string
+  line: string
+  what?: string
+}) {
   const [copied, setCopied] = React.useState(false)
   React.useEffect(() => {
     if (!copied) return
@@ -183,12 +191,12 @@ export function CopyKey({ label, line }: { label: string; line: string }) {
     <Button
       variant="ghost"
       size="icon"
-      aria-label={`複製 ${label} 的公鑰`}
+      aria-label={`複製 ${label} 的${what}`}
       onClick={() =>
         navigator.clipboard.writeText(line).then(
           () => {
             setCopied(true)
-            toast.success("已複製公鑰")
+            toast.success(`已複製${what}`)
           },
           () => toast.error("複製失敗")
         )
