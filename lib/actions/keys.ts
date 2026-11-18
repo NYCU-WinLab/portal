@@ -17,6 +17,7 @@ import {
   user,
 } from "@/lib/db/schema"
 import {
+  findKeycloakUser,
   getKeycloakUserGroupPaths,
   labStatuses,
   labDirectory,
@@ -903,13 +904,19 @@ export async function readServiceKeys(
  * an open service takes current lab members (not alumni), any other only
  * the members granted. Keys play no part: a certificate replaces them. An
  * account allowed in no service gets a certificate only as a current lab
- * member. With withProjects (only for the CA), a current member's Keycloak
- * groups /winlab-projects/<name> come back as projects. Keycloak being unreachable throws, so the CA signs
- * nothing.
+ * member. Keycloak being unreachable throws, so the CA signs nothing.
+ *
+ * The email finds the account in the 10-minute cache; the account and its
+ * groups are then read live, for every caller: a disabled or deleted
+ * account, a changed email or username, a /system account or a member who
+ * just left gets nothing at once, whether or not the caller is recognized
+ * as the CA. Only with forCA do a current member's Keycloak groups
+ * /winlab-projects/<name> come back as projects: anyone else could ask
+ * which projects an email is in.
  */
 export async function readCertificatePrincipals(
   email: string,
-  { withProjects = false }: { withProjects?: boolean } = {}
+  { forCA = false }: { forCA?: boolean } = {}
 ): Promise<
   | { member: false }
   | {
@@ -921,15 +928,26 @@ export async function readCertificatePrincipals(
     }
 > {
   const wanted = email.toLowerCase()
-  const [accounts, directory] = await Promise.all([
-    realmAccounts(),
-    labDirectory(),
-  ])
+  const accounts = await realmAccounts()
   const matches = accounts.filter((a) => a.email?.toLowerCase() === wanted)
   if (matches.length !== 1) return { member: false }
   const [{ id: sub, username }] = matches
-  const status = directory.get(sub)?.status
-  const current = !!status && status !== "alumni"
+  // Read live, never from the cache: this answer may sign a certificate.
+  // The account first, so a deleted one is a plain no, not a 503.
+  const live = await findKeycloakUser(sub)
+  if (
+    live?.enabled !== true ||
+    live.email?.toLowerCase() !== wanted ||
+    live.username.toLowerCase() !== username.toLowerCase()
+  )
+    return { member: false }
+  const paths = await getKeycloakUserGroupPaths(sub)
+  if (paths.some((path) => path === "/system" || path.startsWith("/system/")))
+    return { member: false }
+  const current = paths.some((path) => {
+    const status = LAB_STATUS_GROUP.exec(path)?.[1]
+    return !!status && status !== "alumni" && isLabStatus(status)
+  })
 
   const [member] = await db
     .select({ userId: account.userId })
@@ -950,22 +968,15 @@ export async function readCertificatePrincipals(
     .orderBy(asc(sshServices.slug))
   if (!current && services.length === 0) return { member: false }
   // Carrel project tenants: a current member of /winlab-projects/<name> may
-  // log in to that project's machines. Both the groups and the membership
-  // come from this live read, not the cached directory, so a member who
-  // leaves gets no project the moment Keycloak says so. Names outside the
-  // CA's pattern are left out rather than passed on.
-  const paths =
-    current && withProjects ? await getKeycloakUserGroupPaths(sub) : []
-  const stillCurrent = paths.some((path) => {
-    const status = LAB_STATUS_GROUP.exec(path)?.[1]
-    return !!status && status !== "alumni" && isLabStatus(status)
-  })
-  const projects = stillCurrent
-    ? paths.flatMap((path) => {
-        const name = PROJECT_GROUP.exec(path)?.[1]
-        return name ? [name] : []
-      })
-    : []
+  // log in to that project's machines; only the CA learns them. Names
+  // outside the CA's pattern are left out rather than passed on.
+  const projects =
+    current && forCA
+      ? paths.flatMap((path) => {
+          const name = PROJECT_GROUP.exec(path)?.[1]
+          return name ? [name] : []
+        })
+      : []
   return {
     member: true,
     subject: createHash("sha256").update(sub).digest("hex"),

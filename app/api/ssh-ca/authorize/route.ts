@@ -44,6 +44,7 @@ const RESERVED = new Set([
   "sshd",
   "operator",
   "provisioner",
+  "test",
 ])
 
 type Certificate = {
@@ -84,14 +85,14 @@ export async function POST(request: Request) {
   let result: Awaited<ReturnType<typeof readCertificatePrincipals>>
   try {
     result = await readCertificatePrincipals(email, {
-      withProjects: fromCA(request),
+      forCA: fromCA(request),
     })
   } catch (error) {
     emitErrorLog(error, { route: "ssh-ca-authorize" })
     return refuse(503, "member directory unavailable", "authorize")
   }
   if (!result.member || RESERVED.has(result.username)) return deny()
-  // Project principals only for the CA (withProjects above): anyone else
+  // Project principals only for the CA (forCA above): anyone else
   // could ask this route whether an email is in a project.
   const allowed = new Set([
     result.username,

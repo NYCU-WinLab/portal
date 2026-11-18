@@ -34,7 +34,7 @@ export async function POST(request: Request) {
     // Project groups only for the CA: anyone else could ask which projects
     // an email is in.
     result = await readCertificatePrincipals(email, {
-      withProjects: fromCA(request),
+      forCA: fromCA(request),
     })
   } catch (error) {
     // Keycloak could not say who is a member: the CA signs nothing.
