@@ -3,10 +3,9 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
 
-// The module reads its folder and limit when it loads.
+// The module reads its folder when it loads.
 const dir = mkdtempSync(path.join(tmpdir(), "music-audio-test-"))
 process.env.MUSIC_AUDIO_DIR = dir
-process.env.MUSIC_AUDIO_MAX_BYTES = "1000"
 const audio = await import("../lib/music-audio")
 
 const body = (bytes: Uint8Array) =>
@@ -74,7 +73,11 @@ describe("music audio relay", () => {
     const waiting = audio.fetchAudio("eeeeeeeeeee")
     await Bun.sleep(20)
     expect(
-      audio.receiveAudio("eeeeeeeeeee", "m4a", body(new Uint8Array(2000)))
+      audio.receiveAudio(
+        "eeeeeeeeeee",
+        "m4a",
+        body(new Uint8Array(21 * 1024 * 1024))
+      )
     ).rejects.toThrow("音檔太大")
     await Bun.sleep(50)
     expect(await audio.cachedAudio("eeeeeeeeeee")).toBeNull()

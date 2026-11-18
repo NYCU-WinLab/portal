@@ -42,9 +42,7 @@ export function audioType(ext: string) {
 }
 
 /** The most one file may be. A song is a few MB; this only stops a runaway. */
-function maxBytes() {
-  return Number(process.env.MUSIC_AUDIO_MAX_BYTES) || 20 * 1024 * 1024
-}
+const MAX_BYTES = 20 * 1024 * 1024
 
 export type AudioFile = { path: string; type: string; size: number }
 
@@ -194,7 +192,6 @@ export async function receiveAudio(
   await mkdir(DIR, { recursive: true })
   const final = path.join(DIR, `${name}.${ext}`)
   const part = path.join(DIR, `${name}.${randomUUID()}.part`)
-  const limit = maxBytes()
   let size = 0
   try {
     await pipeline(
@@ -202,7 +199,7 @@ export async function receiveAudio(
       async function* (source: AsyncIterable<Buffer>) {
         for await (const chunk of source) {
           size += chunk.length
-          if (size > limit) throw new Error("音檔太大")
+          if (size > MAX_BYTES) throw new Error("音檔太大")
           yield chunk
         }
       },
