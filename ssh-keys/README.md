@@ -13,7 +13,7 @@ curl -H "Authorization: Bearer wkk_…" "https://portal.winlab.tw/api/ssh-keys/s
 
 Without `?format=text` (or `Accept: text/plain`) the answer is JSON: `[{"username": "alice", "keys": ["ssh-ed25519 AAAA… alice"]}]`, or one such object for one member. Every answer carries an `ETag`; send it back as `If-None-Match` to get `304` while nothing changed.
 
-The text list of every member starts with one `cert-authority,principals="<usernames>"` line for the lab CA (ca.winlab.tw), naming every member the service lets in now. Such a member can then log in with a lab SSH certificate as well as a key, with nothing to change on the machine, and one taken out is refused at the next login. The one-member list has no such line.
+The text list of every member starts with `cert-authority,principals="<usernames>"` lines for the lab CA (ca.winlab.tw), naming every member the service lets in now, at most 40 per line: OpenSSH 9.1 reads only the first 40 names of a `principals=` option, so keep every such line, not just the first. Such a member can then log in with a lab SSH certificate as well as a key, with nothing to change on the machine, and one taken out is refused at the next login. The one-member list has no such line.
 
 | Status | Meaning |
 |--------|---------|
