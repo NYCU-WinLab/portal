@@ -2,16 +2,31 @@
 // HomePod. It is not a member, so these are not actions; /api/music/player calls
 // them after checking PLAYER_TOKEN. It follows what members asked for
 // (playerState) and says what it did (playerReport).
+import { timingSafeEqual } from "node:crypto"
+
 import { and, asc, eq, gt } from "drizzle-orm"
 
 import { announceChange } from "@/lib/actions/changes"
 import { currentItem, playerRow, withQueue } from "@/lib/actions/music-queue"
 import { db } from "@/lib/db"
 import { musicPlayer, musicQueueItems, musicTracks } from "@/lib/db/schema"
+import { wantedIds } from "@/lib/music-audio"
 import { traced } from "@/lib/otel"
 
+/** Whether the request carries MUSIC_PLAYER_TOKEN: the only credential the
+ * player's routes take. */
+export function playerAuthorized(request: Request) {
+  const token = process.env.MUSIC_PLAYER_TOKEN
+  const given = request.headers.get("authorization")?.replace(/^Bearer /, "")
+  if (!token || !given) return false
+  const a = Buffer.from(token)
+  const b = Buffer.from(given)
+  return a.length === b.length && timingSafeEqual(a, b)
+}
+
 /** What the player should do now: the song and where to start, paused,
- * volume, and the next songs to fetch ahead. */
+ * volume, the next songs to fetch ahead, and the songs a member's browser
+ * waits for (upload: post each file to /api/music/player/audio). */
 export async function playerState() {
   const state = await playerRow()
   const rows = await db
@@ -54,6 +69,7 @@ export async function playerState() {
         }
       : null,
     upcoming: upcoming.map((u) => u.videoId),
+    upload: wantedIds(),
   }
 }
 

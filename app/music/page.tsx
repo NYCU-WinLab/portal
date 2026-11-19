@@ -21,7 +21,7 @@ export default async function MusicPage() {
   return (
     <PortalShell page={musicPage} nav={musicNav}>
       <div className="flex flex-col gap-12">
-        <NowPlaying playing={playing} />
+        <NowPlaying playing={playing} upcoming={queue.items} />
         <AddSongs />
         <Queue items={queue.items} />
         <Activity activities={activity.activities} />

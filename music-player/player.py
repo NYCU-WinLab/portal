@@ -14,6 +14,11 @@ The clip goes into the stream that is already playing: the song pauses, the
 clip plays at its own volume, and the song carries on from the same frame. With
 nothing playing, the clip gets a stream of its own.
 
+A member listening in the browser has no way to reach this machine, so the
+portal lists the songs their browsers wait for as "upload" in the state it
+sends. The player posts each file (the same one it keeps in CACHE_DIR, fetched
+first when it is not there yet) to /api/music/player/audio.
+
 When another sender takes the HomePod (someone's phone), our stream drops. The
 player waits until the HomePod is idle again and resumes where it was; if that
 takes longer than TAKEN_AFTER_S, it reports "taken" and the queue pauses.
@@ -56,6 +61,7 @@ BUFFER_S = 2.0
 REPORT_EVERY_S = 10
 TAKEN_AFTER_S = 90
 DOWNLOAD_TIMEOUT_S = 120
+UPLOAD_TIMEOUT_S = 120  # a song's file to the portal, for a member's browser
 FAILOVER_AFTER = 5  # failed connections to the portal, 3 seconds apart
 PROBE_EVERY_S = 30  # how often the player asks the portal while on the backup
 ANNOUNCE_MAX_BYTES = 8 * 1024 * 1024
@@ -140,6 +146,36 @@ class Api:
         except Exception as e:  # noqa: BLE001  the next report catches up
             log.warning("report %s: %s", event, e)
 
+    async def send_audio(self, video_id, path):
+        """Posts a song's file for the browsers that wait for it."""
+        with path.open("rb") as file:
+            async with self.session.post(
+                f"{self.base}/api/music/player/audio",
+                params={"videoId": video_id, "ext": path.suffix.lstrip(".")},
+                data=file,
+                headers=self.headers,
+                timeout=aiohttp.ClientTimeout(total=UPLOAD_TIMEOUT_S),
+            ) as response:
+                response.raise_for_status()
+
+    async def audio_failed(self, video_id, error):
+        """Tells the browsers that wait for a song that none is coming; False
+        when the portal could not be told."""
+        try:
+            async with self.session.post(
+                f"{self.base}/api/music/player/audio",
+                params={"videoId": video_id, "error": error[:200]},
+                headers=self.headers,
+                timeout=aiohttp.ClientTimeout(total=10),
+            ) as response:
+                if response.status >= 300:
+                    log.warning("audio failed %s: HTTP %s", video_id, response.status)
+                    return False
+        except Exception as e:  # noqa: BLE001  the portal's own timer ends the wait
+            log.warning("audio failed %s: %s", video_id, e)
+            return False
+        return True
+
     async def answers(self, base):
         """Returns once base sends a player state; asks every PROBE_EVERY_S."""
         while True:
@@ -153,8 +189,28 @@ class Api:
                 pass
 
 
+_fetching = {}
+
+
 async def fetch(video_id):
-    """The audio file of a video, downloaded once into CACHE_DIR."""
+    """The audio file of a video, downloaded once into CACHE_DIR. Callers that
+    ask for the same video while it downloads share the one download, and one
+    that is cancelled (a song skipped) leaves it running for the others."""
+    task = _fetching.get(video_id)
+    if task is None:
+        task = asyncio.ensure_future(_fetch(video_id))
+        _fetching[video_id] = task
+
+        def done(finished):
+            _fetching.pop(video_id, None)
+            if not finished.cancelled():
+                finished.exception()  # whoever awaited it has the error
+
+        task.add_done_callback(done)
+    return await asyncio.shield(task)
+
+
+async def _fetch(video_id):
     name = cache_name(video_id)
     for path in CACHE_DIR.glob(f"{name}.*"):
         if path.suffix not in (".part", ".ytdl"):
@@ -541,6 +597,7 @@ class Player:
         self.knob_volume = None  # the level the knob asked for last
         self.knob_at = 0.0  # when; the server's volume waits KNOB_HOLD_S behind it
         self.knob_task = None
+        self.uploads = {}  # video id -> the task posting its file, while the portal lists it
 
     def position(self):
         if self.state != "playing" or self.mixer is None:
@@ -550,14 +607,43 @@ class Player:
     async def follow_from(self, base):
         """Follows one server until its stream ends; True if it sent a state."""
         got = False
+        version = None
         try:
             async for state in self.api.states(base):
                 got = True
+                self.serve_uploads(state.pop("upload", []))
+                # A change to the songs browsers wait for alone is not news for
+                # the playback below.
+                if state["version"] == version:
+                    continue
+                version = state["version"]
                 self.want = state
                 self.changed.set()
         except Exception as e:  # noqa: BLE001
             log.warning("follow %s: %s", base, e)
         return got
+
+    def serve_uploads(self, video_ids):
+        """Starts posting each song the portal lists that is not on its way
+        yet. An id stays here while it is listed, so a song is posted once;
+        it is forgotten when the portal stops listing it."""
+        for video_id in [v for v, task in self.uploads.items() if task.done() and v not in video_ids]:
+            del self.uploads[video_id]
+        for video_id in video_ids:
+            if video_id not in self.uploads:
+                self.uploads[video_id] = asyncio.create_task(self.upload(video_id))
+
+    async def upload(self, video_id):
+        try:
+            path = await fetch(video_id)
+            await self.api.send_audio(video_id, path)
+            log.info("posted %s (%d bytes)", video_id, path.stat().st_size)
+        except Exception as e:  # noqa: BLE001
+            message = str(e) or type(e).__name__
+            log.warning("upload %s: %s", video_id, message)
+            if not await self.api.audio_failed(video_id, message):
+                # The portal still lists the song, so the next state tries it again.
+                self.uploads.pop(video_id, None)
 
     async def switch(self, base):
         """Follows another server. The old server's song stops first, so none of
@@ -568,6 +654,8 @@ class Player:
         self.state = "idle"
         # What the old server asked for no longer holds; run() waits for the new one.
         self.want = None
+        # Songs posted to the old server were not posted to this one.
+        self.uploads.clear()
         self.api.base = base
         log.warning("following %s", base)
 

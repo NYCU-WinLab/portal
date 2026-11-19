@@ -19,16 +19,18 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import type { nowPlaying } from "@/lib/actions/music"
+import type { listQueue, nowPlaying } from "@/lib/actions/music"
 import { cn } from "@/lib/utils"
 
 import { autoplay, pause, previous, skip, volume } from "./actions"
 import { Lyrics } from "./lyrics"
 import { LikeButton } from "./like-button"
+import { LocalListening } from "./local-listening"
 import { ok } from "./ok"
 import { addedLine, Cover, duration } from "./song"
 
 type Playing = Awaited<ReturnType<typeof nowPlaying.run>>
+type Item = Awaited<ReturnType<typeof listQueue.run>>["items"][number]
 
 const stateLabel = {
   idle: null,
@@ -40,7 +42,13 @@ const stateLabel = {
 
 // The song on the HomePod: who added it, how far it is, and the controls
 // everyone shares. The bar moves on its own between reports.
-export function NowPlaying({ playing }: { playing: Playing }) {
+export function NowPlaying({
+  playing,
+  upcoming,
+}: {
+  playing: Playing
+  upcoming: Item[]
+}) {
   const { current } = playing
 
   const note = !playing.online
@@ -124,6 +132,7 @@ export function NowPlaying({ playing }: { playing: Playing }) {
           />
           自動推薦
         </label>
+        <LocalListening playing={playing} upcoming={upcoming} />
       </div>
     </section>
   )

@@ -1,26 +1,20 @@
-import { timingSafeEqual } from "node:crypto"
-
 import { z } from "zod"
 
 import { onChange } from "@/lib/actions/changes"
-import { playerReport, playerState } from "@/lib/actions/music-player"
+import {
+  playerAuthorized,
+  playerReport,
+  playerState,
+} from "@/lib/actions/music-player"
+import { onWanted } from "@/lib/music-audio"
 
 // The music player on the lab network (music-player/ in this repo) talks
 // only to this route, with MUSIC_PLAYER_TOKEN. GET is server-sent events:
-// the player state at once, then again each time its version changes. POST
-// reports what the player did.
-
-function authorized(request: Request) {
-  const token = process.env.MUSIC_PLAYER_TOKEN
-  const given = request.headers.get("authorization")?.replace(/^Bearer /, "")
-  if (!token || !given) return false
-  const a = Buffer.from(token)
-  const b = Buffer.from(given)
-  return a.length === b.length && timingSafeEqual(a, b)
-}
+// the player state at once, then again each time its version changes or the
+// songs a browser waits for do. POST reports what the player did.
 
 export async function GET(request: Request) {
-  if (!authorized(request)) return new Response(null, { status: 401 })
+  if (!playerAuthorized(request)) return new Response(null, { status: 401 })
 
   const encoder = new TextEncoder()
   let stop = () => {}
@@ -33,7 +27,7 @@ export async function GET(request: Request) {
           stop()
         }
       }
-      let sent = -1
+      let sent = ""
       // Changes arrive faster than a state read; one read at a time, and
       // one more after it when something changed meanwhile.
       let reading: Promise<void> | null = null
@@ -56,8 +50,9 @@ export async function GET(request: Request) {
                 )
               ),
             ])
-            if (state.version !== sent) {
-              sent = state.version
+            const key = `${state.version}:${state.upload.join(",")}`
+            if (key !== sent) {
+              sent = key
               send(`data: ${JSON.stringify(state)}\n\n`)
             }
           } while (again)
@@ -76,6 +71,7 @@ export async function GET(request: Request) {
       }
       send("retry: 3000\n\n")
       const off = await onChange(push)
+      const offWanted = onWanted(push)
       push()
       // Keeps proxies from closing a quiet connection, and reads the state
       // each time, so a database gone quiet still closes the stream.
@@ -86,6 +82,7 @@ export async function GET(request: Request) {
       stop = () => {
         clearInterval(ping)
         off()
+        offWanted()
       }
       request.signal.addEventListener("abort", () => {
         stop()
@@ -123,7 +120,7 @@ const report = z.object({
 })
 
 export async function POST(request: Request) {
-  if (!authorized(request)) return new Response(null, { status: 401 })
+  if (!playerAuthorized(request)) return new Response(null, { status: 401 })
   const parsed = report.safeParse(await request.json().catch(() => null))
   if (!parsed.success) return new Response(null, { status: 400 })
   await playerReport(parsed.data)
