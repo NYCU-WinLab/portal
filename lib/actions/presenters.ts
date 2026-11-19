@@ -1,3 +1,4 @@
+import { Refusal } from "./define"
 import { eq, max } from "drizzle-orm"
 import { z } from "zod"
 
@@ -33,7 +34,7 @@ export const addPresenter = defineAction({
         .values({ userId, position: (last ?? 0) + 1 })
         .onConflictDoNothing()
         .returning({ userId: presenters.userId })
-      if (!added) throw new Error("已經在報告順序裡")
+      if (!added) throw new Refusal("已經在報告順序裡")
       return added
     })
   },
@@ -53,7 +54,7 @@ export const removePresenter = defineAction({
         .delete(presenters)
         .where(eq(presenters.userId, userId))
         .returning({ userId: presenters.userId })
-      if (removed.length === 0) throw new Error("不在報告順序裡")
+      if (removed.length === 0) throw new Refusal("不在報告順序裡")
       return { userId }
     })
   },
@@ -71,7 +72,7 @@ export const movePresenter = defineAction({
     return changeSchedule(async (tx) => {
       const roster = await presenterRoster(tx)
       const at = roster.findIndex((row) => row.userId === userId)
-      if (at < 0) throw new Error("不在報告順序裡")
+      if (at < 0) throw new Refusal("不在報告順序裡")
       const other = roster[direction === "up" ? at - 1 : at + 1]
       const self = roster[at]
       if (
@@ -79,7 +80,7 @@ export const movePresenter = defineAction({
         other.status !== self.status ||
         other.cohort !== self.cohort
       )
-        throw new Error(direction === "up" ? "已經在最前面" : "已經在最後面")
+        throw new Refusal(direction === "up" ? "已經在最前面" : "已經在最後面")
       await tx
         .update(presenters)
         .set({ position: other.position })

@@ -1,3 +1,4 @@
+import { Refusal } from "./define"
 import { eq, inArray, isNotNull, or, sql } from "drizzle-orm"
 import { z } from "zod"
 
@@ -87,7 +88,7 @@ export const setDoorSuffix = defineAction({
   run: async (actor, { suffix }) => {
     const value = suffix?.normalize("NFC").trim() || null
     const problem = value && suffixProblem(value)
-    if (problem) throw new Error(problem)
+    if (problem) throw new Refusal(problem)
     await upsert(actor.userId, { suffix: value })
     return { suffix: value }
   },

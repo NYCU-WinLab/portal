@@ -5,6 +5,7 @@ import { announceChange } from "@/lib/actions/changes"
 import type { AdminApp } from "@/lib/apps"
 import { reloadGreetings } from "@/lib/display"
 import { traced } from "@/lib/otel"
+import { Refusal } from "@/lib/refusal"
 
 /**
  * Who is acting: the signed-in member, and whether through a page, an MCP
@@ -55,6 +56,8 @@ export type Action<
   quiet?: true
 }
 
+export { Refusal }
+
 /** Names of every action created, for the registry check. */
 export const defined = new Set<string>()
 
@@ -86,7 +89,8 @@ export async function runAction<Input extends z.ZodObject, Output>(
       if (action.kind === "mutation" && action.refreshesDoorPanel)
         void reloadGreetings()
       return result
-    }
+    },
+    (error) => error instanceof Refusal || error instanceof z.ZodError
   )
 }
 

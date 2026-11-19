@@ -1,3 +1,4 @@
+import { Refusal } from "@/lib/refusal"
 import { and, eq, inArray } from "drizzle-orm"
 import { forbidden } from "next/navigation"
 
@@ -35,7 +36,7 @@ export async function isAdmin(actor: Actor, app: AdminApp) {
 /** The one check every admin-only action starts with. */
 export async function requireAdmin(actor: Actor, app: AdminApp) {
   if (!(await isAdmin(actor, app)))
-    throw new Error(`需要 ${adminApps[app]} 管理員權限`)
+    throw new Refusal(`需要 ${adminApps[app]} 管理員權限`)
 }
 
 /** Every app the member administers, by the same rule as isAdmin: what

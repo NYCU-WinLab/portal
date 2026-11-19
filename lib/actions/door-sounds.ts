@@ -1,3 +1,4 @@
+import { Refusal } from "./define"
 import { count, desc, eq, inArray, sql } from "drizzle-orm"
 import { z } from "zod"
 
@@ -36,10 +37,10 @@ const audio = z
  * they are refused. */
 function decodeSound(base64: string) {
   const sound = Buffer.from(base64, "base64")
-  if (!sound.length) throw new Error("音檔是空的")
-  if (sound.length > SOUND_MAX_BYTES) throw new Error("音檔超過 3 MB")
+  if (!sound.length) throw new Refusal("音檔是空的")
+  if (sound.length > SOUND_MAX_BYTES) throw new Refusal("音檔超過 3 MB")
   const type = soundType(sound)
-  if (!type) throw new Error("只接受 mp3、m4a、aac、wav、ogg 音檔")
+  if (!type) throw new Refusal("只接受 mp3、m4a、aac、wav、ogg 音檔")
   return { sound, type }
 }
 
@@ -59,9 +60,9 @@ async function ownSound(actor: Actor, soundId: string) {
     .select({ uploaderId: doorSounds.uploaderId })
     .from(doorSounds)
     .where(eq(doorSounds.id, soundId))
-  if (!row) throw new Error("找不到這個音效")
+  if (!row) throw new Refusal("找不到這個音效")
   if (row.uploaderId !== actor.userId && !(await isAdmin(actor, "door")))
-    throw new Error("只有上傳的人或 Door 管理員能改")
+    throw new Refusal("只有上傳的人或 Door 管理員能改")
 }
 
 export type DoorSound = {
@@ -145,7 +146,7 @@ export const getDoorSound = defineAction({
       })
       .from(doorSounds)
       .where(eq(doorSounds.id, soundId))
-    if (!row) throw new Error("找不到這個音效")
+    if (!row) throw new Refusal("找不到這個音效")
     return {
       contentType: row.type,
       version: row.version,
@@ -170,7 +171,7 @@ export const uploadDoorSound = defineAction({
         .from(doorSounds)
         .where(eq(doorSounds.uploaderId, actor.userId))
       if (n >= SOUND_UPLOADS_MAX)
-        throw new Error(`每人最多 ${SOUND_UPLOADS_MAX} 個音效，先刪一個`)
+        throw new Refusal(`每人最多 ${SOUND_UPLOADS_MAX} 個音效，先刪一個`)
       const [{ n: listed }] = await tx
         .select({ n: count() })
         .from(doorPlaylistItems)
@@ -226,7 +227,7 @@ export const replaceDoorSound = defineAction({
       .set({ sound, soundType: type, version: crypto.randomUUID() })
       .where(eq(doorSounds.id, input.id))
       .returning({ id: doorSounds.id, version: doorSounds.version })
-    if (!row) throw new Error("找不到這個音效")
+    if (!row) throw new Refusal("找不到這個音效")
     return row
   },
 })
@@ -267,7 +268,7 @@ export const setDoorPlaylist = defineAction({
           .from(doorSounds)
           .where(inArray(doorSounds.id, sound_ids))
         if (found.length !== sound_ids.length)
-          throw new Error("有音效已經被刪掉了")
+          throw new Refusal("有音效已經被刪掉了")
       }
       await tx
         .delete(doorPlaylistItems)
@@ -300,7 +301,7 @@ export const setDoorSoundDefault = defineAction({
       .set({ isDefault: input.is_default })
       .where(eq(doorSounds.id, input.id))
       .returning({ id: doorSounds.id })
-    if (!updated.length) throw new Error("找不到這個音效")
+    if (!updated.length) throw new Refusal("找不到這個音效")
     return { id: input.id, is_default: input.is_default }
   },
 })

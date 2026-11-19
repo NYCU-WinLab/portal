@@ -1,3 +1,4 @@
+import { Refusal } from "./define"
 import { and, asc, eq, notInArray } from "drizzle-orm"
 import { z } from "zod"
 
@@ -85,19 +86,19 @@ export const grantAdmin = defineAction({
         .from(user)
         .where(eq(user.id, userId))
         .for("update")
-      if (!member) throw new Error("找不到成員")
+      if (!member) throw new Refusal("找不到成員")
       const [portalRow] = await tx
         .select({ app: admins.app })
         .from(admins)
         .where(and(eq(admins.userId, userId), eq(admins.app, "portal")))
       if (app !== "portal" && !ownAdminsOnly.includes(app) && portalRow)
-        throw new Error("他是 Portal 管理員，已經管得到這個 app")
+        throw new Refusal("他是 Portal 管理員，已經管得到這個 app")
       const [added] = await tx
         .insert(admins)
         .values({ userId, app, grantedBy: actor.userId })
         .onConflictDoNothing()
         .returning({ app: admins.app })
-      if (!added) throw new Error(`已經是 ${adminApps[app]} 管理員了`)
+      if (!added) throw new Refusal(`已經是 ${adminApps[app]} 管理員了`)
       // A portal admin already runs the other apps; drop those rows and
       // keep the ones portal rank does not cover.
       if (app === "portal")
@@ -132,16 +133,16 @@ export const revokeAdmin = defineAction({
           .where(eq(admins.app, "portal"))
           .for("update")
         if (!portalAdmins.some((row) => row.userId === userId))
-          throw new Error("他不是 Portal 管理員")
+          throw new Refusal("他不是 Portal 管理員")
         if (portalAdmins.length <= 1)
-          throw new Error("至少要留 1 位 Portal 管理員")
+          throw new Refusal("至少要留 1 位 Portal 管理員")
       }
       const removed = await tx
         .delete(admins)
         .where(and(eq(admins.userId, userId), eq(admins.app, app)))
         .returning({ app: admins.app })
       if (removed.length === 0)
-        throw new Error(`他不是 ${adminApps[app]} 管理員`)
+        throw new Refusal(`他不是 ${adminApps[app]} 管理員`)
       return { userId, app }
     })
   },

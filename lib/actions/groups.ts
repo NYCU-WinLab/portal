@@ -1,3 +1,4 @@
+import { Refusal } from "./define"
 import { and, count, desc, eq, gte, sql } from "drizzle-orm"
 import { z } from "zod"
 
@@ -146,7 +147,7 @@ export const listMyMailGroups = defineAction({
       .select({ email: user.email })
       .from(user)
       .where(eq(user.id, actor.userId))
-    if (!me) throw new Error("找不到你的帳號")
+    if (!me) throw new Refusal("找不到你的帳號")
     const address = me.email.toLowerCase()
     try {
       const found = new Map<
@@ -245,7 +246,7 @@ export const listMailGroupChanges = defineAction({
   input: z.object({ groupId }),
   run: async (actor, input) => {
     if (!(await manages(actor, input.groupId)))
-      throw new Error("你不是這個群組的管理者")
+      throw new Refusal("你不是這個群組的管理者")
     return {
       changes: await db
         .select({
@@ -274,7 +275,7 @@ export const listMailGroupManagers = defineAction({
   input: z.object({ groupId }),
   run: async (actor, input) => {
     if (!(await manages(actor, input.groupId)))
-      throw new Error("你不是這個群組的管理者")
+      throw new Refusal("你不是這個群組的管理者")
     return {
       managers: await db
         .select({ userId: user.id, name: user.name })
@@ -295,7 +296,7 @@ export const setMailGroupManager = defineAction({
   input: z.object({ groupId, userId: z.uuid(), manager: z.boolean() }),
   run: async (actor, input) => {
     const id = parseGroupId(input.groupId)
-    if (!id) throw new Error("群組 id 格式不對")
+    if (!id) throw new Refusal("群組 id 格式不對")
     if (input.manager) {
       const api = groupsApiFromEnv()
       if (!api) throw new Error("Google 群組整合尚未設定")
@@ -304,7 +305,7 @@ export const setMailGroupManager = defineAction({
         throw new Error("讀不到這個 Google 群組，請稍後再試")
       })
       if (!group || !isManageableGroup(group.email, api.domain))
-        throw new Error("這個群組不存在，或不開放給 portal 管理")
+        throw new Refusal("這個群組不存在，或不開放給 portal 管理")
       await db
         .insert(groupManagers)
         .values({ groupId: group.id, userId: input.userId })
@@ -339,7 +340,7 @@ export const listCohorts = defineAction({
           .where(eq(groupManagers.userId, actor.userId))
           .limit(1)
       ).length > 0
-    if (!any) throw new Error("只有群組信管理者可以看")
+    if (!any) throw new Refusal("只有群組信管理者可以看")
     const [cohorts, directory] = await Promise.all([
       fetchCohorts(),
       labDirectory().catch(() => null),

@@ -4,6 +4,7 @@
 // and books the same way, so every week still gets its own invite. A daily run in the server process
 // does it; a new series books its first week at once, which the daily run
 // (looking only 7 days out) would never reach.
+import { Refusal } from "./define"
 import { and, asc, eq, gt, gte, inArray, isNull, lt, lte } from "drizzle-orm"
 import { z } from "zod"
 
@@ -202,7 +203,7 @@ async function roomForOccurrence(
   // picked; it is only logged.
   const stray = await strayLabHold(slots, date, series.startTime, endTime)
   if (stray?.exact)
-    throw new Error(
+    throw new Refusal(
       `系上已有實驗室帳號借的 ${stray.room}，portal 沒有這筆紀錄，可能是之前的預約沒收到回應；請確認後自己借或取消`
     )
   if (stray)
@@ -282,7 +283,7 @@ async function bookOccurrence(
           spansOverlap(row, { start: series.startTime, end: endTime })
         )
         if (clash)
-          throw new Error(
+          throw new Refusal(
             `你 ${clash.start} 到 ${clash.end} 已有「${plainTitle(clash)}」`
           )
       }
@@ -395,7 +396,7 @@ export async function createStandingMeeting(
     : input.online_only
       ? onlineSpanProblem(input.start_time, endTime)
       : spanProblem(input.start_time, endTime)
-  if (problem) throw new Error(problem)
+  if (problem) throw new Refusal(problem)
   const group = input.group ?? null
   // The advisor joins each occurrence, read fresh, not frozen here.
   const attendees = await resolveAttendees({
@@ -407,15 +408,15 @@ export async function createStandingMeeting(
   let issueRefs: string[] = []
   let deliverables: string[] = []
   if (input.epic) {
-    if (!group) throw new Error("要先選專案群組才能選 Epic")
+    if (!group) throw new Refusal("要先選專案群組才能選 Epic")
     const path = (await projectGroups()).find(
       (g) => g.name === group
     )?.gitlabPath
-    if (!path) throw new Error("這個群組沒有連到 GitLab")
+    if (!path) throw new Refusal("這個群組沒有連到 GitLab")
     const iid = epicIid(input.epic, path)
     const epic = iid === null ? null : await getEpic(path, iid)
-    if (!epic) throw new Error("Epic 不存在或不屬於這個群組")
-    if (epic.kind !== "sync") throw new Error("固定會議只能選 Sync 類的 Epic")
+    if (!epic) throw new Refusal("Epic 不存在或不屬於這個群組")
+    if (epic.kind !== "sync") throw new Refusal("固定會議只能選 Sync 類的 Epic")
     issueRefs = [`${path}&${epic.iid}`]
     deliverables = deliverablesOf(
       (await epicIssues(path, epic)).flatMap((i) => i.deliverables)
@@ -426,8 +427,8 @@ export async function createStandingMeeting(
   const today = todayInTaipei()
   if (input.start_date !== undefined) {
     if (weekdayOf(input.start_date) !== input.weekday)
-      throw new Error("第一場的日期要在那個星期")
-    if (input.start_date < today) throw new Error("不能從過去的日期開始")
+      throw new Refusal("第一場的日期要在那個星期")
+    if (input.start_date < today) throw new Refusal("不能從過去的日期開始")
   }
   const [series] = await db
     .insert(roomSeries)
@@ -473,8 +474,9 @@ async function ownSeries(actorId: string, id: string) {
     .select()
     .from(roomSeries)
     .where(eq(roomSeries.id, id))
-  if (!series) throw new Error("找不到這個固定會議")
-  if (series.createdBy !== actorId) throw new Error("只能改自己建立的固定會議")
+  if (!series) throw new Refusal("找不到這個固定會議")
+  if (series.createdBy !== actorId)
+    throw new Refusal("只能改自己建立的固定會議")
   return series
 }
 
@@ -533,15 +535,15 @@ export const updateMeeting = defineAction({
     if (input.external_url !== undefined)
       patch.externalUrl = externalMeetingUrl(input.external_url)
     if (input.agenda !== undefined) patch.agenda = input.agenda || null
-    if (!Object.keys(patch).length) throw new Error("沒有要改的欄位")
+    if (!Object.keys(patch).length) throw new Refusal("沒有要改的欄位")
     if (input.series) {
       const [series] = await db
         .select()
         .from(roomSeries)
         .where(eq(roomSeries.id, input.series))
-      if (!series) throw new Error("找不到這個固定會議")
+      if (!series) throw new Refusal("找不到這個固定會議")
       if (!(await mayEdit(actor.userId, series)))
-        throw new Error("只有建立者和專案群組的成員能編輯")
+        throw new Refusal("只有建立者和專案群組的成員能編輯")
       const bookings = await db.transaction(async (tx) => {
         await tx
           .update(roomSeries)
@@ -571,16 +573,16 @@ export const updateMeeting = defineAction({
       .from(roomBookings)
       .where(eq(roomBookings.id, input.booking!))
     if (!booking || booking.status !== "booked")
-      throw new Error("找不到這筆預約，或已經取消")
+      throw new Refusal("找不到這筆預約，或已經取消")
     if (booking.meetingId)
-      throw new Error("週一 Lab Meeting 請到 /meetings 由報告人或管理員改")
+      throw new Refusal("週一 Lab Meeting 請到 /meetings 由報告人或管理員改")
     if (
       !(await mayEdit(actor.userId, {
         createdBy: booking.requestedBy,
         groupName: booking.groupName,
       }))
     )
-      throw new Error("只有發起人和專案群組的成員能編輯")
+      throw new Refusal("只有發起人和專案群組的成員能編輯")
     const [updated] = await db
       .update(roomBookings)
       .set(patch)
@@ -592,7 +594,7 @@ export const updateMeeting = defineAction({
         )
       )
       .returning({ id: roomBookings.id })
-    if (!updated) throw new Error("這筆預約剛被取消")
+    if (!updated) throw new Refusal("這筆預約剛被取消")
     return { booking: input.booking, ...patch, bookings: 1 }
   },
 })

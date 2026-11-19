@@ -1,3 +1,4 @@
+import { Refusal } from "./define"
 import { createHash, randomBytes } from "node:crypto"
 
 import { and, desc, eq, isNull, sql } from "drizzle-orm"
@@ -93,7 +94,7 @@ export const revokeServiceKey = defineAction({
       .set({ revokedAt: new Date(), revokedBy: actor.userId })
       .where(and(eq(serviceKeys.id, id), isNull(serviceKeys.revokedAt)))
       .returning({ id: serviceKeys.id, service: serviceKeys.service })
-    if (!revoked) throw new Error("找不到這把金鑰")
+    if (!revoked) throw new Refusal("找不到這把金鑰")
     return revoked
   },
 })

@@ -1,3 +1,4 @@
+import { Refusal } from "./define"
 import {
   and,
   asc,
@@ -109,7 +110,7 @@ async function cardLock(tx: Tx) {
   const { rows } = await tx.execute<{ ok: boolean }>(
     sql`select pg_try_advisory_xact_lock(hashtext('door_cards')) as ok`
   )
-  if (!rows[0]?.ok) throw new Error("卡機正在處理別的操作，稍後再試")
+  if (!rows[0]?.ok) throw new Refusal("卡機正在處理別的操作，稍後再試")
 }
 
 /** Runs fn holding the card lock, then writes the attempt down. fn returns
@@ -148,15 +149,15 @@ async function locked(
             : "db_failed"
       await record(action, userId, card, refusal).catch(() => {})
       // Nor does the caller see that message.
-      if (refusal === "db_failed") throw new Error("資料庫出錯，請再試一次")
+      if (refusal === "db_failed") throw new Refusal("資料庫出錯，請再試一次")
       throw error
     }
     await record(action, userId, card, "db_failed").catch(() => {})
-    throw new Error(AHEAD)
+    throw new Refusal(AHEAD)
   }
   if ("error" in outcome) {
     await record(action, userId, card, outcome.error, outcome.detail)
-    throw new Error(outcome.say)
+    throw new Refusal(outcome.say)
   }
   await record(action, userId, card, null, outcome.detail)
   return outcome.detail
@@ -198,7 +199,7 @@ async function holderOf(
       .select({ name: user.name })
       .from(user)
       .where(eq(user.id, input.holderId))
-    if (!member) throw new Error("找不到這位成員")
+    if (!member) throw new Refusal("找不到這位成員")
     name ||= member.name
   }
   return {
@@ -228,9 +229,9 @@ export const addDoorCard = defineAction({
         .from(doorCards)
         .where(eq(doorCards.cardId, input.cardId))
       if (existing?.syncState === "synced")
-        throw new Error("這張卡已經在名單上，要換人請用修改")
+        throw new Refusal("這張卡已經在名單上，要換人請用修改")
       if (existing?.syncState === "deleting")
-        throw new Error("這張卡還沒確認刪掉，請再刪一次")
+        throw new Refusal("這張卡還沒確認刪掉，請再刪一次")
       const holder = await holderOf(tx, {
         holderId:
           input.holderId === undefined ? existing?.holderId : input.holderId,
@@ -279,9 +280,9 @@ export const updateDoorCard = defineAction({
         .select()
         .from(doorCards)
         .where(eq(doorCards.cardId, input.cardId))
-      if (!card) throw new Error("名單上沒有這張卡")
+      if (!card) throw new Refusal("名單上沒有這張卡")
       if (card.syncState === "deleting")
-        throw new Error("這張卡還沒確認刪掉，請再刪一次")
+        throw new Refusal("這張卡還沒確認刪掉，請再刪一次")
       // Without holderId the card keeps its member.
       // A guest card keeps its name when only the note changes.
       const holderId =
@@ -437,7 +438,7 @@ export async function compareCards(userId: string | null) {
       })
     } catch (error) {
       await record("compare", userId, null, error)
-      throw new Error(message(error))
+      throw new Refusal(message(error))
     }
     const drifted =
       result.suspect ||

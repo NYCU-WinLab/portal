@@ -1,3 +1,4 @@
+import { Refusal } from "./define"
 import { and, asc, desc, eq, gte, lt } from "drizzle-orm"
 import { z } from "zod"
 
@@ -60,7 +61,7 @@ export const createLeave = defineAction({
   run: async (actor, { date, reason }) => {
     const allowed = upcomingMondays()
     if (!allowed.includes(date)) {
-      throw new Error(
+      throw new Refusal(
         `只能請 ${allowed[0]} 到 ${allowed.at(-1)} 之間的週一，不能請 ${date}`
       )
     }
@@ -69,7 +70,7 @@ export const createLeave = defineAction({
       .values({ userId: actor.userId, date, reason })
       .onConflictDoNothing()
       .returning({ date: leaves.date, reason: leaves.reason })
-    if (!created) throw new Error(`${date} 已經請過假了`)
+    if (!created) throw new Refusal(`${date} 已經請過假了`)
     return created
   },
 })
@@ -86,7 +87,7 @@ export const deleteLeave = defineAction({
       .delete(leaves)
       .where(and(eq(leaves.userId, actor.userId), eq(leaves.date, date)))
       .returning({ date: leaves.date })
-    if (removed.length === 0) throw new Error(`${date} 沒有你的請假`)
+    if (removed.length === 0) throw new Refusal(`${date} 沒有你的請假`)
     return { date }
   },
 })

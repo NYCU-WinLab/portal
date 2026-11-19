@@ -1,3 +1,4 @@
+import { Refusal } from "./define"
 import { eq, isNull } from "drizzle-orm"
 import { z } from "zod"
 
@@ -54,7 +55,7 @@ export const loadMyGravatar = defineAction({
       .from(user)
       .where(eq(user.id, actor.userId))
     const bytes = me && (await gravatarImage(me.email))
-    if (!bytes) throw new Error("這個信箱沒有 Gravatar")
+    if (!bytes) throw new Refusal("這個信箱沒有 Gravatar")
     return { version: await store(actor.userId, bytes) }
   },
 })

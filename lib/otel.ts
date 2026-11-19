@@ -27,14 +27,20 @@ export function emitErrorLog(
 export async function traced<T>(
   name: string,
   attributes: Record<string, string | number | boolean>,
-  fn: () => Promise<T>
+  fn: () => Promise<T>,
+  /** True for a failure that is the caller's to fix (a refused request),
+   * not the service's: it ends the span with refused=true and no ERROR. */
+  expected?: (error: unknown) => boolean
 ): Promise<T> {
   return tracer.startActiveSpan(name, { attributes }, async (span) => {
     try {
       return await fn()
     } catch (error) {
-      span.recordException(error as Error)
-      span.setStatus({ code: SpanStatusCode.ERROR })
+      if (expected?.(error)) span.setAttribute("refused", true)
+      else {
+        span.recordException(error as Error)
+        span.setStatus({ code: SpanStatusCode.ERROR })
+      }
       throw error
     } finally {
       span.end()

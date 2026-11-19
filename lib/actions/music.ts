@@ -1,3 +1,4 @@
+import { Refusal } from "./define"
 import { and, desc, eq, inArray, isNotNull, notInArray, sql } from "drizzle-orm"
 import { z } from "zod"
 
@@ -242,9 +243,9 @@ export const addPlaylist = defineAction({
         : /^[\w-]{10,}$/.test(input.playlist)
           ? input.playlist
           : null
-    if (!playlistId) throw new Error("不是 YouTube 歌單連結")
+    if (!playlistId) throw new Refusal("不是 YouTube 歌單連結")
     const list = await getPlaylist(playlistId)
-    if (!list.tracks.length) throw new Error("這個歌單是空的或看不到")
+    if (!list.tracks.length) throw new Refusal("這個歌單是空的或看不到")
     return withQueue(async (tx) => {
       await dropRecommendations(tx)
       await saveTracks(tx, list.tracks)
@@ -287,7 +288,7 @@ export const playNext = defineAction({
           and(eq(musicQueueItems.id, id), eq(musicQueueItems.status, "queued"))
         )
         .returning({ id: musicQueueItems.id })
-      if (!moved.length) throw new Error("這首已經不在佇列裡")
+      if (!moved.length) throw new Refusal("這首已經不在佇列裡")
       await logActivity(tx, { userId: actor.userId, kind: "next", itemId: id })
       return { ok: true }
     }),
@@ -309,7 +310,7 @@ export const skipSong = defineAction({
           and(eq(musicQueueItems.id, id), eq(musicQueueItems.status, "playing"))
         )
         .returning({ id: musicQueueItems.id })
-      if (!skipped.length) throw new Error("這首已經播完了")
+      if (!skipped.length) throw new Refusal("這首已經播完了")
       await logActivity(tx, { userId: actor.userId, kind: "skip", itemId: id })
       return { ok: true }
     }),
@@ -338,7 +339,7 @@ export const previousSong = defineAction({
         )
         .orderBy(desc(musicQueueItems.endedAt))
         .limit(1)
-      if (!last) throw new Error("沒有上一首")
+      if (!last) throw new Refusal("沒有上一首")
       const { front } = await sortKeys(tx)
       const [item] = await tx
         .insert(musicQueueItems)
@@ -374,7 +375,7 @@ export const removeSong = defineAction({
           and(eq(musicQueueItems.id, id), eq(musicQueueItems.status, "queued"))
         )
         .returning({ id: musicQueueItems.id })
-      if (!removed.length) throw new Error("這首已經不在佇列裡")
+      if (!removed.length) throw new Refusal("這首已經不在佇列裡")
       await logActivity(tx, {
         userId: actor.userId,
         kind: "remove",
@@ -398,7 +399,7 @@ export const clearQueue = defineAction({
         .set({ status: "removed", endedAt: new Date(), endedBy: actor.userId })
         .where(eq(musicQueueItems.status, "queued"))
         .returning({ id: musicQueueItems.id })
-      if (!removed.length) throw new Error("佇列已經是空的")
+      if (!removed.length) throw new Refusal("佇列已經是空的")
       await logActivity(tx, {
         userId: actor.userId,
         kind: "clear",
@@ -490,7 +491,7 @@ export const getLyrics = defineAction({
       .from(musicTracks)
       .where(eq(musicTracks.videoId, videoId))
       .limit(1)
-    if (!track) throw new Error("找不到這首")
+    if (!track) throw new Refusal("找不到這首")
     let [row] = await db
       .select()
       .from(musicLyrics)
@@ -570,7 +571,7 @@ export const likeSong = defineAction({
         .select({ videoId: musicTracks.videoId })
         .from(musicTracks)
         .where(eq(musicTracks.videoId, input.videoId))
-      if (!track) throw new Error("找不到這首歌")
+      if (!track) throw new Refusal("找不到這首歌")
       // One member's likes take turns, so two at once cannot both pass the
       // cap.
       await tx.execute(
@@ -582,7 +583,7 @@ export const likeSong = defineAction({
         .select({ count: sql<number>`count(*)::int` })
         .from(musicLikes)
         .where(eq(musicLikes.userId, actor.userId))
-      if (count >= LIKE_MAX) throw new Error(`最多收藏 ${LIKE_MAX} 首`)
+      if (count >= LIKE_MAX) throw new Refusal(`最多收藏 ${LIKE_MAX} 首`)
       await tx
         .insert(musicLikes)
         .values({ userId: actor.userId, videoId: input.videoId })

@@ -1,3 +1,4 @@
+import { Refusal } from "./define"
 import { and, asc, eq, inArray, sql } from "drizzle-orm"
 import { z } from "zod"
 
@@ -53,13 +54,13 @@ const inForce = (row: Row, minute: number) =>
 async function valuesOf(input: z.infer<typeof fields>, userId: string) {
   const startsAt = minutes(input.starts_at)
   const endsAt = minutes(input.ends_at)
-  if (startsAt === endsAt) throw new Error("開始和結束不能是同一個時間")
+  if (startsAt === endsAt) throw new Refusal("開始和結束不能是同一個時間")
   const found = await db
     .select({ id: doorSounds.id })
     .from(doorSounds)
     .where(inArray(doorSounds.id, input.sound_ids))
   if (found.length !== input.sound_ids.length)
-    throw new Error("有音效已經被刪掉了")
+    throw new Refusal("有音效已經被刪掉了")
   return {
     startsAt,
     endsAt,
@@ -169,7 +170,7 @@ export const updateDoorSoundRule = defineAction({
       .set({ ...values, updatedAt: sql`now()` })
       .where(eq(doorSoundRules.id, id))
       .returning({ id: doorSoundRules.id })
-    if (!row) throw new Error("找不到這條排程")
+    if (!row) throw new Refusal("找不到這條排程")
     return { id }
   },
 })
@@ -189,7 +190,7 @@ export const deleteDoorSoundRule = defineAction({
       .delete(doorSoundRules)
       .where(eq(doorSoundRules.id, id))
       .returning({ id: doorSoundRules.id })
-    if (!rows.length) throw new Error("找不到這條排程")
+    if (!rows.length) throw new Refusal("找不到這條排程")
     return { deleted: true }
   },
 })

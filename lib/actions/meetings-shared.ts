@@ -1,6 +1,7 @@
 // What the meetings actions share: who may present or ask (from Keycloak),
 // the schedule as members read it, and the questioner assignment that runs
 // after every change to the schedule or the presenter list.
+import { Refusal } from "./define"
 import { and, asc, eq, gt, inArray, isNotNull, sql } from "drizzle-orm"
 
 import { joinUrl } from "@/lib/actions/rooms-meetings"
@@ -304,6 +305,6 @@ export async function meetingOn(tx: Tx, date: string) {
     .from(meetings)
     .where(eq(meetings.date, date))
     .for("update")
-  if (!row) throw new Error(`${date} 沒有排會議`)
+  if (!row) throw new Refusal(`${date} 沒有排會議`)
   return row
 }

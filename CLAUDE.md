@@ -22,7 +22,7 @@ The rewrite of portal.winlab.tw on plain Postgres. Apps move over one at a time;
 - **Measure before tuning.** When a page feels slow, look first at its server span in Sensorium (project `portal-dev`), then the network (`curl -w`), then the client (prefetch, animations), and change the slow part only.
 - **MCP lives at `/mcp`**; discovery is under `/.well-known/` at the site root.
 - **Design** comes from ui.winlab.tw (`bunx shadcn@latest add @winlab/<item>`); its DESIGN.md is the rulebook and `bun run tokens:check` enforces the token part.
-- **Observability**: actions run in a span (`action <name>`, with `via` web or mcp); send ids and counts, never member content.
+- **Observability**: actions run in a span (`action <name>`, with `via` web or mcp); send ids and counts, never member content. **An action refuses with `throw new Refusal(...)`** (`lib/refusal.ts`: wrong input, someone else's record, a rule not met): the span gets `refused=true` and no error, so Golem raises no alert. Throw a plain `Error` only for a broken service, missing setup or a bug.
 
 ## Verify
 

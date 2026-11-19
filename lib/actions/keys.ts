@@ -1,3 +1,4 @@
+import { Refusal } from "./define"
 import { createHash, randomBytes } from "node:crypto"
 
 import { and, asc, count, desc, eq, inArray, sql } from "drizzle-orm"
@@ -116,7 +117,7 @@ async function addKeys(
           .returning({ id: sshKeys.id, fingerprint: sshKeys.fingerprint })
       : []
     if (held + added.length > MAX_KEYS)
-      throw new Error(`最多 ${MAX_KEYS} 把金鑰`)
+      throw new Refusal(`最多 ${MAX_KEYS} 把金鑰`)
     for (const key of added)
       await record(tx, actor, {
         action: "add_key",
@@ -221,7 +222,7 @@ export const listMemberSshKeys = defineAction({
       .select({ id: user.id, username: user.username, name: user.name })
       .from(user)
       .where(sql`lower(${user.username}) = ${username.toLowerCase()}`)
-    if (!member?.username) throw new Error("找不到這個成員")
+    if (!member?.username) throw new Refusal("找不到這個成員")
     const keys = await db
       .select({
         type: sshKeys.type,
@@ -318,9 +319,9 @@ export const addSshKey = defineAction({
   }),
   run: async (actor, input) => {
     if (input.public_key.includes("PRIVATE KEY"))
-      throw new Error("這是私鑰，請貼上 .pub 檔的內容")
+      throw new Refusal("這是私鑰，請貼上 .pub 檔的內容")
     const key = parsePublicKey(input.public_key)
-    if (!key) throw new Error("這不是 SSH 公鑰，請貼上 .pub 檔的整行內容")
+    if (!key) throw new Refusal("這不是 SSH 公鑰，請貼上 .pub 檔的整行內容")
     const label = (input.label || key.comment || key.type).slice(0, 60)
     const [added] = await addKeys(
       actor,
@@ -334,7 +335,7 @@ export const addSshKey = defineAction({
       ],
       "paste"
     )
-    if (!added) throw new Error("這把金鑰已經加過了")
+    if (!added) throw new Refusal("這把金鑰已經加過了")
     return { id: added.id, fingerprint: added.fingerprint }
   },
 })
@@ -352,7 +353,7 @@ export const importSshKeys = defineAction({
   run: async (actor, { host, username }) => {
     const found = await hostedKeys(host, username)
     if (found.length === 0)
-      throw new Error(`${keyHosts[host].label} 的 ${username} 沒有公鑰`)
+      throw new Refusal(`${keyHosts[host].label} 的 ${username} 沒有公鑰`)
     const label = `${keyHosts[host].label} ${username}`.slice(0, 60)
     const added = await addKeys(
       actor,
@@ -395,7 +396,7 @@ export const updateSshKey = defineAction({
       })
       .where(and(eq(sshKeys.id, id), eq(sshKeys.userId, actor.userId)))
       .returning({ id: sshKeys.id })
-    if (!updated) throw new Error("找不到這把金鑰")
+    if (!updated) throw new Refusal("找不到這把金鑰")
     return { updated: true }
   },
 })
@@ -414,7 +415,7 @@ export const deleteSshKey = defineAction({
         .delete(sshKeys)
         .where(and(eq(sshKeys.id, id), eq(sshKeys.userId, actor.userId)))
         .returning({ fingerprint: sshKeys.fingerprint })
-      if (!deleted) throw new Error("找不到這把金鑰")
+      if (!deleted) throw new Refusal("找不到這把金鑰")
       await record(tx, actor, {
         action: "delete_key",
         userId: actor.userId,
@@ -446,7 +447,7 @@ export const setSshServiceKey = defineAction({
         .where(eq(sshKeys.userId, actor.userId))
         .orderBy(...oldestFirst)
       const key = mine.find((one) => one.id === id)
-      if (!key) throw new Error("找不到這把金鑰")
+      if (!key) throw new Refusal("找不到這把金鑰")
       const [service] = await tx
         .select({
           id: sshServices.id,
@@ -465,7 +466,7 @@ export const setSshServiceKey = defineAction({
       // A service the member may not use reads the same as one that does
       // not exist.
       if (!service || !(service.open || service.granted))
-        throw new Error("你不能用這個服務")
+        throw new Refusal("你不能用這個服務")
       const rows = await tx
         .select({ keyId: sshKeyServices.keyId })
         .from(sshKeyServices)
@@ -599,7 +600,7 @@ export const createSshService = defineAction({
         })
         .onConflictDoNothing({ target: sshServices.slug })
         .returning({ id: sshServices.id })
-      if (!created) throw new Error("這個代號已經有服務在用")
+      if (!created) throw new Refusal("這個代號已經有服務在用")
       await record(tx, actor, { action: "create_service", service: slug })
       return { id: created.id, slug, token }
     }),
@@ -623,7 +624,7 @@ export const rotateSshServiceKey = defineAction({
         .set({ tokenHash, prefix, lastReadAt: null })
         .where(eq(sshServices.id, id))
         .returning({ slug: sshServices.slug })
-      if (!service) throw new Error("找不到這個服務")
+      if (!service) throw new Refusal("找不到這個服務")
       await record(tx, actor, {
         action: "rotate_service",
         service: service.slug,
@@ -646,7 +647,7 @@ export const deleteSshService = defineAction({
         .delete(sshServices)
         .where(eq(sshServices.id, id))
         .returning({ slug: sshServices.slug })
-      if (!service) throw new Error("找不到這個服務")
+      if (!service) throw new Refusal("找不到這個服務")
       await record(tx, actor, {
         action: "delete_service",
         service: service.slug,
@@ -670,13 +671,13 @@ export const grantSshService = defineAction({
         .select({ slug: sshServices.slug, open: sshServices.open })
         .from(sshServices)
         .where(eq(sshServices.id, id))
-      if (!service) throw new Error("找不到這個服務")
-      if (service.open) throw new Error("這個服務所有成員都能用")
+      if (!service) throw new Refusal("找不到這個服務")
+      if (service.open) throw new Refusal("這個服務所有成員都能用")
       const [member] = await tx
         .select({ id: user.id })
         .from(user)
         .where(eq(user.id, user_id))
-      if (!member) throw new Error("找不到這個成員")
+      if (!member) throw new Refusal("找不到這個成員")
       const granted = await tx
         .insert(sshServiceGrants)
         .values({ serviceId: id, userId: user_id, grantedBy: actor.userId })
@@ -726,7 +727,7 @@ export const revokeSshServiceGrant = defineAction({
           )
         )
         .returning({ serviceId: sshServiceGrants.serviceId })
-      if (!revoked) throw new Error("這個成員沒有這個服務")
+      if (!revoked) throw new Refusal("這個成員沒有這個服務")
       // Their keys leave with the grant.
       await tx
         .delete(sshKeyServices)

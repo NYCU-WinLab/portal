@@ -1,3 +1,4 @@
+import { Refusal } from "./define"
 import { and, count, eq, gt, sql } from "drizzle-orm"
 import { z } from "zod"
 
@@ -113,7 +114,7 @@ export const sendInvitation = defineAction({
           )
         )
       if (sent >= (actor.service ? PER_HOUR_SERVICE : PER_HOUR))
-        throw new Error("這一小時寄太多邀請了")
+        throw new Refusal("這一小時寄太多邀請了")
       const rows: [string, string][] = [
         ...(input.access
           ? [["權限", ACCESS[input.access]] as [string, string]]

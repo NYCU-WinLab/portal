@@ -1,3 +1,4 @@
+import { Refusal } from "./define"
 import { and, desc, eq } from "drizzle-orm"
 import { z } from "zod"
 
@@ -25,7 +26,7 @@ export const getProfile = defineAction({
       )
       .orderBy(desc(account.updatedAt))
       .limit(1)
-    if (!link) throw new Error("這個帳號沒有連到 Keycloak")
+    if (!link) throw new Refusal("這個帳號沒有連到 Keycloak")
     const [user, groupPaths] = await Promise.all([
       getKeycloakUser(link.sub),
       getKeycloakUserGroupPaths(link.sub),

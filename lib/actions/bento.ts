@@ -1,3 +1,4 @@
+import { Refusal } from "./define"
 import { and, asc, desc, eq, sql } from "drizzle-orm"
 import { z } from "zod"
 
@@ -39,8 +40,8 @@ async function lockOrder(tx: Tx, orderId: string, open = true) {
     .from(bentoOrders)
     .where(eq(bentoOrders.id, orderId))
     .for("update")
-  if (!order) throw new Error("找不到這張訂單")
-  if (open && order.status !== "open") throw new Error("這張訂單已經關了")
+  if (!order) throw new Refusal("找不到這張訂單")
+  if (open && order.status !== "open") throw new Refusal("這張訂單已經關了")
   return order
 }
 
@@ -138,7 +139,7 @@ export const getBentoOrder = defineAction({
       })
       .from(bentoOrders)
       .where(eq(bentoOrders.id, orderId))
-    if (!order) throw new Error("找不到這張訂單")
+    if (!order) throw new Refusal("找不到這張訂單")
     const [[restaurant], sameDay, lines, menu, optionGroups, myRatings] =
       await Promise.all([
         db
@@ -312,23 +313,23 @@ export const addBentoOrderItem = defineAction({
       const ordered = []
       for (const item of items) {
         const dish = dishes.find((row) => row.id === item.menuItemId)
-        if (!dish) throw new Error("有菜不在這家餐廳的菜單上")
+        if (!dish) throw new Refusal("有菜不在這家餐廳的菜單上")
         const picked = new Set(item.optionValueIds)
         const options: BentoLineOption[] = []
         let price = dish.price
         for (const group of groups) {
           const values = group.values.filter((value) => picked.has(value.id))
           if (group.required && values.length === 0)
-            throw new Error(`${dish.name}請選${group.name}`)
+            throw new Refusal(`${dish.name}請選${group.name}`)
           if (!group.multiple && values.length > 1)
-            throw new Error(`${dish.name}的${group.name}只能選一個`)
+            throw new Refusal(`${dish.name}的${group.name}只能選一個`)
           for (const value of values) {
             picked.delete(value.id)
             options.push({ group: group.name, label: value.label })
             price += value.priceDelta
           }
         }
-        if (picked.size > 0) throw new Error("有選項不屬於這家餐廳")
+        if (picked.size > 0) throw new Refusal("有選項不屬於這家餐廳")
         for (let n = 0; n < item.quantity; n++)
           ordered.push({
             orderId,
@@ -367,7 +368,7 @@ export const removeBentoOrderItem = defineAction({
       })
       .from(bentoOrderItems)
       .where(eq(bentoOrderItems.id, lineId))
-    if (!line) throw new Error("找不到這份餐點")
+    if (!line) throw new Refusal("找不到這份餐點")
     if (line.userId !== actor.userId) await requireAdmin(actor, "bento")
     return db.transaction(async (tx) => {
       await lockOrder(tx, line.orderId)
@@ -398,7 +399,7 @@ export const rateBentoDish = defineAction({
         )
       )
       .limit(1)
-    if (!ordered) throw new Error("只能評你點過的菜")
+    if (!ordered) throw new Refusal("只能評你點過的菜")
     await db
       .insert(bentoRatings)
       .values({ menuItemId, userId: actor.userId, score })
@@ -418,7 +419,7 @@ export const copyBentoOrder = defineAction({
   kind: "mutation",
   input: z.object({ orderId: id, fromUserId: id }),
   run: async (actor, { orderId, fromUserId }) => {
-    if (fromUserId === actor.userId) throw new Error("不能偷學自己")
+    if (fromUserId === actor.userId) throw new Refusal("不能偷學自己")
     return db.transaction(async (tx) => {
       await lockOrder(tx, orderId)
       const source = await tx
@@ -431,7 +432,7 @@ export const copyBentoOrder = defineAction({
           )
         )
         .orderBy(asc(bentoOrderItems.createdAt))
-      if (source.length === 0) throw new Error("對方在這張訂單沒有點餐")
+      if (source.length === 0) throw new Refusal("對方在這張訂單沒有點餐")
       await tx
         .delete(bentoOrderItems)
         .where(
@@ -468,8 +469,8 @@ export const createBentoOrder = defineAction({
       .select({ active: bentoRestaurants.active })
       .from(bentoRestaurants)
       .where(eq(bentoRestaurants.id, restaurantId))
-    if (!restaurant) throw new Error("找不到這家餐廳")
-    if (!restaurant.active) throw new Error("這家餐廳停用了")
+    if (!restaurant) throw new Refusal("找不到這家餐廳")
+    if (!restaurant.active) throw new Refusal("這家餐廳停用了")
     const [created] = await db
       .insert(bentoOrders)
       .values({
@@ -490,7 +491,7 @@ const setStatus =
       .set({ status, closedAt: status === "closed" ? new Date() : null })
       .where(eq(bentoOrders.id, orderId))
       .returning({ id: bentoOrders.id, status: bentoOrders.status })
-    if (!updated) throw new Error("找不到這張訂單")
+    if (!updated) throw new Refusal("找不到這張訂單")
     return updated
   }
 
@@ -529,7 +530,7 @@ export const deleteBentoOrder = defineAction({
       .delete(bentoOrders)
       .where(eq(bentoOrders.id, orderId))
       .returning({ id: bentoOrders.id })
-    if (removed.length === 0) throw new Error("找不到這張訂單")
+    if (removed.length === 0) throw new Refusal("找不到這張訂單")
     return { orderId }
   },
 })

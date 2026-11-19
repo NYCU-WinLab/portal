@@ -1,3 +1,4 @@
+import { Refusal } from "./define"
 import { desc, eq, sql } from "drizzle-orm"
 import { z } from "zod"
 
@@ -23,7 +24,7 @@ async function memberName(applicantId: string) {
     .select({ name: user.name })
     .from(user)
     .where(eq(user.id, applicantId))
-  if (!member) throw new Error("找不到這位成員")
+  if (!member) throw new Refusal("找不到這位成員")
   return member.name
 }
 
@@ -265,7 +266,7 @@ export const updateReimburseEgress = defineAction({
       .set({ ...changes, ...applicant })
       .where(eq(reimburseEgress.id, entryId))
       .returning({ id: reimburseEgress.id })
-    if (!updated) throw new Error("找不到這筆支出")
+    if (!updated) throw new Refusal("找不到這筆支出")
     return updated
   },
 })
@@ -283,7 +284,7 @@ export const deleteReimburseEgress = defineAction({
       .delete(reimburseEgress)
       .where(eq(reimburseEgress.id, entryId))
       .returning({ id: reimburseEgress.id })
-    if (removed.length === 0) throw new Error("找不到這筆支出")
+    if (removed.length === 0) throw new Refusal("找不到這筆支出")
     return { entryId }
   },
 })
@@ -331,7 +332,7 @@ export const updateReimburseIngress = defineAction({
       .set(changes)
       .where(eq(reimburseIngress.id, entryId))
       .returning({ id: reimburseIngress.id })
-    if (!updated) throw new Error("找不到這筆收入")
+    if (!updated) throw new Refusal("找不到這筆收入")
     return updated
   },
 })
@@ -349,7 +350,7 @@ export const deleteReimburseIngress = defineAction({
       .delete(reimburseIngress)
       .where(eq(reimburseIngress.id, entryId))
       .returning({ id: reimburseIngress.id })
-    if (removed.length === 0) throw new Error("找不到這筆收入")
+    if (removed.length === 0) throw new Refusal("找不到這筆收入")
     return { entryId }
   },
 })

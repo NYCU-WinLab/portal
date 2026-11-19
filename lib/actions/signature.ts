@@ -1,3 +1,4 @@
+import { Refusal } from "./define"
 import { eq } from "drizzle-orm"
 import { z } from "zod"
 
@@ -79,7 +80,7 @@ export const setMySignature = defineAction({
       dataUrl
     )!
     const image = Buffer.from(base64, "base64")
-    if (image.length > SIGNATURE_LIMIT) throw new Error("簽名圖片最大 1 MB")
+    if (image.length > SIGNATURE_LIMIT) throw new Refusal("簽名圖片最大 1 MB")
     checkSignatureImage(image, `image/${type}`)
     const values = {
       userId: actor.userId,
