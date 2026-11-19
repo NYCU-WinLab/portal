@@ -1,3 +1,4 @@
+import { Refusal } from "./define"
 import { eq } from "drizzle-orm"
 import { z } from "zod"
 
@@ -76,7 +77,7 @@ export async function requirePaper(tx: Tx, paperId: string) {
     .select({ id: papers.id })
     .from(papers)
     .where(eq(papers.id, paperId))
-  if (!paper) throw new Error("這篇不在論文清單裡")
+  if (!paper) throw new Refusal("這篇不在論文清單裡")
 }
 
 export const updateMyLabMeeting = defineAction({
@@ -100,17 +101,17 @@ export const updateMyLabMeeting = defineAction({
         meeting.presenterId !== actor.userId &&
         !(await isAdmin(actor, "meetings"))
       )
-        throw new Error(`${date} 不是你報告`)
+        throw new Refusal(`${date} 不是你報告`)
       const change: Partial<typeof meetings.$inferInsert> = {}
       if (paperId !== undefined) {
         if (meeting.kind !== "regular" && paperId !== null)
-          throw new Error("只有一般報告週選論文清單")
+          throw new Refusal("只有一般報告週選論文清單")
         if (paperId) await requirePaper(tx, paperId)
         change.paperId = paperId
       }
       if (title !== undefined) {
         if (meeting.kind === "regular")
-          throw new Error("一般報告週的題目來自論文清單")
+          throw new Refusal("一般報告週的題目來自論文清單")
         change.title = title
       }
       for (const [key, value] of Object.entries(links))

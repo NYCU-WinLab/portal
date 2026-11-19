@@ -1,3 +1,4 @@
+import { Refusal } from "./define"
 import {
   and,
   asc,
@@ -123,7 +124,7 @@ async function findRestaurant(restaurantId: string) {
     .select()
     .from(bentoRestaurants)
     .where(eq(bentoRestaurants.id, restaurantId))
-  if (!restaurant) throw new Error("找不到這家餐廳")
+  if (!restaurant) throw new Refusal("找不到這家餐廳")
   return restaurant
 }
 
@@ -182,7 +183,7 @@ export const getBentoRestaurant = defineAction({
   run: async (actor, { restaurantId }) => {
     const restaurant = await findRestaurant(restaurantId)
     if (!restaurant.active && !(await isAdmin(actor, "bento")))
-      throw new Error("找不到這家餐廳")
+      throw new Refusal("找不到這家餐廳")
     const [menu, optionGroups] = await Promise.all([
       loadMenu(restaurantId),
       loadOptionGroups(restaurantId),
@@ -264,7 +265,7 @@ export const updateBentoRestaurant = defineAction({
       .set(changes)
       .where(eq(bentoRestaurants.id, restaurantId))
       .returning({ id: bentoRestaurants.id, name: bentoRestaurants.name })
-    if (!updated) throw new Error("找不到這家餐廳")
+    if (!updated) throw new Refusal("找不到這家餐廳")
     return updated
   },
 })
@@ -283,12 +284,12 @@ export const deleteBentoRestaurant = defineAction({
       .from(bentoOrders)
       .where(eq(bentoOrders.restaurantId, restaurantId))
       .limit(1)
-    if (used) throw new Error("這家餐廳有訂單，改成停用")
+    if (used) throw new Refusal("這家餐廳有訂單，改成停用")
     const removed = await db
       .delete(bentoRestaurants)
       .where(eq(bentoRestaurants.id, restaurantId))
       .returning({ id: bentoRestaurants.id })
-    if (removed.length === 0) throw new Error("找不到這家餐廳")
+    if (removed.length === 0) throw new Refusal("找不到這家餐廳")
     return { restaurantId }
   },
 })
@@ -332,7 +333,7 @@ export const setBentoMenu = defineAction({
             )
           )
         if (existing.length !== new Set(kept).size)
-          throw new Error("有菜不屬於這家餐廳")
+          throw new Refusal("有菜不屬於這家餐廳")
       }
       await tx
         .delete(bentoMenuItems)
@@ -449,7 +450,7 @@ export const setBentoMenuImage = defineAction({
     }
     const data = Buffer.from(image.base64, "base64")
     if (data.length > MENU_IMAGE_LIMIT)
-      throw new Error(
+      throw new Refusal(
         `圖片最大 ${MENU_IMAGE_LIMIT / 1024 / 1024} MB，這張 ${(data.length / 1024 / 1024).toFixed(1)} MB`
       )
     const values = {

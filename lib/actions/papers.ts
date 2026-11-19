@@ -1,3 +1,4 @@
+import { Refusal } from "./define"
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm"
 import { z } from "zod"
 
@@ -149,7 +150,7 @@ export const addPaperTag = defineAction({
         .returning({ id: paperTags.id, name: paperTags.name })
       return added
     } catch (error) {
-      if (isUniqueViolation(error)) throw new Error(`已經有「${name}」`)
+      if (isUniqueViolation(error)) throw new Refusal(`已經有「${name}」`)
       throw error
     }
   },
@@ -169,10 +170,10 @@ export const renamePaperTag = defineAction({
         .set({ name })
         .where(eq(paperTags.id, id))
         .returning({ id: paperTags.id })
-      if (renamed.length === 0) throw new Error("找不到這個標籤")
+      if (renamed.length === 0) throw new Refusal("找不到這個標籤")
       return { id, name }
     } catch (error) {
-      if (isUniqueViolation(error)) throw new Error(`已經有「${name}」`)
+      if (isUniqueViolation(error)) throw new Refusal(`已經有「${name}」`)
       throw error
     }
   },
@@ -191,7 +192,7 @@ export const deletePaperTag = defineAction({
       .delete(paperTags)
       .where(eq(paperTags.id, id))
       .returning({ id: paperTags.id })
-    if (removed.length === 0) throw new Error("找不到這個標籤")
+    if (removed.length === 0) throw new Refusal("找不到這個標籤")
     return { id }
   },
 })
@@ -216,7 +217,7 @@ async function setTags(
     .select({ id: paperTags.id })
     .from(paperTags)
     .where(inArray(paperTags.id, unique))
-  if (known.length !== unique.length) throw new Error("有標籤不存在")
+  if (known.length !== unique.length) throw new Refusal("有標籤不存在")
   await tx
     .insert(paperTagLinks)
     .values(unique.map((tagId) => ({ paperId, tagId })))
@@ -257,7 +258,7 @@ export const updatePaper = defineAction({
         .set(input)
         .where(eq(papers.id, id))
         .returning({ id: papers.id })
-      if (updated.length === 0) throw new Error("找不到這篇論文")
+      if (updated.length === 0) throw new Refusal("找不到這篇論文")
       if (tagIds) await setTags(tx, id, tagIds)
       return { id }
     })
@@ -278,12 +279,12 @@ export const deletePaper = defineAction({
       .from(meetings)
       .where(and(eq(meetings.paperId, id)))
       .limit(1)
-    if (used) throw new Error(`${used.date} 的報告用了這篇，不能刪`)
+    if (used) throw new Refusal(`${used.date} 的報告用了這篇，不能刪`)
     const removed = await db
       .delete(papers)
       .where(eq(papers.id, id))
       .returning({ id: papers.id })
-    if (removed.length === 0) throw new Error("找不到這篇論文")
+    if (removed.length === 0) throw new Refusal("找不到這篇論文")
     return { id }
   },
 })

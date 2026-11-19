@@ -1,3 +1,4 @@
+import { Refusal } from "./define"
 import { AsyncLocalStorage } from "node:async_hooks"
 
 import {
@@ -217,8 +218,8 @@ export const listProjectGroups = defineAction({
 
 async function gitlabPathOf(groupName: string) {
   const group = (await projectGroups()).find((g) => g.name === groupName)
-  if (!group) throw new Error(`沒有「${groupName}」這個專案群組`)
-  if (!group.gitlabPath) throw new Error(`「${group.label}」沒有連到 GitLab`)
+  if (!group) throw new Refusal(`沒有「${groupName}」這個專案群組`)
+  if (!group.gitlabPath) throw new Refusal(`「${group.label}」沒有連到 GitLab`)
   return group.gitlabPath
 }
 
@@ -246,14 +247,14 @@ async function resolveEpic(
   forSeries: boolean
 ) {
   if (!ref) return { issueRefs: [], deliverables: [] as string[] }
-  if (!groupName) throw new Error("要先選專案群組才能選 Epic")
+  if (!groupName) throw new Refusal("要先選專案群組才能選 Epic")
   const path = await gitlabPathOf(groupName)
   const iid = epicIid(ref, path)
-  if (iid === null) throw new Error("Epic 不屬於這個群組")
+  if (iid === null) throw new Refusal("Epic 不屬於這個群組")
   const epic = await getEpic(path, iid)
-  if (!epic) throw new Error(`Epic &${iid} 不存在`)
+  if (!epic) throw new Refusal(`Epic &${iid} 不存在`)
   if (forSeries && epic.kind !== "sync")
-    throw new Error("固定會議只能選 Sync 類的 Epic")
+    throw new Refusal("固定會議只能選 Sync 類的 Epic")
   const issues = await epicIssues(path, epic)
   return {
     issueRefs: [`${path}&${epic.iid}`],
@@ -274,9 +275,9 @@ export const getEpicDeliverables = defineAction({
   run: async (_actor, { group, epic }) => {
     const path = await gitlabPathOf(group)
     const iid = epicIid(epic, path)
-    if (iid === null) throw new Error("Epic 不屬於這個群組")
+    if (iid === null) throw new Refusal("Epic 不屬於這個群組")
     const found = await getEpic(path, iid)
-    if (!found) throw new Error(`Epic &${iid} 不存在`)
+    if (!found) throw new Refusal(`Epic &${iid} 不存在`)
     const issues = await epicIssues(path, found)
     return {
       kind: found.kind,
@@ -319,7 +320,7 @@ export async function resolveAttendees(input: {
   let out: Attendee[] = []
   if (input.group && input.inviteGroup) {
     const group = (await projectGroups()).find((g) => g.name === input.group)
-    if (!group) throw new Error(`沒有「${input.group}」這個專案群組`)
+    if (!group) throw new Refusal(`沒有「${input.group}」這個專案群組`)
     out = mergeAttendees(
       out,
       group.members.map((m) => ({
@@ -350,10 +351,10 @@ export async function resolveAttendees(input: {
         },
       ])
   }
-  if (unknown.length) throw new Error(`找不到成員：${unknown.join("、")}`)
+  if (unknown.length) throw new Refusal(`找不到成員：${unknown.join("、")}`)
   if (input.includeAdvisor) {
     const advisor = everyone.find((m) => m.username === ADVISOR_USERNAME)
-    if (!advisor) throw new Error("找不到老師的帳號")
+    if (!advisor) throw new Refusal("找不到老師的帳號")
     // No username: the advisor never names the recording's project.
     out = mergeAttendees(out, [{ name: advisor.name, email: advisor.email }])
   }
@@ -628,7 +629,7 @@ export async function withLease<T>(
       .returning({ key: bookingLeases.key })
     if (taken.length) break
     if (attempt >= 120)
-      throw new Error("同一時段的另一筆預約還在處理，稍後再試")
+      throw new Refusal("同一時段的另一筆預約還在處理，稍後再試")
     await new Promise((resolve) => setTimeout(resolve, 500))
   }
   try {
@@ -662,7 +663,7 @@ export async function organizerOf(userId: string) {
     })
     .from(user)
     .where(eq(user.id, userId))
-  if (!me) throw new Error("找不到你的帳號")
+  if (!me) throw new Refusal("找不到你的帳號")
   return me
 }
 
@@ -675,9 +676,9 @@ export function roomFor(
   instead = "換個時段或改成線上"
 ) {
   const picked = pickRoom(slots, start, end)
-  if (!picked) throw new Error(`這段時間沒有教室從頭到尾都空著，${instead}`)
+  if (!picked) throw new Refusal(`這段時間沒有教室從頭到尾都空著，${instead}`)
   if (picked.paid && !allowPaid)
-    throw new Error(`只剩付費教室 ${picked.room}，同意付費才能借`)
+    throw new Refusal(`只剩付費教室 ${picked.room}，同意付費才能借`)
   return picked
 }
 
@@ -717,7 +718,7 @@ async function refuseClash(
     (row) => row.id !== except && spansOverlap(row, { start, end })
   )
   if (clash)
-    throw new Error(
+    throw new Refusal(
       `你 ${clash.start} 到 ${clash.end} 已有「${plainTitle(clash)}」`
     )
 }
@@ -757,10 +758,10 @@ export const bookMeeting = defineAction({
     const problem = online
       ? onlineSpanProblem(input.start_time, input.end_time)
       : spanProblem(input.start_time, input.end_time)
-    if (problem) throw new Error(problem)
-    if (input.date < todayInTaipei()) throw new Error("不能借過去的日期")
+    if (problem) throw new Refusal(problem)
+    if (input.date < todayInTaipei()) throw new Refusal("不能借過去的日期")
     if (online && input.date > addDays(todayInTaipei(), ONLINE_AHEAD_DAYS))
-      throw new Error(`線上會議最多預約 ${ONLINE_AHEAD_DAYS} 天後`)
+      throw new Refusal(`線上會議最多預約 ${ONLINE_AHEAD_DAYS} 天後`)
     if (input.repeat !== "none") {
       const standing = await createStandingMeeting(
         actor.userId,
@@ -816,7 +817,7 @@ export const bookMeeting = defineAction({
               eq(roomBookings.endTime, input.end_time)
             )
           )
-        if (standing) throw new Error("你的固定會議已經借好這個時段了")
+        if (standing) throw new Refusal("你的固定會議已經借好這個時段了")
         if (input.online_only)
           await refuseClash(
             actor.userId,
@@ -888,7 +889,7 @@ export const getBookingAgenda = defineAction({
           eq(roomMeetingRequests.kind, "create")
         )
       )
-    if (!row) throw new Error("沒有這個預約")
+    if (!row) throw new Refusal("沒有這個預約")
     const { booking } = row
     const { items, gitlab } = await bookingAgenda(booking)
     return {
@@ -959,7 +960,7 @@ export const cancelMeeting = defineAction({
       .select()
       .from(roomBookings)
       .where(and(eq(roomBookings.id, id), eq(roomBookings.status, "booked")))
-    if (!booking) throw new Error("找不到這筆預約，或已經取消")
+    if (!booking) throw new Refusal("找不到這筆預約，或已經取消")
     if (booking.requestedBy !== actor.userId) {
       // The member booked through their appointment schedule may cancel too.
       const [appointment] = await db
@@ -967,10 +968,12 @@ export const cancelMeeting = defineAction({
         .from(appointments)
         .where(eq(appointments.bookingId, booking.id))
       if (appointment?.ownerId !== actor.userId)
-        throw new Error("只能取消自己的預約")
+        throw new Refusal("只能取消自己的預約")
     }
     if (booking.meetingId)
-      throw new Error("這是週一 Lab Meeting 的會議，請到 /meetings 請管理員改")
+      throw new Refusal(
+        "這是週一 Lab Meeting 的會議，請到 /meetings 請管理員改"
+      )
     return cancelBooking(booking, actor.userId)
   },
 })
@@ -999,39 +1002,39 @@ export const moveMeeting = defineAction({
         .where(
           and(eq(roomBookings.id, input.id), eq(roomBookings.status, "booked"))
         )
-      if (!booking) throw new Error("找不到這筆預約，或已經取消")
+      if (!booking) throw new Refusal("找不到這筆預約，或已經取消")
       if (booking.requestedBy !== actor.userId)
-        throw new Error("只有發起人能改時間")
+        throw new Refusal("只有發起人能改時間")
       if (booking.meetingId)
-        throw new Error("週一 Lab Meeting 請到 /meetings 由報告人或管理員改")
+        throw new Refusal("週一 Lab Meeting 請到 /meetings 由報告人或管理員改")
       if (booking.seriesId)
-        throw new Error("固定會議的單場不能改時間，請取消這場再另外預約")
+        throw new Refusal("固定會議的單場不能改時間，請取消這場再另外預約")
       const [appointment] = await db
         .select({ bookingId: appointments.bookingId })
         .from(appointments)
         .where(eq(appointments.bookingId, booking.id))
       if (appointment)
-        throw new Error("透過預約時段約的會議不能改時間，請取消後重新預約")
+        throw new Refusal("透過預約時段約的會議不能改時間，請取消後重新預約")
       const today = todayInTaipei()
-      if (booking.date < today) throw new Error("過去的會議不能改時間")
+      if (booking.date < today) throw new Refusal("過去的會議不能改時間")
       if (
         booking.date === input.date &&
         booking.startTime === input.start_time &&
         booking.endTime === input.end_time
       )
-        throw new Error("時間沒有變")
+        throw new Refusal("時間沒有變")
       const hasRoom = Boolean(booking.room)
       const problem = hasRoom
         ? spanProblem(input.start_time, input.end_time)
         : onlineSpanProblem(input.start_time, input.end_time)
-      if (problem) throw new Error(problem)
-      if (input.date < today) throw new Error("不能改到過去的日期")
+      if (problem) throw new Refusal(problem)
+      if (input.date < today) throw new Refusal("不能改到過去的日期")
       if (!hasRoom && input.date > addDays(today, ONLINE_AHEAD_DAYS))
-        throw new Error(`線上會議最多預約 ${ONLINE_AHEAD_DAYS} 天後`)
+        throw new Refusal(`線上會議最多預約 ${ONLINE_AHEAD_DAYS} 天後`)
       if (hasRoom && !bookingConfigured())
         throw new Error("Portal 還沒設定系上借用帳號，現在不能改教室時段")
       if (await meetingPending(booking.id))
-        throw new Error("線上會議室還在建立，稍後再改")
+        throw new Refusal("線上會議室還在建立，稍後再改")
       const organizer = await organizerOf(actor.userId)
 
       const { moved, paid } = await withBookingLock(
@@ -1081,7 +1084,8 @@ export const moveMeeting = defineAction({
                   )
                 )
                 .returning()
-              if (!row) throw new Error("這筆預約剛被取消或改過，重新整理再試")
+              if (!row)
+                throw new Refusal("這筆預約剛被取消或改過，重新整理再試")
               await queueMail(
                 tx,
                 inviteMail(row, organizer, "REQUEST", booking)
@@ -1191,7 +1195,7 @@ export async function cancelBooking(
       .from(roomBookings)
       .where(eq(roomBookings.id, read.id))
     if (!booking || booking.status !== "booked")
-      throw new Error("這筆預約已經取消")
+      throw new Refusal("這筆預約已經取消")
     if (booking.externalId && booking.room)
       await release(booking.externalId, {
         room: booking.room,
@@ -1200,11 +1204,11 @@ export async function cancelBooking(
       })
     const cancelled = await db.transaction(async (tx) => {
       const row = await markCancelled(tx, booking, cancelledBy, notify)
-      if (!row) throw new Error("這筆預約已經取消")
+      if (!row) throw new Refusal("這筆預約已經取消")
       // A move that outlived the lease holds another room now: keep the
       // booking, rather than cancel it with that room still held.
       if (row.externalId !== booking.externalId)
-        throw new Error("這筆預約剛改過時間，重新整理再試")
+        throw new Refusal("這筆預約剛改過時間，重新整理再試")
       return row
     })
     const teamsError = await cancelTeamsMeeting(cancelled)

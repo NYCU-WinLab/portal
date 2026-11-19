@@ -1,3 +1,4 @@
+import { Refusal } from "./define"
 import { and, asc, eq, gt, gte, lt, lte, or, sql } from "drizzle-orm"
 import { alias } from "drizzle-orm/pg-core"
 import { z } from "zod"
@@ -298,15 +299,15 @@ export const setAppointmentSchedule = defineAction({
       const from = minutesOf(w.start)!
       const to = minutesOf(w.end)!
       if (to - from < input.slot_minutes)
-        throw new Error(
+        throw new Refusal(
           `${w.start} 到 ${w.end} 放不下一段 ${input.slot_minutes} 分鐘`
         )
       const next = windows[i + 1]
       if (next && next.weekday === w.weekday && spansOverlap(w, next))
-        throw new Error(`同一天的時段 ${w.start} 和 ${next.start} 重疊了`)
+        throw new Refusal(`同一天的時段 ${w.start} 和 ${next.start} 重疊了`)
     }
     const { sources } = await calendarState(actor.userId)
-    if (sources === 0) throw new Error("先加入行事曆，才能開放預約")
+    if (sources === 0) throw new Refusal("先加入行事曆，才能開放預約")
     const values = {
       windows,
       slotMinutes: input.slot_minutes,
@@ -381,9 +382,9 @@ export const bookAppointment = defineAction({
     allow_paid: z.boolean().default(false),
   }),
   run: async (actor, input) => {
-    if (input.user_id === actor.userId) throw new Error("不能預約自己")
+    if (input.user_id === actor.userId) throw new Refusal("不能預約自己")
     const owner = await ownerOf(input.user_id)
-    if (!owner) throw new Error("這位成員沒有連結行事曆")
+    if (!owner) throw new Refusal("這位成員沒有連結行事曆")
     // Both members' booking locks for the day, in a fixed order: no other
     // booking of either one (by hand, a standing meeting or another
     // appointment, either way round) can take the slot meanwhile.
@@ -398,15 +399,15 @@ export const bookAppointment = defineAction({
         )
         const fresh = await ownerOf(owner.id)
         if (!fresh || !current(fresh))
-          throw new Error(`${owner.name} 的行事曆現在同步不了，稍後再試`)
+          throw new Refusal(`${owner.name} 的行事曆現在同步不了，稍後再試`)
         const schedule = await scheduleOf(owner.id)
-        if (!schedule) throw new Error(`${owner.name} 沒有開放預約`)
+        if (!schedule) throw new Refusal(`${owner.name} 沒有開放預約`)
         const today = todayInTaipei()
         if (input.date > addDays(today, schedule.aheadDays))
-          throw new Error(`最多預約 ${schedule.aheadDays} 天後`)
+          throw new Refusal(`最多預約 ${schedule.aheadDays} 天後`)
         const [free] = await freeSlots(owner, schedule, input.date, input.date)
         if (!free?.starts.includes(input.start_time))
-          throw new Error("這個時段已經沒空了，換一個時段")
+          throw new Refusal("這個時段已經沒空了，換一個時段")
         const end = clock(minutesOf(input.start_time)! + schedule.slotMinutes)
         const booked = await bookMeeting.run(
           actor,
@@ -422,7 +423,7 @@ export const bookAppointment = defineAction({
             agenda: input.agenda,
           })
         )
-        if (!("id" in booked)) throw new Error("預約沒有成立")
+        if (!("id" in booked)) throw new Refusal("預約沒有成立")
         try {
           await db
             .insert(appointments)

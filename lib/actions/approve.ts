@@ -1,3 +1,4 @@
+import { Refusal } from "./define"
 import { and, asc, desc, eq, inArray, isNull, or, sql } from "drizzle-orm"
 import { z } from "zod"
 
@@ -45,7 +46,7 @@ async function findDocument(documentId: string) {
     })
     .from(approveDocuments)
     .where(eq(approveDocuments.id, documentId))
-  if (!doc) throw new Error("找不到這份文件")
+  if (!doc) throw new Refusal("找不到這份文件")
   return doc
 }
 
@@ -62,14 +63,14 @@ async function visibleDocument(actor: Actor, documentId: string) {
         eq(approveSigners.signerId, actor.userId)
       )
     )
-  if (!signer) throw new Error("找不到這份文件")
+  if (!signer) throw new Refusal("找不到這份文件")
   return doc
 }
 
 async function draftOf(actor: Actor, documentId: string) {
   const doc = await findDocument(documentId)
-  if (doc.createdBy !== actor.userId) throw new Error("只能改自己建立的文件")
-  if (doc.status !== "draft") throw new Error("已經送出，不能再改")
+  if (doc.createdBy !== actor.userId) throw new Refusal("只能改自己建立的文件")
+  if (doc.status !== "draft") throw new Refusal("已經送出，不能再改")
   return doc
 }
 
@@ -241,7 +242,7 @@ export const getApproveFile = defineAction({
       .select({ pdf: approveDocuments.pdf })
       .from(approveDocuments)
       .where(eq(approveDocuments.id, doc.id))
-    if (!row?.pdf) throw new Error("這份文件還沒有上傳 PDF")
+    if (!row?.pdf) throw new Refusal("這份文件還沒有上傳 PDF")
     return {
       filename: `${doc.title}.pdf`,
       contentType: "application/pdf",
@@ -263,7 +264,7 @@ export const createApproveDocument = defineAction({
   }),
   run: async (actor, { title, base64 }) => {
     const raw = Buffer.from(base64, "base64")
-    if (raw.length > PDF_LIMIT) throw new Error("PDF 最大 10 MB")
+    if (raw.length > PDF_LIMIT) throw new Refusal("PDF 最大 10 MB")
     const { bytes } = await processUpload({
       file: new Uint8Array(raw),
       contentType: "application/pdf",
@@ -316,7 +317,7 @@ export const setApproveFields = defineAction({
   run: async (actor, input) => {
     await draftOf(actor, input.id)
     if (new Set(input.fields.map((f) => f.id)).size !== input.fields.length)
-      throw new Error("欄位 id 重複")
+      throw new Refusal("欄位 id 重複")
     const signerIds = [
       ...new Set(input.fields.flatMap((f) => (f.signerId ? [f.signerId] : []))),
     ]
@@ -325,7 +326,8 @@ export const setApproveFields = defineAction({
         .select({ id: user.id })
         .from(user)
         .where(inArray(user.id, signerIds))
-      if (found.length !== signerIds.length) throw new Error("有簽核人不是成員")
+      if (found.length !== signerIds.length)
+        throw new Refusal("有簽核人不是成員")
     }
     const taken = input.fields.length
       ? await db
@@ -341,7 +343,7 @@ export const setApproveFields = defineAction({
             )
           )
       : []
-    if (taken.length) throw new Error("欄位 id 已被別份文件使用")
+    if (taken.length) throw new Refusal("欄位 id 已被別份文件使用")
     await db.transaction(async (tx) => {
       await tx
         .delete(approveFields)
@@ -372,13 +374,14 @@ export const submitApproveDocument = defineAction({
   input: z.object({ id }),
   run: async (actor, input) => {
     const doc = await draftOf(actor, input.id)
-    if (!doc.hasPdf) throw new Error("還沒有上傳 PDF")
+    if (!doc.hasPdf) throw new Refusal("還沒有上傳 PDF")
     const fields = await db
       .select({ signerId: approveFields.signerId })
       .from(approveFields)
       .where(eq(approveFields.documentId, doc.id))
-    if (!fields.length) throw new Error("還沒有放任何欄位")
-    if (fields.some((f) => !f.signerId)) throw new Error("有欄位還沒指定簽核人")
+    if (!fields.length) throw new Refusal("還沒有放任何欄位")
+    if (fields.some((f) => !f.signerId))
+      throw new Refusal("有欄位還沒指定簽核人")
     const signerIds = [...new Set(fields.map((f) => f.signerId!))]
     const [creator] = await db
       .select({ name: user.name })
@@ -399,7 +402,7 @@ export const submitApproveDocument = defineAction({
           )
         )
         .returning({ id: approveDocuments.id })
-      if (!sent) throw new Error("已經送出了")
+      if (!sent) throw new Refusal("已經送出了")
       await tx
         .insert(approveSigners)
         .values(signerIds.map((signerId) => ({ documentId: doc.id, signerId })))
@@ -430,7 +433,7 @@ export const signApproveDocument = defineAction({
   }),
   run: async (actor, input) => {
     const doc = await visibleDocument(actor, input.id)
-    if (doc.status !== "pending") throw new Error("這份文件不在簽核中")
+    if (doc.status !== "pending") throw new Refusal("這份文件不在簽核中")
     const [signature] = await db
       .select({ image: signatures.image, type: signatures.contentType })
       .from(signatures)
@@ -450,7 +453,7 @@ export const signApproveDocument = defineAction({
         .from(approveDocuments)
         .where(eq(approveDocuments.id, doc.id))
         .for("update")
-      if (locked?.status !== "pending") throw new Error("這份文件不在簽核中")
+      if (locked?.status !== "pending") throw new Refusal("這份文件不在簽核中")
       // Locks the member's row so a double submit signs once.
       const [me] = await tx
         .select({ signedAt: approveSigners.signedAt })
@@ -462,8 +465,8 @@ export const signApproveDocument = defineAction({
           )
         )
         .for("update")
-      if (!me) throw new Error("你不是這份文件的簽核人")
-      if (me.signedAt) throw new Error("你已經簽過了")
+      if (!me) throw new Refusal("你不是這份文件的簽核人")
+      if (me.signedAt) throw new Refusal("你已經簽過了")
       const fields = await tx
         .select({ id: approveFields.id, category: approveFields.category })
         .from(approveFields)
@@ -476,11 +479,11 @@ export const signApproveDocument = defineAction({
       const unknown = Object.keys(input.values).filter(
         (key) => !fields.some((f) => f.id === key && f.category !== "signature")
       )
-      if (unknown.length) throw new Error("有欄位不是你要填的")
+      if (unknown.length) throw new Refusal("有欄位不是你要填的")
       const filled = fields.map((f) => {
         if (f.category === "signature") {
           if (!signature?.image || !signature.type)
-            throw new Error("你還沒有存簽名，先到個人頁簽名")
+            throw new Refusal("你還沒有存簽名，先到個人頁簽名")
           return {
             ...f,
             value: `data:${signature.type};base64,${signature.image.toString("base64")}`,
@@ -491,7 +494,7 @@ export const signApproveDocument = defineAction({
           (f.category === "other"
             ? ""
             : (saved.find((s) => s.category === f.category)?.value ?? ""))
-        if (!value) throw new Error("還有欄位沒填")
+        if (!value) throw new Refusal("還有欄位沒填")
         return { ...f, value }
       })
       for (const f of filled)
@@ -569,8 +572,9 @@ export const deleteApproveDocument = defineAction({
   input: z.object({ id }),
   run: async (actor, input) => {
     const doc = await findDocument(input.id)
-    if (doc.createdBy !== actor.userId) throw new Error("只能刪自己建立的文件")
-    if (doc.status === "completed") throw new Error("已完成的文件不能刪")
+    if (doc.createdBy !== actor.userId)
+      throw new Refusal("只能刪自己建立的文件")
+    if (doc.status === "completed") throw new Refusal("已完成的文件不能刪")
     await db.delete(approveDocuments).where(eq(approveDocuments.id, doc.id))
     return { deleted: true }
   },

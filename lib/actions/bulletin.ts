@@ -1,3 +1,4 @@
+import { Refusal } from "./define"
 import { desc, eq, sql } from "drizzle-orm"
 import { z } from "zod"
 
@@ -86,7 +87,7 @@ export const createAnnouncement = defineAction({
   run: async (actor, post) => {
     const bcc = post.notify ? await labEmails() : []
     if (post.notify && bcc.length === 0)
-      throw new Error("找不到實驗室成員的信箱，沒有發出")
+      throw new Refusal("找不到實驗室成員的信箱，沒有發出")
     return db.transaction(async (tx) => {
       const mailId = post.notify
         ? await queueMail(tx, { to: [], bcc, ...announcementMail(post) })
@@ -119,7 +120,7 @@ export const updateAnnouncement = defineAction({
       .set({ title, content, updatedAt: sql`now()` })
       .where(eq(announcements.id, id))
       .returning({ id: announcements.id })
-    if (!updated) throw new Error("找不到這則公告")
+    if (!updated) throw new Refusal("找不到這則公告")
     return updated
   },
 })
@@ -138,7 +139,7 @@ export const deleteAnnouncement = defineAction({
         .delete(announcements)
         .where(eq(announcements.id, id))
         .returning({ id: announcements.id, mailId: announcements.mailId })
-      if (!removed) throw new Error("找不到這則公告")
+      if (!removed) throw new Refusal("找不到這則公告")
       if (removed.mailId)
         await tx
           .delete(mailOutbox)

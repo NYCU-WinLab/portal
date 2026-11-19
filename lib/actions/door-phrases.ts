@@ -1,3 +1,4 @@
+import { Refusal } from "./define"
 import {
   and,
   asc,
@@ -125,16 +126,16 @@ async function save(
   values: Omit<typeof doorPhrases.$inferInsert, "id">,
   where?: { id: string; scope: SQL }
 ) {
-  if (!values.before && !values.after) throw new Error("名字前後至少填一個")
+  if (!values.before && !values.after) throw new Refusal("名字前後至少填一個")
   if (values.startsAt === values.endsAt)
-    throw new Error("開始和結束不能是同一個時間")
+    throw new Refusal("開始和結束不能是同一個時間")
   if (where) {
     const [row] = await tx
       .update(doorPhrases)
       .set({ ...values, updatedAt: sql`now()` })
       .where(and(eq(doorPhrases.id, where.id), where.scope))
       .returning()
-    if (!row) throw new Error("找不到這條問候語")
+    if (!row) throw new Refusal("找不到這條問候語")
     return row
   }
   if (values.userId) {
@@ -147,7 +148,7 @@ async function save(
       .select({ count: sql<number>`count(*)::int` })
       .from(doorPhrases)
       .where(eq(doorPhrases.userId, values.userId))
-    if (count >= OWN_MAX) throw new Error(`每人最多 ${OWN_MAX} 句`)
+    if (count >= OWN_MAX) throw new Refusal(`每人最多 ${OWN_MAX} 句`)
   }
   const [row] = await tx.insert(doorPhrases).values(values).returning()
   return row
@@ -249,7 +250,7 @@ export const deleteDoorPhrase = defineAction({
       .delete(doorPhrases)
       .where(and(eq(doorPhrases.id, id), await scope(actor, isDefault)))
       .returning({ id: doorPhrases.id })
-    if (!row) throw new Error("找不到這條問候語")
+    if (!row) throw new Refusal("找不到這條問候語")
     return { id }
   },
 })
@@ -288,7 +289,7 @@ export const getDoorVoiceClip = defineAction({
   input: z.object({ id: z.uuid("找不到這段語音") }),
   run: async (actor, { id }) => {
     const clip = await panelVoiceClip(id)
-    if (!clip) throw new Error("找不到這段語音")
+    if (!clip) throw new Refusal("找不到這段語音")
     return { contentType: clip.type, base64: clip.bytes.toString("base64") }
   },
 })
@@ -307,7 +308,7 @@ export const deleteDoorVoiceClip = defineAction({
       .delete(doorVoiceClips)
       .where(eq(doorVoiceClips.id, id))
       .returning({ text: doorVoiceClips.text })
-    if (!row) throw new Error("找不到這段語音")
+    if (!row) throw new Refusal("找不到這段語音")
     return { id, text: row.text }
   },
 })

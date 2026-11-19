@@ -1,3 +1,4 @@
+import { Refusal } from "./define"
 import {
   and,
   asc,
@@ -312,7 +313,7 @@ async function readSource(
   left: { steps: number }
 ): Promise<{ events: GoogleEvent[]; truncated?: boolean }> {
   if (source.kind === "google") {
-    if (!accessToken) throw new Error("no Google access")
+    if (!accessToken) throw new Refusal("no Google access")
     return {
       events:
         source.accessRole === "freeBusyReader"
@@ -707,7 +708,7 @@ async function ownSource(userId: string, id: string) {
     .select()
     .from(calendarSources)
     .where(and(eq(calendarSources.id, id), eq(calendarSources.userId, userId)))
-  if (!source) throw new Error("找不到這個行事曆")
+  if (!source) throw new Refusal("找不到這個行事曆")
   return source
 }
 
@@ -732,7 +733,7 @@ export const setCalendarSource = defineAction({
       source.kind === "google" &&
       source.accessRole !== "owner"
     )
-      throw new Error("只有自己的 Google 日曆可以公開標題")
+      throw new Refusal("只有自己的 Google 日曆可以公開標題")
     const [updated] = await db
       .update(calendarSources)
       .set({
@@ -783,7 +784,7 @@ export const addCalendarSource = defineAction({
         )
       )
     if (total >= MAX_SOURCES)
-      throw new Error(`最多加入 ${MAX_SOURCES} 個行事曆`)
+      throw new Refusal(`最多加入 ${MAX_SOURCES} 個行事曆`)
     const now = new Date()
     const from = new Date(now.getTime() - BACK_DAYS * 86_400_000)
     const to = new Date(now.getTime() + AHEAD_DAYS * 86_400_000)
@@ -810,7 +811,7 @@ export const addCalendarSource = defineAction({
           )
         )
       if (total >= MAX_SOURCES)
-        throw new Error(`最多加入 ${MAX_SOURCES} 個行事曆`)
+        throw new Refusal(`最多加入 ${MAX_SOURCES} 個行事曆`)
       const [source] = await tx
         .insert(calendarSources)
         .values({
@@ -852,8 +853,8 @@ export const removeCalendarSource = defineAction({
   run: async (actor, input) => {
     const source = await ownSource(actor.userId, input.source_id)
     if (source.kind === "google")
-      throw new Error("Google 日曆用開關關閉，或取消連結 Google")
-    if (source.kind === "portal") throw new Error("WinLab 會議用開關關閉")
+      throw new Refusal("Google 日曆用開關關閉，或取消連結 Google")
+    if (source.kind === "portal") throw new Refusal("WinLab 會議用開關關閉")
     await db.delete(calendarSources).where(eq(calendarSources.id, source.id))
     return { removed: true }
   },
@@ -871,7 +872,7 @@ export const unlinkGoogleCalendar = defineAction({
       .delete(calendarLinks)
       .where(eq(calendarLinks.userId, actor.userId))
       .returning({ refreshToken: calendarLinks.refreshToken })
-    if (!removed) throw new Error("還沒有連結 Google 行事曆")
+    if (!removed) throw new Refusal("還沒有連結 Google 行事曆")
     await db
       .delete(calendarSources)
       .where(
@@ -990,7 +991,7 @@ export const getMemberCalendar = defineAction({
   }),
   run: async (actor, input) => {
     const owner = await ownerOf(input.user_id)
-    if (!owner) throw new Error("這位成員沒有行事曆")
+    if (!owner) throw new Refusal("這位成員沒有行事曆")
     const state = await calendarState(owner.userId)
     const from = input.from ?? todayInTaipei()
     const start = new Date(`${from}T00:00:00+08:00`)

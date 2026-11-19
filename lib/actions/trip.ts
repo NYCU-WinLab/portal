@@ -1,3 +1,4 @@
+import { Refusal } from "./define"
 import { and, asc, count, desc, eq, sql, sum } from "drizzle-orm"
 import { zipSync } from "fflate"
 import { z } from "zod"
@@ -26,7 +27,7 @@ const description = z
 
 async function findTrip(tripId: string) {
   const [trip] = await db.select().from(trips).where(eq(trips.id, tripId))
-  if (!trip) throw new Error("找不到這趟出差")
+  if (!trip) throw new Refusal("找不到這趟出差")
   return trip
 }
 
@@ -47,7 +48,7 @@ async function findFile(actor: Actor, fileId: string) {
   // Someone else's file is not found, rather than forbidden, so ids leak
   // nothing.
   if (!file || (file.userId !== actor.userId && !admin))
-    throw new Error("找不到這個檔案")
+    throw new Refusal("找不到這個檔案")
   return { file, admin, mine: file.userId === actor.userId }
 }
 
@@ -223,7 +224,7 @@ export const exportTripFiles = defineAction({
         )
       )
       .orderBy(asc(tripFiles.createdAt))
-    if (rows.length === 0) throw new Error("還沒有檔案")
+    if (rows.length === 0) throw new Refusal("還沒有檔案")
     const entries: Record<string, Uint8Array> = {}
     for (const row of rows) {
       // No separators, and never "." or ".." so no entry leaves its folder.
@@ -263,10 +264,10 @@ export const uploadTripFile = defineAction({
     { tripId, filename, contentType, base64, description }
   ) => {
     const trip = await findTrip(tripId)
-    if (trip.status !== "open") throw new Error("這趟出差已經關了")
+    if (trip.status !== "open") throw new Refusal("這趟出差已經關了")
     const raw = Buffer.from(base64, "base64")
     if (raw.length > TRIP_FILE_LIMIT)
-      throw new Error(
+      throw new Refusal(
         `檔案最大 ${TRIP_FILE_LIMIT / 1024 / 1024} MB，這個 ${(raw.length / 1024 / 1024).toFixed(1)} MB`
       )
     // Converting, checking and stamping the file happen in the PDF worker.
@@ -305,8 +306,8 @@ export const updateTripFile = defineAction({
   input: z.object({ fileId: id, description }),
   run: async (actor, { fileId, description }) => {
     const { file, mine } = await findFile(actor, fileId)
-    if (!mine) throw new Error("只能改自己的檔案")
-    if (file.status !== "open") throw new Error("這趟出差已經關了")
+    if (!mine) throw new Refusal("只能改自己的檔案")
+    if (file.status !== "open") throw new Refusal("這趟出差已經關了")
     await db
       .update(tripFiles)
       .set({ description })
@@ -325,7 +326,7 @@ export const deleteTripFile = defineAction({
   run: async (actor, { fileId }) => {
     const { file, admin, mine } = await findFile(actor, fileId)
     if (!admin && !(mine && file.status === "open"))
-      throw new Error("這趟出差已經關了")
+      throw new Refusal("這趟出差已經關了")
     await db.delete(tripFiles).where(eq(tripFiles.id, fileId))
     return { fileId }
   },
@@ -382,7 +383,7 @@ export const updateTrip = defineAction({
       })
       .where(eq(trips.id, tripId))
       .returning({ id: trips.id, status: trips.status })
-    if (!updated) throw new Error("找不到這趟出差")
+    if (!updated) throw new Refusal("找不到這趟出差")
     return updated
   },
 })
@@ -400,7 +401,7 @@ export const deleteTrip = defineAction({
       .delete(trips)
       .where(eq(trips.id, tripId))
       .returning({ id: trips.id })
-    if (removed.length === 0) throw new Error("找不到這趟出差")
+    if (removed.length === 0) throw new Refusal("找不到這趟出差")
     return { tripId }
   },
 })

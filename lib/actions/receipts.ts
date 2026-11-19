@@ -1,3 +1,4 @@
+import { Refusal } from "./define"
 import { and, asc, desc, eq, isNotNull, sql } from "drizzle-orm"
 import { z } from "zod"
 
@@ -103,7 +104,7 @@ export const getReceiptFile = defineAction({
       .select({ name: receipts.name, data: receipts.data })
       .from(receipts)
       .where(eq(receipts.id, id))
-    if (!row) throw new Error("找不到這張收據")
+    if (!row) throw new Refusal("找不到這張收據")
     return {
       filename: `${row.name.replace(/[\\/:*?"<>|\u0000-\u001f]/g, "_")}.pdf`,
       contentType: "application/pdf",
@@ -128,7 +129,7 @@ export const uploadReceipt = defineAction({
   run: async (actor, input) => {
     const raw = Buffer.from(input.base64, "base64")
     if (raw.length > RECEIPT_FILE_LIMIT)
-      throw new Error(
+      throw new Refusal(
         `檔案最大 ${RECEIPT_FILE_LIMIT / 1024 / 1024} MB，這個 ${(raw.length / 1024 / 1024).toFixed(1)} MB`
       )
     // Converting and checking the file happen in the PDF worker.
@@ -197,7 +198,7 @@ export const updateReceipt = defineAction({
       .set({ ...changes, updatedAt: sql`now()` })
       .where(eq(receipts.id, id))
       .returning({ id: receipts.id, status: receipts.status })
-    if (!updated) throw new Error("找不到這張收據")
+    if (!updated) throw new Refusal("找不到這張收據")
     return updated
   },
 })
@@ -215,7 +216,7 @@ export const deleteReceipt = defineAction({
       .delete(receipts)
       .where(eq(receipts.id, id))
       .returning({ id: receipts.id })
-    if (!removed) throw new Error("找不到這張收據")
+    if (!removed) throw new Refusal("找不到這張收據")
     return removed
   },
 })

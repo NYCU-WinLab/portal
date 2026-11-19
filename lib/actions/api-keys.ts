@@ -1,3 +1,4 @@
+import { Refusal } from "./define"
 import { createHash, randomBytes } from "node:crypto"
 
 import { and, count, desc, eq, isNull, lt, or, sql } from "drizzle-orm"
@@ -39,7 +40,7 @@ export const listApiKeys = defineAction({
   input: z.object({ all: z.boolean().default(false) }),
   run: async (actor, { all }) => {
     if (all && !(await keyAdmin(actor)))
-      throw new Error("只有 Portal 或門禁管理員能看所有人的金鑰")
+      throw new Refusal("只有 Portal 或門禁管理員能看所有人的金鑰")
     const keys = await db
       .select({
         id: apiKeys.id,
@@ -91,7 +92,7 @@ export const createApiKey = defineAction({
         .from(apiKeys)
         .where(and(eq(apiKeys.userId, actor.userId), isNull(apiKeys.revokedAt)))
       if (active >= MAX_PER_MEMBER)
-        throw new Error(`每人最多 ${MAX_PER_MEMBER} 把金鑰，先撤銷不用的`)
+        throw new Refusal(`每人最多 ${MAX_PER_MEMBER} 把金鑰，先撤銷不用的`)
       const [created] = await tx
         .insert(apiKeys)
         .values({
@@ -127,7 +128,7 @@ export const revokeApiKey = defineAction({
         )
       )
       .returning({ id: apiKeys.id, name: apiKeys.name })
-    if (!revoked) throw new Error("找不到這把金鑰")
+    if (!revoked) throw new Refusal("找不到這把金鑰")
     return revoked
   },
 })

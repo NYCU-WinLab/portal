@@ -1,3 +1,4 @@
+import { Refusal } from "./define"
 import {
   and,
   asc,
@@ -69,7 +70,7 @@ export const generateSemester = defineAction({
     )
     const off = new Map(holidays.map(({ date, reason }) => [date, reason]))
     for (const date of off.keys())
-      if (!dates.includes(date)) throw new Error(`${date} 不在這學期的週次裡`)
+      if (!dates.includes(date)) throw new Refusal(`${date} 不在這學期的週次裡`)
     const window = semesterOf(start)
     return changeSchedule(async (tx) => {
       await tx
@@ -110,7 +111,7 @@ export const addLabMeeting = defineAction({
     title: optionalText(300),
   }),
   run: async (actor, { date, kind, holiday, title }) => {
-    if (kind === "holiday" && !holiday) throw new Error("請填放假原因")
+    if (kind === "holiday" && !holiday) throw new Refusal("請填放假原因")
     return changeSchedule(async (tx) => {
       const [added] = await tx
         .insert(meetings)
@@ -122,7 +123,7 @@ export const addLabMeeting = defineAction({
         })
         .onConflictDoNothing()
         .returning({ date: meetings.date })
-      if (!added) throw new Error(`${date} 已經有會議`)
+      if (!added) throw new Refusal(`${date} 已經有會議`)
       return added
     })
   },
@@ -159,7 +160,7 @@ export const updateLabMeeting = defineAction({
       // A kind change drops what the new kind cannot have.
       if (next.kind !== "holiday") next.holiday = null
       if (next.kind === "holiday" && !next.holiday)
-        throw new Error("請填放假原因")
+        throw new Refusal("請填放假原因")
       if (next.kind === "holiday" || next.kind === "speaker")
         next.presenterId = null
       if (next.kind !== "regular") next.paperId = null
@@ -169,7 +170,8 @@ export const updateLabMeeting = defineAction({
       try {
         await tx.update(meetings).set(change).where(eq(meetings.id, id))
       } catch (error) {
-        if (isUniqueViolation(error)) throw new Error(`${next.date} 已經有會議`)
+        if (isUniqueViolation(error))
+          throw new Refusal(`${next.date} 已經有會議`)
         throw error
       }
       // A Teams meeting already made for the old date, time or place.
@@ -231,15 +233,15 @@ export const swapLabMeetings = defineAction({
   kind: "mutation",
   input: z.object({ first: isoDate, second: isoDate }),
   run: async (actor, { first, second }) => {
-    if (first === second) throw new Error("請選兩個不同的週")
+    if (first === second) throw new Refusal("請選兩個不同的週")
     if (semesterOf(first).start !== semesterOf(second).start)
-      throw new Error("只能交換同一學期的兩週")
+      throw new Refusal("只能交換同一學期的兩週")
     return changeSchedule(async (tx) => {
       const a = await meetingOn(tx, first)
       const b = await meetingOn(tx, second)
       for (const row of [a, b])
         if (row.kind === "holiday" || row.kind === "speaker")
-          throw new Error(`${row.date} 是放假或演講週，不能交換`)
+          throw new Refusal(`${row.date} 是放假或演講週，不能交換`)
       const pick = (row: typeof a) =>
         Object.fromEntries(swapped.map((key) => [key, row[key]]))
       await tx.update(meetings).set(pick(b)).where(eq(meetings.id, a.id))
@@ -279,7 +281,7 @@ export const fillPresenters = defineAction({
       const turn = (await presenterRoster(tx))
         .filter((row) => row.inRotation)
         .map((row) => row.userId)
-      if (turn.length === 0) throw new Error("報告順序是空的")
+      if (turn.length === 0) throw new Refusal("報告順序是空的")
       const today = taipeiToday()
       const [last] = await tx
         .select({ presenterId: meetings.presenterId })
@@ -332,9 +334,9 @@ export const setQuestioners = defineAction({
   run: async (actor, { date, userIds }) => {
     return changeSchedule(async (tx) => {
       const meeting = await meetingOn(tx, date)
-      if (date < taipeiToday()) throw new Error(`${date} 已經過了`)
+      if (date < taipeiToday()) throw new Refusal(`${date} 已經過了`)
       if (userIds.includes(meeting.presenterId ?? ""))
-        throw new Error("報告人不能當自己那週的提問人")
+        throw new Refusal("報告人不能當自己那週的提問人")
       await tx
         .delete(meetingQuestioners)
         .where(eq(meetingQuestioners.meetingId, meeting.id))

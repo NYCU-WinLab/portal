@@ -1,3 +1,4 @@
+import { Refusal } from "./define"
 import { and, desc, eq, gte, sql } from "drizzle-orm"
 import { z } from "zod"
 
@@ -117,7 +118,7 @@ export const recordGameScore = defineAction({
   }),
   run: async (actor, input) => {
     if (impossible(input.game, input.score, input.level))
-      throw new Error("這個成績不可能")
+      throw new Refusal("這個成績不可能")
     const [recent] = await db
       .select({ id: gameScores.id })
       .from(gameScores)
@@ -129,7 +130,7 @@ export const recordGameScore = defineAction({
         )
       )
       .limit(1)
-    if (recent) throw new Error("太快了，等一下再送")
+    if (recent) throw new Refusal("太快了，等一下再送")
     await db.insert(gameScores).values({ userId: actor.userId, ...input })
     return { recorded: true }
   },

@@ -1,3 +1,4 @@
+import { Refusal } from "./define"
 import { asc, eq, sql } from "drizzle-orm"
 import { z } from "zod"
 
@@ -69,9 +70,9 @@ export const saveIpUser = defineAction({
         })
         .from(ipUserSettings)
         .for("share")
-      if (!settings) throw new Error("還沒有設定網段")
+      if (!settings) throw new Refusal("還沒有設定網段")
       if (!settings.inSubnet || settings.isNetwork)
-        throw new Error("請確認 IP 在此網段內，且不是保留位址")
+        throw new Refusal("請確認 IP 在此網段內，且不是保留位址")
       let before: typeof ipUserEntries.$inferSelect | undefined
       if (input.id) {
         ;[before] = await tx
@@ -80,16 +81,16 @@ export const saveIpUser = defineAction({
           .where(eq(ipUserEntries.id, input.id))
           .for("update")
         if (!before || before.revision !== input.expected_revision)
-          throw new Error("資料已被修改或刪除，請重新整理後再試")
+          throw new Refusal("資料已被修改或刪除，請重新整理後再試")
         const wasReserved = [
           host(settings.gateway),
           settings.broadcast,
         ].includes(host(before.ip))
         if (wasReserved && host(before.ip) !== input.ip)
-          throw new Error("閘道與廣播位址不能改")
+          throw new Refusal("閘道與廣播位址不能改")
       }
       if (settings.reserved && (!before || host(before.ip) !== input.ip))
-        throw new Error("閘道與廣播位址是保留的")
+        throw new Refusal("閘道與廣播位址是保留的")
       const values = {
         ip: input.ip,
         userName: input.user_name,
@@ -115,7 +116,7 @@ export const saveIpUser = defineAction({
             (error as { cause?: { code?: string } })?.cause?.code ?? ""
           ) === "23505"
         )
-          throw new Error("這個 IP 已有紀錄")
+          throw new Refusal("這個 IP 已有紀錄")
         throw error
       })
       await tx.insert(ipUserChanges).values({
@@ -153,12 +154,12 @@ export const deleteIpUser = defineAction({
         .where(eq(ipUserEntries.id, input.id))
         .for("update")
       if (!before || before.revision !== input.expected_revision)
-        throw new Error("資料已被修改或刪除，請重新整理後再試")
+        throw new Refusal("資料已被修改或刪除，請重新整理後再試")
       if (
         settings &&
         [host(settings.gateway), settings.broadcast].includes(host(before.ip))
       )
-        throw new Error("閘道與廣播位址不能刪")
+        throw new Refusal("閘道與廣播位址不能刪")
       await tx.delete(ipUserEntries).where(eq(ipUserEntries.id, input.id))
       await tx.insert(ipUserChanges).values({
         entryId: input.id,

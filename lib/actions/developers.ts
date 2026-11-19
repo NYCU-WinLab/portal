@@ -1,3 +1,4 @@
+import { Refusal } from "./define"
 import OAuth2Server from "@node-oauth/oauth2-server"
 import { and, count, desc, eq, gt, sql } from "drizzle-orm"
 import { z } from "zod"
@@ -191,9 +192,9 @@ export async function memberData(userId: string, scope: Scope) {
     .select({ sub: account.accountId })
     .from(account)
     .where(and(eq(account.userId, userId), eq(account.providerId, "keycloak")))
-  if (!link) throw new Error("Member unavailable")
+  if (!link) throw new Refusal("Member unavailable")
   const member = await getKeycloakUser(link.sub)
-  if (!member.enabled) throw new Error("Member unavailable")
+  if (!member.enabled) throw new Refusal("Member unavailable")
   if (scope === "profile") return { sub: link.sub, ...profileResponse(member) }
   if (scope === "name")
     return {
@@ -223,12 +224,12 @@ export async function authorizationDetails(raw: unknown) {
         .where(eq(developerApps.id, input.client_id))
     : []
   if (!row?.enabled || !row.redirectUris.includes(input.redirect_uri))
-    throw new Error("無效或已停用的應用程式或回呼網址")
+    throw new Refusal("無效或已停用的應用程式或回呼網址")
   const scopes = approvedScopes(
     input.scope.split(" ").filter(Boolean),
     row.approvedScopes
   )
-  if (!scopes) throw new Error("應用程式尚未獲准使用這些資料權限")
+  if (!scopes) throw new Refusal("應用程式尚未獲准使用這些資料權限")
   return { app: appRow(row), input, scopes }
 }
 
@@ -265,7 +266,7 @@ export const authorizeDeveloperApp = defineAction({
         !app.redirectUris.includes(details.input.redirect_uri) ||
         !approvedScopes(details.scopes, app.approvedScopes)
       )
-        throw new Error("無效或已停用的應用程式或回呼網址")
+        throw new Refusal("無效或已停用的應用程式或回呼網址")
       const [created] = await tx
         .insert(developerGrants)
         .values({
@@ -322,9 +323,9 @@ async function manageable(actor: Actor, id: string) {
     .select(appFields)
     .from(developerApps)
     .where(eq(developerApps.id, id))
-  if (!app) throw new Error("找不到應用程式")
+  if (!app) throw new Refusal("找不到應用程式")
   if (app.ownerId !== actor.userId && !(await isAdmin(actor, "portal")))
-    throw new Error("找不到應用程式")
+    throw new Refusal("找不到應用程式")
   return app
 }
 
@@ -383,7 +384,7 @@ export const registerDeveloperApp = defineAction({
       .select({ n: count() })
       .from(developerApps)
       .where(eq(developerApps.ownerId, actor.userId))
-    if (owned.n >= 20) throw new Error("每位成員最多可註冊 20 個應用程式")
+    if (owned.n >= 20) throw new Refusal("每位成員最多可註冊 20 個應用程式")
     const secret =
       input.client_type === "confidential" ? randomSecret() : undefined
     const [created] = await db
@@ -442,7 +443,7 @@ export const rotateDeveloperSecret = defineAction({
   run: async (actor, { id }) => {
     const app = await manageable(actor, id)
     if (app.clientType !== "confidential")
-      throw new Error("Public client 不使用 secret")
+      throw new Refusal("Public client 不使用 secret")
     const secret = randomSecret()
     await db
       .update(developerApps)
@@ -504,7 +505,7 @@ export const requestDeveloperScopes = defineAction({
   run: async (actor, input) => {
     const app = await manageable(actor, input.app_id)
     if (app.ownerId !== actor.userId)
-      throw new Error("只有應用程式擁有者可以申請")
+      throw new Refusal("只有應用程式擁有者可以申請")
     const [pending] = await db
       .select({ id: developerScopeRequests.id })
       .from(developerScopeRequests)
@@ -514,7 +515,7 @@ export const requestDeveloperScopes = defineAction({
           eq(developerScopeRequests.status, "pending")
         )
       )
-    if (pending) throw new Error("這個應用程式已有待審核申請")
+    if (pending) throw new Refusal("這個應用程式已有待審核申請")
     const [created] = await db
       .insert(developerScopeRequests)
       .values({
@@ -579,7 +580,7 @@ export const reviewDeveloperScopes = defineAction({
         .from(developerScopeRequests)
         .where(eq(developerScopeRequests.id, input.id))
         .for("update")
-      if (request?.status !== "pending") throw new Error("這筆申請不是待審")
+      if (request?.status !== "pending") throw new Refusal("這筆申請不是待審")
       if (input.approve) {
         await tx
           .update(developerApps)

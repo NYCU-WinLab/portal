@@ -1,3 +1,4 @@
+import { Refusal } from "./define"
 import { eq } from "drizzle-orm"
 import { z } from "zod"
 
@@ -22,7 +23,7 @@ export const whoami = defineAction({
       })
       .from(user)
       .where(eq(user.id, actor.userId))
-    if (!member) throw new Error("找不到這個成員")
+    if (!member) throw new Refusal("找不到這個成員")
     return member
   },
 })
