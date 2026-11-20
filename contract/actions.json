@@ -8081,7 +8081,7 @@
     "description": "Every meeting booked through the portal from date (default today, Asia/Taipei) for days days, the lab meeting's weekly Teams meeting included (lab_meeting_id set; its program is in list_lab_meetings): room (null for an online-only meeting), date, start and end, status booked or cancelled (cancelled rows stay), title, agenda, project group, attendees, who booked it, and the Teams meeting's state (pending, success with join_url, or failed with the reason). Every member sees every booking; only the member who booked one (or the member it was booked with through book_appointment) can cancel it with cancel_meeting.",
     "kind": "query",
     "app": "meetings",
-    "hash": "540b8e1449a08b98",
+    "hash": "0ebad06dc3c185ba",
     "input": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
@@ -8261,6 +8261,16 @@
                   }
                 ]
               },
+              "seriesDate": {
+                "anyOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              },
               "seriesId": {
                 "anyOf": [
                   {
@@ -8297,6 +8307,7 @@
               "groupName",
               "attendees",
               "seriesId",
+              "seriesDate",
               "labMeetingId",
               "requestedBy",
               "requestedByName",
@@ -10255,10 +10266,10 @@
   {
     "name": "list_standing_meetings",
     "title": "固定會議",
-    "description": "Every standing meeting on /meetings: title, weekday (0 Sunday), start time, duration, every week or every other week (anchorDate is a day it meets on, fixing which weeks), attendees, whether the advisor is invited, whether it is active, who made it, and its next occurrence with the room already held for it (booked false until the daily run books it, 7 days ahead). Every member sees every series; only its creator can pause or delete it, and its creator or any member of its project group can edit its external link and agenda with update_meeting.",
+    "description": "Every standing meeting on /meetings: title, weekday (0 Sunday), start time, duration, every week or every other week (anchorDate is a day it meets on, fixing which weeks), attendees, whether the advisor is invited, whether it is active, who made it, its next occurrence with the room already held for it (booked false until the daily run books it, 7 days ahead; nextHeld is when that week really meets, which differs once the week was moved), and settled, the weeks from today on that already have a booking, kept or cancelled. Every member sees every series; only its creator can pause or delete it, and its creator or any member of its project group can edit its external link and agenda with update_meeting.",
     "kind": "query",
     "app": "meetings",
-    "hash": "fc48b01ee078b578",
+    "hash": "d636fbd341f46c80",
     "input": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {},
@@ -10370,6 +10381,33 @@
                   }
                 ]
               },
+              "nextHeld": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "date": {
+                        "type": "string"
+                      },
+                      "endTime": {
+                        "type": "string"
+                      },
+                      "startTime": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "date",
+                      "startTime",
+                      "endTime"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
               "nextRoom": {
                 "anyOf": [
                   {
@@ -10382,6 +10420,12 @@
               },
               "onlineOnly": {
                 "type": "boolean"
+              },
+              "settled": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
               },
               "startTime": {
                 "type": "string"
@@ -10413,7 +10457,9 @@
               "createdByName",
               "nextDate",
               "nextBooked",
-              "nextRoom"
+              "nextRoom",
+              "nextHeld",
+              "settled"
             ],
             "type": "object"
           },
@@ -10654,7 +10700,7 @@
   {
     "name": "move_meeting",
     "title": "改會議時間",
-    "description": "Moves one of the member's own one-off bookings (by id from list_meetings) to another date or time, keeping its title, attendees, agenda, links and meet.winlab.tw room. A room booking gets the room /meetings would pick for the new span (free before paid; a paid room only with allow_paid true) and keeps 08:00 to 22:00; an online-only one keeps its own limits (today to 90 days ahead, 30 to 300 minutes, no overlap with the member's other meetings). The new room is reserved before the old one is released, so a refused move changes nothing. Everyone gets the updated calendar invite by mail. Only the member who booked it; not for the Monday lab meeting, an occurrence of a standing meeting or an appointment booked through book_appointment (cancel and book again). room_error is set when the old department room could not be released: release it by hand in the department system. meet_error is set when meet kept the old time. Read back the new date, time and room, and get the member's yes first.",
+    "description": "Moves one of the member's own one-off bookings (by id from list_meetings) to another date or time, keeping its title, attendees, agenda, links and meet.winlab.tw room. A room booking gets the room /meetings would pick for the new span (free before paid; a paid room only with allow_paid true) and keeps 08:00 to 22:00; an online-only one keeps its own limits (today to 90 days ahead, 30 to 300 minutes, no overlap with the member's other meetings). The new room is reserved before the old one is released, so a refused move changes nothing. Everyone gets the updated calendar invite by mail. One week of a standing meeting moves the same way, that week only, but not onto a day the series meets on: the series keeps its day and time, and the daily run never books the old day again. Only the member who booked it; not for the Monday lab meeting or an appointment booked through book_appointment (cancel and book again). room_error is set when the old department room could not be released: release it by hand in the department system. meet_error is set when meet kept the old time. Read back the new date, time and room, and get the member's yes first.",
     "kind": "mutation",
     "app": "meetings",
     "hash": "8e69bb6b815500e4",

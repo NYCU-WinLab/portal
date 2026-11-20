@@ -89,7 +89,7 @@ export const listStandingMeetings = defineAction({
   name: "list_standing_meetings",
   title: "固定會議",
   description:
-    "Every standing meeting on /meetings: title, weekday (0 Sunday), start time, duration, every week or every other week (anchorDate is a day it meets on, fixing which weeks), attendees, whether the advisor is invited, whether it is active, who made it, and its next occurrence with the room already held for it (booked false until the daily run books it, 7 days ahead). Every member sees every series; only its creator can pause or delete it, and its creator or any member of its project group can edit its external link and agenda with update_meeting.",
+    "Every standing meeting on /meetings: title, weekday (0 Sunday), start time, duration, every week or every other week (anchorDate is a day it meets on, fixing which weeks), attendees, whether the advisor is invited, whether it is active, who made it, its next occurrence with the room already held for it (booked false until the daily run books it, 7 days ahead; nextHeld is when that week really meets, which differs once the week was moved), and settled, the weeks from today on that already have a booking, kept or cancelled. Every member sees every series; only its creator can pause or delete it, and its creator or any member of its project group can edit its external link and agenda with update_meeting.",
   kind: "query",
   input: z.object({}),
   run: async () => {
@@ -105,15 +105,13 @@ export const listStandingMeetings = defineAction({
         series.active ? nextOccurrence(rule(series), today) : null,
       ])
     )
-    const held = await seriesBookings(
-      rows.map(({ series }) => series.id),
-      [...new Set([...next.values()].filter((d) => d !== null))]
-    )
+    const held = await seriesBookings(rows.map(({ series }) => series.id))
     return {
       series: rows.map(({ series, createdByName }) => {
         const nextDate = next.get(series.id) ?? null
-        const booking = held.find(
-          (b) => b.seriesId === series.id && b.date === nextDate
+        const mine = held.filter((b) => b.seriesId === series.id)
+        const booking = mine.find(
+          (b) => b.seriesDate === nextDate && b.status === "booked"
         )
         return {
           id: series.id,
@@ -136,6 +134,16 @@ export const listStandingMeetings = defineAction({
           nextDate,
           nextBooked: Boolean(booking),
           nextRoom: booking?.room ?? null,
+          // Where the next week really is, once it was moved.
+          nextHeld: booking
+            ? {
+                date: booking.date,
+                startTime: booking.startTime,
+                endTime: booking.endTime,
+              }
+            : null,
+          // Weeks from today on that a booking settles, kept or cancelled.
+          settled: [...new Set(mine.map((b) => b.seriesDate!))],
         }
       }),
     }

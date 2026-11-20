@@ -422,9 +422,7 @@ export default async function MeetingsPage() {
   // before they are booked. A day that has a booking, kept or cancelled,
   // shows that instead.
   const held = new Set(
-    bookings.flatMap((b) =>
-      b.seriesId ? [`${b.seriesId} ${b.seriesDate}`] : []
-    )
+    series.flatMap((s) => s.settled.map((d) => `${s.id} ${d}`))
   )
   const upcoming = series
     .filter((s) => s.active)
