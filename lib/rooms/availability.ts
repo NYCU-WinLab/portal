@@ -117,7 +117,9 @@ export function compareRooms(a: string, b: string) {
 export function pickRoom(
   slots: Slot[],
   start: string,
-  end: string
+  end: string,
+  /** Kept when open throughout, whatever its floor: the room a move is in. */
+  prefer?: string
 ): { room: string; paid: boolean } | null {
   const span = slots.filter((slot) => slot.start >= start && slot.end <= end)
   if (!span.length || span[0].start !== start || span.at(-1)!.end !== end)
@@ -127,8 +129,13 @@ export function pickRoom(
       .map(pick)
       .reduce((open, rooms) => open.filter((room) => rooms.includes(room)))
       .sort(compareRooms)[0]
+  const openIn = (pick: (slot: Slot) => string[]) =>
+    prefer !== undefined && span.every((slot) => pick(slot).includes(prefer))
+  // Its room first within a tier: a free room still beats a paid one.
+  if (openIn((slot) => slot.freeRooms)) return { room: prefer!, paid: false }
   const free = throughout((slot) => slot.freeRooms)
   if (free) return { room: free, paid: false }
+  if (openIn((slot) => slot.paidRooms)) return { room: prefer!, paid: true }
   const paid = throughout((slot) => slot.paidRooms)
   return paid ? { room: paid, paid: true } : null
 }

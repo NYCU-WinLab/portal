@@ -62,6 +62,7 @@ import {
   daySlots,
   mergeRuns,
   pickRoom,
+  type Busy,
   type Slot,
 } from "@/lib/rooms/availability"
 import {
@@ -98,17 +99,36 @@ import {
 const day = z.string().refine(isCalendarDay, "日期要是 YYYY-MM-DD")
 const time = z.string().regex(/^\d{2}:\d{2}$/, "時間要是 HH:MM")
 
-/** The department's free and busy rooms on each day, on the 30-minute grid. */
-export async function availability(days: string[], fresh = false) {
+/**
+ * The department's free and busy rooms on each day, on the 30-minute grid.
+ * except is a reservation of the lab's to count as open: the one a move
+ * gives up, so the meeting can stay in its room.
+ */
+export async function availability(
+  days: string[],
+  fresh = false,
+  except?: { room: string; start: string; end: string }
+) {
   const rooms = await listRooms()
   const busy = await listBusy(
     rooms.filter((room) => room.active).map((room) => room.name),
     days,
     fresh
   )
+  const ours = (b: Busy) =>
+    except !== undefined &&
+    b.room === except.room &&
+    b.subscriber === labAccount() &&
+    Date.parse(b.start) >= Date.parse(except.start) &&
+    Date.parse(b.end) <= Date.parse(except.end)
   return days.map((date) => ({
     date,
-    slots: daySlots(rooms, busy.get(date) ?? [], date, labAccount()),
+    slots: daySlots(
+      rooms,
+      (busy.get(date) ?? []).filter((b) => !ours(b)),
+      date,
+      labAccount()
+    ),
   }))
 }
 
@@ -677,11 +697,15 @@ export function roomFor(
   start: string,
   end: string,
   allowPaid: boolean,
-  instead = "換個時段或改成線上"
+  instead = "換個時段或改成線上",
+  /** The room a move is in: kept when it is open for the whole span. */
+  prefer?: string,
+  /** The span fits inside what was already paid for in prefer. */
+  paidFor = false
 ) {
-  const picked = pickRoom(slots, start, end)
+  const picked = pickRoom(slots, start, end, prefer)
   if (!picked) throw new Refusal(`這段時間沒有教室從頭到尾都空著，${instead}`)
-  if (picked.paid && !allowPaid)
+  if (picked.paid && !allowPaid && !(paidFor && picked.room === prefer))
     throw new Refusal(`只剩付費教室 ${picked.room}，同意付費才能借`)
   return picked
 }
@@ -986,7 +1010,7 @@ export const moveMeeting = defineAction({
   name: "move_meeting",
   title: "改會議時間",
   description:
-    "Moves one of the member's own one-off bookings (by id from list_meetings) to another date or time, keeping its title, attendees, agenda, links and meet.winlab.tw room. A room booking gets the room /meetings would pick for the new span (free before paid; a paid room only with allow_paid true) and keeps 08:00 to 22:00; an online-only one keeps its own limits (today to 90 days ahead, 30 to 300 minutes, no overlap with the member's other meetings). The new room is reserved before the old one is released, so a refused move changes nothing. Everyone gets the updated calendar invite by mail. One week of a standing meeting moves the same way, that week only, but not onto a day the series meets on: the series keeps its day and time, and the daily run never books the old day again. Only the member who booked it; not for the Monday lab meeting or an appointment booked through book_appointment (cancel and book again). room_error is set when the old department room could not be released: release it by hand in the department system. meet_error is set when meet kept the old time. Read back the new date, time and room, and get the member's yes first.",
+    "Moves one of the member's own one-off bookings (by id from list_meetings) to another date or time, keeping its title, attendees, agenda, links and meet.winlab.tw room. A room booking stays in its room when that room is open for the new span (a paid room only when no free room is), its own reservation counted as open (on the same day the old span is released first and taken back if the new one is refused); otherwise it gets the room /meetings would pick (free before paid) and keeps 08:00 to 22:00. A paid room needs allow_paid true, also to keep a paid room for longer or at another time, but not for less of the same span; an online-only one keeps its own limits (today to 90 days ahead, 30 to 300 minutes, no overlap with the member's other meetings). A refused move changes nothing; if the old span cannot be taken back either, the move fails saying so, and the booking keeps its time without a room (everyone gets that invite). Everyone gets the updated calendar invite by mail. One week of a standing meeting moves the same way, that week only, but not onto a day the series meets on: the series keeps its day and time, and the daily run never books the old day again. Only the member who booked it; not for the Monday lab meeting or an appointment booked through book_appointment (cancel and book again). room_error is set when the old department room could not be released: release it by hand in the department system. meet_error is set when meet kept the old time. Read back the new date, time and room, and get the member's yes first.",
   kind: "mutation",
   input: z.object({
     id: z.uuid("id 是預約的 id"),
@@ -1049,7 +1073,19 @@ export const moveMeeting = defineAction({
         throw new Refusal("線上會議室還在建立，稍後再改")
       const organizer = await organizerOf(actor.userId)
 
-      const { moved, paid } = await withBookingLock(
+      // The department reservation the booking holds now.
+      const old =
+        booking.externalId && booking.room
+          ? {
+              id: booking.externalId,
+              span: {
+                room: booking.room,
+                start: taipeiIso(booking.date, booking.startTime),
+                end: taipeiIso(booking.date, booking.endTime),
+              },
+            }
+          : null
+      const { moved, paid, released } = await withBookingLock(
         actor.userId,
         input.date,
         async () => {
@@ -1061,14 +1097,21 @@ export const moveMeeting = defineAction({
               input.end_time,
               booking.id
             )
-          // Picked from a fresh read, inside the lock, as a new booking is.
+          // Picked from a fresh read, inside the lock, as a new booking is,
+          // counting the room it gives up as open: it stays there when it
+          // can.
           const room = hasRoom
             ? roomFor(
-                (await availability([input.date], true))[0].slots,
+                (await availability([input.date], true, old?.span))[0].slots,
                 input.start_time,
                 input.end_time,
                 input.allow_paid,
-                "換個時段"
+                "換個時段",
+                booking.room ?? undefined,
+                // Paying for more of the room is asked again; less is not.
+                input.date === booking.date &&
+                  input.start_time >= booking.startTime &&
+                  input.end_time <= booking.endTime
               )
             : null
           const save = (externalId: string | null) =>
@@ -1104,11 +1147,93 @@ export const moveMeeting = defineAction({
               )
               return row
             })
-          if (!room) return { moved: await save(null), paid: false }
+          if (!room)
+            return { moved: await save(null), paid: false, released: false }
           const reservation = {
             room: room.room,
             start: taipeiIso(input.date, input.start_time),
             end: taipeiIso(input.date, input.end_time),
+          }
+          // Same room, overlapping span: the department system cannot hold
+          // both, and has no edit, so the old one goes first. Its span is
+          // taken back when the new one is refused.
+          if (
+            old &&
+            room.room === old.span.room &&
+            input.date === booking.date &&
+            spansOverlap(
+              { start: booking.startTime, end: booking.endTime },
+              { start: input.start_time, end: input.end_time }
+            )
+          ) {
+            const restore = async () => {
+              const back = await reserveOrClean(old.span).catch(() => null)
+              if (back) {
+                await db
+                  .update(roomBookings)
+                  .set({ externalId: back })
+                  .where(eq(roomBookings.id, booking.id))
+                return
+              }
+              // Nothing holds the room now: the booking keeps its time
+              // without a room, and everyone gets the invite that says so.
+              await db.transaction(async (tx) => {
+                const [row] = await tx
+                  .update(roomBookings)
+                  .set({
+                    room: null,
+                    externalId: null,
+                    inviteSequence: sql`${roomBookings.inviteSequence} + 1`,
+                  })
+                  .where(eq(roomBookings.id, booking.id))
+                  .returning()
+                if (row)
+                  await queueMail(
+                    tx,
+                    inviteMail(row, organizer, "REQUEST", booking)
+                  )
+              })
+              throw new Error(
+                `${old.span.room} 退掉後借不回來，這場目前沒有教室，請重新借教室或改成線上`
+              )
+            }
+            // A release with no clear answer may still have gone through:
+            // the room's reservations say which.
+            const releaseOld = async () => {
+              try {
+                await release(old.id, old.span)
+              } catch (error) {
+                const left = await findLabReservations(old.span).catch(
+                  () => null
+                )
+                if (left === null)
+                  throw new Error(
+                    `系上借用系統沒有回應，請到系上借用系統確認 ${old.span.room} 還在不在`
+                  )
+                if (left.includes(old.id)) throw error
+              }
+            }
+            const moved = await withLease(
+              `room ${room.room} ${input.date}`,
+              async () => {
+                await releaseOld()
+                let externalId: string
+                try {
+                  externalId = await reserveOrClean(reservation)
+                } catch (error) {
+                  await restore()
+                  throw error
+                }
+                try {
+                  return await save(externalId)
+                } catch (error) {
+                  await release(externalId, reservation).catch(() => {})
+                  await restore()
+                  throw error
+                }
+              }
+            )
+            return { moved, paid: room.paid, released: true }
           }
           const moved = await withLease(
             `room ${room.room} ${input.date}`,
@@ -1122,19 +1247,15 @@ export const moveMeeting = defineAction({
               }
             }
           )
-          return { moved, paid: room.paid }
+          return { moved, paid: room.paid, released: false }
         }
       )
 
       // The new room is held and recorded; only now let the old one go.
       let roomError: string | null = null
-      if (booking.externalId && booking.room)
+      if (old && !released)
         try {
-          await release(booking.externalId, {
-            room: booking.room,
-            start: taipeiIso(booking.date, booking.startTime),
-            end: taipeiIso(booking.date, booking.endTime),
-          })
+          await release(old.id, old.span)
         } catch {
           roomError = `${dayLabel(booking.date)} ${booking.startTime} 的 ${booking.room} 沒退掉，請到系上借用系統取消`
         }
