@@ -1161,27 +1161,56 @@ export const moveMeeting = defineAction({
             )
           ) {
             const restore = async () => {
-              try {
-                const back = await reserveOrClean(old.span)
+              const back = await reserveOrClean(old.span).catch(() => null)
+              if (back) {
                 await db
                   .update(roomBookings)
                   .set({ externalId: back })
                   .where(eq(roomBookings.id, booking.id))
-              } catch {
-                // Nothing holds the room now: cancel would release nothing.
-                await db
+                return
+              }
+              // Nothing holds the room now: the booking keeps its time
+              // without a room, and everyone gets the invite that says so.
+              await db.transaction(async (tx) => {
+                const [row] = await tx
                   .update(roomBookings)
-                  .set({ externalId: null })
+                  .set({
+                    room: null,
+                    externalId: null,
+                    inviteSequence: sql`${roomBookings.inviteSequence} + 1`,
+                  })
                   .where(eq(roomBookings.id, booking.id))
-                throw new Error(
-                  `${old.span.room} 已退掉，原時段也借不回來，請重新借教室或改成線上`
+                  .returning()
+                if (row)
+                  await queueMail(
+                    tx,
+                    inviteMail(row, organizer, "REQUEST", booking)
+                  )
+              })
+              throw new Error(
+                `${old.span.room} 退掉後借不回來，這場目前沒有教室，請重新借教室或改成線上`
+              )
+            }
+            // A release with no clear answer may still have gone through:
+            // the room's reservations say which.
+            const releaseOld = async () => {
+              try {
+                await release(old.id, old.span)
+              } catch (error) {
+                const left = await findLabReservations(old.span).catch(
+                  () => null
                 )
+                if (left === null)
+                  throw new Error(
+                    `系上借用系統沒有回應，請到系上借用系統確認 ${old.span.room} 還在不在`
+                  )
+                if (left.includes(old.id)) throw error
               }
             }
             const moved = await withLease(
               `room ${room.room} ${input.date}`,
               async () => {
-                await release(old.id, old.span)
+                await releaseOld()
                 let externalId: string
                 try {
                   externalId = await reserveOrClean(reservation)
