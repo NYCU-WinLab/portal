@@ -233,7 +233,10 @@ async function bookOccurrence(
     .select({ id: roomBookings.id })
     .from(roomBookings)
     .where(
-      and(eq(roomBookings.seriesId, series.id), eq(roomBookings.date, date))
+      and(
+        eq(roomBookings.seriesId, series.id),
+        eq(roomBookings.seriesDate, date)
+      )
     )
   if (held) return "skipped"
   const endTime = seriesEnd(series)!
@@ -646,7 +649,7 @@ export async function runDailyRooms() {
           await db
             .select({
               seriesId: roomBookings.seriesId,
-              date: roomBookings.date,
+              date: roomBookings.seriesDate,
             })
             .from(roomBookings)
             .where(
@@ -655,8 +658,8 @@ export async function runDailyRooms() {
                   roomBookings.seriesId,
                   active.map((series) => series.id)
                 ),
-                gte(roomBookings.date, from),
-                lte(roomBookings.date, to)
+                gte(roomBookings.seriesDate, from),
+                lte(roomBookings.seriesDate, to)
               )
             )
         ).map((row) => `${row.seriesId} ${row.date}`)

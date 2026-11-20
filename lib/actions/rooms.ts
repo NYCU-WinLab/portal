@@ -168,6 +168,7 @@ async function bookingsBetween(from: string, to: string) {
       groupName: roomBookings.groupName,
       attendees: roomBookings.attendees,
       seriesId: roomBookings.seriesId,
+      seriesDate: roomBookings.seriesDate,
       labMeetingId: roomBookings.meetingId,
       requestedBy: roomBookings.requestedBy,
       requestedByName: user.name,
@@ -571,6 +572,7 @@ export async function placeBooking(input: NewBooking) {
             issueRefs: input.issueRefs,
             deliverables: input.deliverables,
             seriesId: input.seriesId,
+            seriesDate: input.seriesId ? input.date : null,
             meetingId: input.meetingId,
             place: input.place,
             requestedBy: input.organizer.id,
@@ -982,7 +984,7 @@ export const moveMeeting = defineAction({
   name: "move_meeting",
   title: "改會議時間",
   description:
-    "Moves one of the member's own one-off bookings (by id from list_meetings) to another date or time, keeping its title, attendees, agenda, links and meet.winlab.tw room. A room booking gets the room /meetings would pick for the new span (free before paid; a paid room only with allow_paid true) and keeps 08:00 to 22:00; an online-only one keeps its own limits (today to 90 days ahead, 30 to 300 minutes, no overlap with the member's other meetings). The new room is reserved before the old one is released, so a refused move changes nothing. Everyone gets the updated calendar invite by mail. Only the member who booked it; not for the Monday lab meeting, an occurrence of a standing meeting or an appointment booked through book_appointment (cancel and book again). room_error is set when the old department room could not be released: release it by hand in the department system. meet_error is set when meet kept the old time. Read back the new date, time and room, and get the member's yes first.",
+    "Moves one of the member's own one-off bookings (by id from list_meetings) to another date or time, keeping its title, attendees, agenda, links and meet.winlab.tw room. A room booking gets the room /meetings would pick for the new span (free before paid; a paid room only with allow_paid true) and keeps 08:00 to 22:00; an online-only one keeps its own limits (today to 90 days ahead, 30 to 300 minutes, no overlap with the member's other meetings). The new room is reserved before the old one is released, so a refused move changes nothing. Everyone gets the updated calendar invite by mail. One week of a standing meeting moves the same way, that week only: the series keeps its day and time, and the daily run never books the old day again. Only the member who booked it; not for the Monday lab meeting or an appointment booked through book_appointment (cancel and book again). room_error is set when the old department room could not be released: release it by hand in the department system. meet_error is set when meet kept the old time. Read back the new date, time and room, and get the member's yes first.",
   kind: "mutation",
   input: z.object({
     id: z.uuid("id 是預約的 id"),
@@ -1007,8 +1009,6 @@ export const moveMeeting = defineAction({
         throw new Refusal("只有發起人能改時間")
       if (booking.meetingId)
         throw new Refusal("週一 Lab Meeting 請到 /meetings 由報告人或管理員改")
-      if (booking.seriesId)
-        throw new Refusal("固定會議的單場不能改時間，請取消這場再另外預約")
       const [appointment] = await db
         .select({ bookingId: appointments.bookingId })
         .from(appointments)
@@ -1222,7 +1222,7 @@ export async function seriesBookings(seriesIds: string[], dates: string[]) {
   return db
     .select({
       seriesId: roomBookings.seriesId,
-      date: roomBookings.date,
+      date: roomBookings.seriesDate,
       room: roomBookings.room,
     })
     .from(roomBookings)
@@ -1230,7 +1230,7 @@ export async function seriesBookings(seriesIds: string[], dates: string[]) {
       and(
         eq(roomBookings.status, "booked"),
         inArray(roomBookings.seriesId, seriesIds),
-        inArray(roomBookings.date, dates)
+        inArray(roomBookings.seriesDate, dates)
       )
     )
 }

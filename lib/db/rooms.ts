@@ -95,6 +95,10 @@ export const roomBookings = pgTable(
       .default(sql`'{}'`)
       .notNull(),
     seriesId: uuid().references(() => roomSeries.id, { onDelete: "set null" }),
+    // The week of its series this booking stands for: its first date, kept
+    // when the week is moved to another day, so the daily run never books
+    // that week again.
+    seriesDate: date({ mode: "string" }),
     // The Monday lab meeting this booking holds the Teams meeting for.
     meetingId: uuid().references(() => meetings.id, { onDelete: "set null" }),
     // Where it happens when no department room is reserved (EC411).
@@ -114,7 +118,7 @@ export const roomBookings = pgTable(
     index().on(table.requestedBy),
     // One booking per occurrence, however often the scheduler runs.
     uniqueIndex()
-      .on(table.seriesId, table.date)
+      .on(table.seriesId, table.seriesDate)
       .where(sql`${table.status} = 'booked' and ${table.seriesId} is not null`),
     uniqueIndex()
       .on(table.meetingId)
