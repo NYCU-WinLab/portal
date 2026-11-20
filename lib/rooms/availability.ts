@@ -131,10 +131,11 @@ export function pickRoom(
       .sort(compareRooms)[0]
   const openIn = (pick: (slot: Slot) => string[]) =>
     prefer !== undefined && span.every((slot) => pick(slot).includes(prefer))
+  // Its room first within a tier: a free room still beats a paid one.
   if (openIn((slot) => slot.freeRooms)) return { room: prefer!, paid: false }
-  if (openIn((slot) => slot.paidRooms)) return { room: prefer!, paid: true }
   const free = throughout((slot) => slot.freeRooms)
   if (free) return { room: free, paid: false }
+  if (openIn((slot) => slot.paidRooms)) return { room: prefer!, paid: true }
   const paid = throughout((slot) => slot.paidRooms)
   return paid ? { room: paid, paid: true } : null
 }
