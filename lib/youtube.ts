@@ -107,7 +107,13 @@ export async function searchSongs(query: string, limit = 12): Promise<Track[]> {
 /** What YouTube Music would play after this song, in its order. */
 export async function upNext(videoId: string): Promise<Track[]> {
   const yt = await youtube()
-  const panel = await yt.music.getUpNext(videoId, true)
+  const panel = await yt.music.getUpNext(videoId, true).catch((e: unknown) => {
+    // A removed, private or non-Music video has no up-next panel: no options, not a fault.
+    if (/queue was empty/i.test(e instanceof Error ? e.message : String(e)))
+      return null
+    throw e
+  })
+  if (!panel) return []
   return (panel.contents ?? [])
     .map((item) => {
       const x = item as unknown as {
