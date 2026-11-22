@@ -138,6 +138,7 @@ export const deleteIpUser = defineAction({
   description:
     "Portal admins only: deletes one address row by id and the revision read from list_ip_users; gateway and broadcast rows cannot be deleted.",
   kind: "mutation",
+  idempotent: true,
   input: deleteIpUserInput,
   run: async (actor, input) => {
     return db.transaction(async (tx) => {

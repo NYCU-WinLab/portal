@@ -91,6 +91,7 @@ export const removeMyAvatar = defineAction({
   description:
     "Removes the signed-in member's avatar; their initial shows instead.",
   kind: "mutation",
+  idempotent: true,
   input: z.object({}),
   run: async (actor) => {
     await db.delete(memberAvatars).where(eq(memberAvatars.userId, actor.userId))
@@ -105,6 +106,7 @@ export const removeMemberAvatar = defineAction({
   description:
     "Portal admins only: removes one member's avatar (user_id from list_members).",
   kind: "mutation",
+  idempotent: true,
   input: z.object({ user_id: member }),
   run: async (actor, input) => {
     const removed = await db

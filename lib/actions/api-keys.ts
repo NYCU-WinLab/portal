@@ -114,6 +114,7 @@ export const revokeApiKey = defineAction({
   description:
     "Revokes one API key by id so it can no longer be used. A member revokes their own; a portal or door admin can revoke anyone's, so a leaked door key can be stopped. Fails when the key is not found or already revoked.",
   kind: "mutation",
+  idempotent: true,
   input: z.object({ id: z.uuid() }),
   run: async (actor, { id }) => {
     const admin = await keyAdmin(actor)

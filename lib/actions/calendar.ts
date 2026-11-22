@@ -850,6 +850,7 @@ export const removeCalendarSource = defineAction({
   description:
     "Removes an ICS address or imported file from the signed-in member's calendar, with its events. A Google calendar or WinLab 會議 cannot be removed: turn it off with set_calendar_source (or unlink Google with unlink_google_calendar).",
   kind: "mutation",
+  idempotent: true,
   input: z.object({ source_id: z.uuid() }),
   run: async (actor, input) => {
     const source = await ownSource(actor.userId, input.source_id)
