@@ -323,6 +323,7 @@ export const deleteTripFile = defineAction({
   description:
     "Deletes a trip file: the member's own while the trip is open, or anyone's at any time for a trip admin. It cannot be undone.",
   kind: "mutation",
+  idempotent: true,
   input: z.object({ fileId: id }),
   run: async (actor, { fileId }) => {
     const { file, admin, mine } = await findFile(actor, fileId)
@@ -397,6 +398,7 @@ export const deleteTrip = defineAction({
   description:
     "Deletes a trip with every file in it (trip admins only). It cannot be undone; confirm with the member first.",
   kind: "mutation",
+  idempotent: true,
   input: z.object({ tripId: id }),
   run: async (actor, { tripId }) => {
     const removed = await db

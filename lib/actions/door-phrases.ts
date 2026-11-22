@@ -244,6 +244,7 @@ export const deleteDoorPhrase = defineAction({
   description:
     "Deletes one of your own phrases, or with default true one of the lab's defaults (door admins).",
   kind: "mutation",
+  idempotent: true,
   input: z.object({ id: z.uuid("找不到這條問候語"), default: lab }),
   run: async (actor, { id, default: isDefault }) => {
     const [row] = await db
@@ -302,6 +303,7 @@ export const deleteDoorVoiceClip = defineAction({
   description:
     "Deletes one voice clip, for example a badly pronounced name. The door speaks that text in the stock voice until the voice job makes it again, usually within a minute. Door admins only.",
   kind: "mutation",
+  idempotent: true,
   input: z.object({ id: z.uuid("找不到這段語音") }),
   run: async (actor, { id }) => {
     const [row] = await db

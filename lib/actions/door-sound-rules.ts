@@ -183,6 +183,7 @@ export const deleteDoorSoundRule = defineAction({
   description:
     "Deletes a door sound rule by its id. Door admins only; to pause one, update it with enabled false.",
   kind: "mutation",
+  idempotent: true,
   input: z.object({ id: z.uuid("找不到這條排程") }),
   run: async (actor, { id }) => {
     await requireAdmin(actor, "door")
