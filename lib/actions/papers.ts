@@ -187,6 +187,7 @@ export const deletePaperTag = defineAction({
   description:
     "Admins only. Removes a tag and takes it off every paper; the papers stay.",
   kind: "mutation",
+  idempotent: true,
   input: z.object({ id: z.uuid() }),
   run: async (actor, { id }) => {
     const removed = await db
@@ -274,6 +275,7 @@ export const deletePaper = defineAction({
   description:
     "Admins only. Removes a paper from the list. Fails while any week presents it.",
   kind: "mutation",
+  idempotent: true,
   input: z.object({ id: z.uuid() }),
   run: async (actor, { id }) => {
     const [used] = await db

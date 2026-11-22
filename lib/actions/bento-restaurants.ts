@@ -278,6 +278,7 @@ export const deleteBentoRestaurant = defineAction({
   description:
     "Deletes a restaurant with its menu (bento admins only). Refused once it has any order; switch it off with update_bento_restaurant instead.",
   kind: "mutation",
+  idempotent: true,
   input: z.object({ restaurantId: id }),
   run: async (actor, { restaurantId }) => {
     const [used] = await db

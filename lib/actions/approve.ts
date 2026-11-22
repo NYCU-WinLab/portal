@@ -570,6 +570,7 @@ export const deleteApproveDocument = defineAction({
   description:
     "Deletes one of the member's own documents that is not completed yet (a draft, or a pending one nobody needs to sign anymore). Completed documents stay.",
   kind: "mutation",
+  idempotent: true,
   input: z.object({ id }),
   run: async (actor, input) => {
     const doc = await findDocument(input.id)
