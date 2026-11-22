@@ -479,6 +479,7 @@ export const deleteDeveloperApp = defineAction({
   description:
     "Deletes an application for good (its owner or a portal admin): the client id stops working, and every consent, token and scope request goes with it. It cannot be undone; to stop an application for now, disable it instead. Delete only after the member confirms the application by name.",
   kind: "mutation",
+  idempotent: true,
   input: z.object({ id: z.uuid() }),
   run: async (actor, { id }) => {
     await manageable(actor, id)
@@ -725,6 +726,7 @@ export const revokeMyAuthorization = defineAction({
   description:
     "Ends one of the signed-in member's consents (by id from list_my_authorizations); the application's tokens stop working at once.",
   kind: "mutation",
+  idempotent: true,
   input: z.object({ id: z.uuid() }),
   run: async (actor, { id }) => {
     await db

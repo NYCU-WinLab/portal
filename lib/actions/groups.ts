@@ -230,6 +230,7 @@ export const removeMailGroupMember = defineAction({
   description:
     "Removes one MEMBER address from a mailing list the member manages; owners and managers are never removed here. Same list rules as add_mail_group_members.",
   kind: "mutation",
+  idempotent: true,
   input: z.object({ groupId, email: z.string().trim().min(3).max(254) }),
   run: async (actor, input) => {
     const d = deps(actor)

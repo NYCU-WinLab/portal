@@ -86,6 +86,7 @@ export const revokeServiceKey = defineAction({
   description:
     "Revokes one service key by id so the service can no longer call the portal with it. Portal admins only. Fails when the key is not found or already revoked.",
   kind: "mutation",
+  idempotent: true,
   admin: "portal",
   input: z.object({ id: z.uuid() }),
   run: async (actor, { id }) => {
