@@ -81,6 +81,7 @@ export const deleteLeave = defineAction({
   description:
     "Withdraws the signed-in member's own sign-up for one Monday meeting, putting them back on the attending list. Only their own; fails when they have none on that date.",
   kind: "mutation",
+  idempotent: true,
   input: z.object({ date: isoDate }),
   run: async (actor, { date }) => {
     const removed = await db

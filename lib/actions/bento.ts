@@ -360,6 +360,7 @@ export const removeBentoOrderItem = defineAction({
   description:
     "Removes one line from an open order: the member's own, or anyone's for a bento admin. lineId comes from get_bento_order.",
   kind: "mutation",
+  idempotent: true,
   input: z.object({ lineId: id }),
   run: async (actor, { lineId }) => {
     const [line] = await db
@@ -526,6 +527,7 @@ export const deleteBentoOrder = defineAction({
   description:
     "Deletes an order with every line on it (bento admins only). It cannot be undone; confirm with the member first.",
   kind: "mutation",
+  idempotent: true,
   input: z.object({ orderId: id }),
   run: async (actor, { orderId }) => {
     const removed = await db

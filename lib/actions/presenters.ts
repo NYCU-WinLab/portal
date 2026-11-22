@@ -48,6 +48,7 @@ export const removePresenter = defineAction({
   description:
     "Admins only. Takes a member off the presenter list, so they are no longer given weeks or questions. Weeks they already hold stay theirs.",
   kind: "mutation",
+  idempotent: true,
   input: z.object({ userId: z.uuid() }),
   run: async (actor, { userId }) => {
     return changeSchedule(async (tx) => {

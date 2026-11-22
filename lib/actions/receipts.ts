@@ -210,6 +210,7 @@ export const deleteReceipt = defineAction({
   description:
     "Deletes a receipt and its file, for receipts admins only. The notice already mailed to accounting stays sent.",
   kind: "mutation",
+  idempotent: true,
   input: z.object({ id }),
   run: async (actor, { id }) => {
     const [removed] = await db

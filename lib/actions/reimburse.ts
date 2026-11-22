@@ -279,6 +279,7 @@ export const deleteReimburseEgress = defineAction({
   description:
     "Deletes an egress entry (reimburse admins only). It cannot be undone; confirm with the member first.",
   kind: "mutation",
+  idempotent: true,
   input: z.object({ entryId: id }),
   run: async (actor, { entryId }) => {
     const removed = await db
@@ -346,6 +347,7 @@ export const deleteReimburseIngress = defineAction({
   description:
     "Deletes an ingress entry (reimburse admins only). It cannot be undone; confirm with the member first.",
   kind: "mutation",
+  idempotent: true,
   input: z.object({ entryId: id }),
   run: async (actor, { entryId }) => {
     const removed = await db

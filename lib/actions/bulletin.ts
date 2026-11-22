@@ -132,6 +132,7 @@ export const deleteAnnouncement = defineAction({
   description:
     "Deletes an announcement from the board, for portal admins only. Mail already sent stays in members' inboxes; mail still queued is not sent.",
   kind: "mutation",
+  idempotent: true,
   input: z.object({ id }),
   run: async (actor, { id }) => {
     return db.transaction(async (tx) => {
