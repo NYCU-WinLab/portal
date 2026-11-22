@@ -252,6 +252,7 @@ export const uploadTripFile = defineAction({
   title: "上傳檔案",
   description: `Uploads one receipt to an open trip as the signed-in member: a PDF or JPEG as base64 (a JPEG becomes a one-page PDF; convert PNGs to JPEG first). Their saved handwritten signature is drawn on page 1 if they chose so. Up to ${TRIP_FILE_LIMIT / 1024 / 1024} MB, with an optional description such as "3/14 飯店住宿".`,
   kind: "mutation",
+  additive: true,
   input: z.object({
     tripId: id,
     filename: z.string().trim().min(1, "缺檔名").max(200),
@@ -349,6 +350,7 @@ export const createTrip = defineAction({
   description:
     "Opens a trip for uploads (trip admins only): a name such as 2026 ICRA 橫濱 and an optional description (dates, subsidy cap, notes).",
   kind: "mutation",
+  additive: true,
   input: z.object(tripFields),
   run: async (actor, input) => {
     const [created] = await db

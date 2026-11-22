@@ -23,6 +23,7 @@ export const addPresenter = defineAction({
   description:
     "Admins only. Adds a member (id from list_members) to the end of their cohort in the presenter list; from then on they present in turn and ask questions.",
   kind: "mutation",
+  additive: true,
   input: z.object({ userId: z.uuid("請選擇成員") }),
   run: async (actor, { userId }) => {
     return changeSchedule(async (tx) => {

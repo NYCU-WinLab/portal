@@ -230,6 +230,7 @@ export const addReimburseEgress = defineAction({
   description:
     "Records money paid back to a member (reimburse admins only): applicantId (list_members), item, amount and invoiceDate; transferDate once the money is sent (null while owed) and the bank transferFee the lab paid on top. Confirm the entry with the member first.",
   kind: "mutation",
+  additive: true,
   input: z.object(egressFields),
   run: async (actor, input) => {
     const applicantName = await memberName(input.applicantId)
@@ -303,6 +304,7 @@ export const addReimburseIngress = defineAction({
   description:
     "Records money coming into the lab fund (reimburse admins only): date, amount in whole NT$ and an optional note.",
   kind: "mutation",
+  additive: true,
   input: z.object({ date: isoDate, amount, note }),
   run: async (actor, input) => {
     const [created] = await db

@@ -41,6 +41,11 @@ export type Action<
   description: string
   /** query reads, mutation writes; MCP marks queries read-only. */
   kind: "query" | "mutation"
+  /** Set on a mutation that only adds its own new record and changes,
+   * replaces or removes nothing else, sends no mail and touches no outside
+   * system or the door. MCP marks it non-destructive, so a client may run it
+   * without asking; every other mutation stays destructive. */
+  additive?: true
   input: Input
   run: (actor: Actor, input: z.infer<Input>) => Promise<Output>
   /** Only this app's admins may run it at all: runAction refuses anyone

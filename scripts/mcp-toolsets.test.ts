@@ -5,7 +5,6 @@ import type { AdminApp } from "@/lib/apps"
 import { instructions } from "@/lib/mcp/server"
 import {
   callableActions,
-  defaultToolsets,
   listedActions,
   parseToolsets,
   toolsetNames,
@@ -24,15 +23,22 @@ const everyAdmin = new Set<AdminApp>([
 const noAdmin = new Set<AdminApp>()
 
 describe("toolsets", () => {
-  test("the default list stays under 50 tools, even for an admin of everything", () => {
-    const names = parseToolsets(null)
-    expect(listedActions(everyAdmin, names).length).toBeLessThan(50)
-    expect(listedActions(noAdmin, names).length).toBeGreaterThan(0)
+  test("no selection lists every callable tool", () => {
+    for (const raw of [null, undefined, "", " , ", "nope"]) {
+      const chosen = parseToolsets(raw)
+      expect(listedActions(noAdmin, chosen)).toEqual(callableActions(noAdmin))
+      expect(listedActions(everyAdmin, chosen)).toEqual(
+        callableActions(everyAdmin)
+      )
+    }
+    const names = listedActions(noAdmin, parseToolsets(null)).map((a) => a.name)
+    expect(names).toContain("whoami")
   })
 
-  test("the default includes whoami", () => {
-    const names = listedActions(noAdmin, parseToolsets("")).map((a) => a.name)
-    expect(names).toContain("whoami")
+  test("naming a toolset narrows the list", () => {
+    const music = listedActions(noAdmin, parseToolsets("music"))
+    expect(music.length).toBeGreaterThan(0)
+    expect(music.length).toBeLessThan(callableActions(noAdmin).length)
   })
 
   test("naming every toolset reaches every callable tool", () => {
@@ -65,10 +71,8 @@ describe("toolsets", () => {
       "bento",
       "music",
     ])
-    expect([...parseToolsets("nope")].sort()).toEqual(
-      [...defaultToolsets].sort()
-    )
-    expect(parseToolsets("default,music").has("profile")).toBe(true)
+    expect([...parseToolsets("nope")].sort()).toEqual([...toolsetNames].sort())
+    expect([...parseToolsets("music,nope")]).toEqual(["music"])
   })
 
   test("the instructions tell how to ask for another toolset", () => {

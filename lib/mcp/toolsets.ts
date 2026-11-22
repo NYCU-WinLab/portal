@@ -6,16 +6,7 @@ import { apiApps, type ApiApp } from "@/lib/api-apps"
 /** Actions that belong to no app (access management) form this toolset. */
 export const accessToolset = "access"
 
-/** What a member's tool list holds when the client names nothing. */
-export const defaultToolsets: readonly string[] = [
-  "profile",
-  "calendar",
-  "leave",
-  "bulletin",
-  "members",
-]
-
-/** Every toolset a client may name, besides "all" and "default". */
+/** Every toolset a client may name, besides "all". */
 export const toolsetNames: readonly string[] = [
   ...(Object.keys(apiApps) as ApiApp[]),
   accessToolset,
@@ -25,8 +16,8 @@ const toolsetOf = (action: Action) =>
   appOfAction.get(action.name) ?? accessToolset
 
 /** The toolsets a request names: `?toolsets=a,b` or the X-Portal-Toolsets
- * header, comma separated. "all" lists everything, "default" the default
- * set; unknown names are ignored, and none left means the default. */
+ * header, comma separated. Naming toolsets only narrows tools/list: "all",
+ * no names, or only unknown names list everything. */
 export function parseToolsets(raw: string | null | undefined): Set<string> {
   const names = (raw ?? "")
     .split(",")
@@ -35,10 +26,9 @@ export function parseToolsets(raw: string | null | undefined): Set<string> {
   const chosen = new Set<string>()
   for (const name of names) {
     if (name === "all") return new Set(toolsetNames)
-    if (name === "default") defaultToolsets.forEach((t) => chosen.add(t))
-    else if (toolsetNames.includes(name)) chosen.add(name)
+    if (toolsetNames.includes(name)) chosen.add(name)
   }
-  return chosen.size > 0 ? chosen : new Set(defaultToolsets)
+  return chosen.size > 0 ? chosen : new Set(toolsetNames)
 }
 
 /** The tools a member may call: every MCP action except the ones only
@@ -56,8 +46,7 @@ export const listedActions = (
 
 /** The routing paragraph for the server instructions. */
 export const routing = [
-  `tools/list shows only the default toolsets (${defaultToolsets.join(", ")}). Every other tool stays callable by name.`,
-  `To list more, connect with ?toolsets=<a,b> or the X-Portal-Toolsets header ("all" lists everything).`,
+  `tools/list shows every tool unless you name toolsets. For a shorter list, connect with ?toolsets=<a,b> or the X-Portal-Toolsets header; every tool you may run stays callable by name either way.`,
   `Toolsets: ${toolsetNames
     .map((t) =>
       t in apiApps
