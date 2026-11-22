@@ -46,6 +46,10 @@ export type Action<
    * system or the door. MCP marks it non-destructive, so a client may run it
    * without asking; every other mutation stays destructive. */
   additive?: true
+  /** Set on a mutation that leaves the same state when run again with the
+   * same input (a set, a remove of one record). MCP sends idempotentHint, so
+   * a client may retry it safely. */
+  idempotent?: true
   input: Input
   run: (actor: Actor, input: z.infer<Input>) => Promise<Output>
   /** Only this app's admins may run it at all: runAction refuses anyone

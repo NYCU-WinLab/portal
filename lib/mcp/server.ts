@@ -52,10 +52,15 @@ export function servedInput(input: z.ZodObject): StandardSchemaWithJSON {
 }
 
 /** Hints a client may use to decide what to run without asking. Every
- * mutation is destructive unless the action says it only adds. */
+ * mutation is destructive unless the action says it only adds, and
+ * idempotent only when the action says so. */
 export function annotationsOf(action: Action) {
   if (action.kind === "query") return { readOnlyHint: true }
-  return { readOnlyHint: false, destructiveHint: !action.additive }
+  return {
+    readOnlyHint: false,
+    destructiveHint: !action.additive,
+    idempotentHint: action.idempotent === true,
+  }
 }
 
 // A fresh server per request, built from the action registry, so there is
