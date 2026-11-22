@@ -24,4 +24,6 @@ curl -sf localhost:3000/.well-known/oauth-protected-resource/mcp | grep -q '"res
 curl -sf localhost:3000/.well-known/oauth-authorization-server/api/auth | grep -q '"client_id_metadata_document_supported":true'
 test "$(curl -s -o /dev/null -w '%{http_code}' -X POST localhost:3000/mcp -H 'content-type: application/json' -d '{}')" = 401
 curl -s -D - -o /dev/null -X POST localhost:3000/mcp -H 'content-type: application/json' -d '{}' | grep -qi 'www-authenticate: Bearer resource_metadata='
+# A toolsets query string must not change the resource a client is told to use.
+curl -s -D - -o /dev/null -X POST 'localhost:3000/mcp?toolsets=all' -H 'content-type: application/json' -d '{}' | grep -qi 'www-authenticate: Bearer resource_metadata="http://localhost:3000/.well-known/oauth-protected-resource/mcp"'
 echo "smoke passed"
