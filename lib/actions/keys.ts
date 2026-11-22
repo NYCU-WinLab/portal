@@ -407,6 +407,7 @@ export const deleteSshKey = defineAction({
   description:
     "Deletes one of the signed-in member's SSH keys by id (from list_my_ssh_keys). Every service stops serving it on its next read. Fails when the key is not the member's.",
   kind: "mutation",
+  idempotent: true,
   input: z.object({ id: z.uuid() }),
   run: async (actor, { id }) =>
     db.transaction(async (tx) => {
@@ -639,6 +640,7 @@ export const deleteSshService = defineAction({
   description:
     "Portal admins only: deletes a service by id, with its grants and every key's use of it. Its read key stops working at once. Members' keys themselves stay.",
   kind: "mutation",
+  idempotent: true,
   admin: "portal",
   input: z.object({ id: z.uuid() }),
   run: async (actor, { id }) =>
@@ -713,6 +715,7 @@ export const revokeSshServiceGrant = defineAction({
   description:
     "Portal admins only: takes a service away from one member. Their keys leave the service with the grant, and its machines stop accepting them on their next read. Fails when the member holds no grant.",
   kind: "mutation",
+  idempotent: true,
   admin: "portal",
   input: z.object({ id: z.uuid(), user_id: z.uuid() }),
   run: async (actor, { id, user_id }) =>

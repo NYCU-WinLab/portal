@@ -122,6 +122,7 @@ export const revokeAdmin = defineAction({
   description:
     "Removes a member's admin role for one app. Only portal admins can, and the last portal admin cannot be removed.",
   kind: "mutation",
+  idempotent: true,
   input: grantInput,
   run: async (actor, { userId, app }) => {
     return db.transaction(async (tx) => {

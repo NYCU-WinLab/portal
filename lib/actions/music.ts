@@ -365,6 +365,7 @@ export const removeSong = defineAction({
   title: "移出佇列",
   description: "Take a waiting song (by queue item id) out of the queue.",
   kind: "mutation",
+  idempotent: true,
   input: z.object({ itemId }),
   run: async (actor, { itemId: id }) =>
     withQueue(async (tx) => {
@@ -391,6 +392,7 @@ export const clearQueue = defineAction({
   description:
     "Take every waiting song out of the queue. The playing song keeps playing.",
   kind: "mutation",
+  idempotent: true,
   input: z.object({}),
   run: async (actor) =>
     withQueue(async (tx) => {
