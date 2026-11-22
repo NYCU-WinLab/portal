@@ -4,6 +4,7 @@ import { adminAppsOf } from "@/lib/actions/authz"
 import { auth, mcpResource } from "@/lib/auth"
 import { isLabMember } from "@/lib/auth/member"
 import { mcpHandler } from "@/lib/mcp/server"
+import { parseToolsets } from "@/lib/mcp/toolsets"
 
 // The signing keys come from this same server over loopback, not through the
 // public gateway; Better Auth caches them for 5 minutes either way.
@@ -50,6 +51,12 @@ export const POST = requireMcpAuth(
         extra: {
           userId: claims.sub,
           adminApps,
+          toolsets: [
+            ...parseToolsets(
+              new URL(request.url).searchParams.get("toolsets") ??
+                request.headers.get("x-portal-toolsets")
+            ),
+          ],
         },
       },
     })
