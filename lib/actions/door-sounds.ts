@@ -239,6 +239,7 @@ export const deleteDoorSound = defineAction({
   description:
     "Deletes a sound from the door sound pool and from every playlist it is on. Only its uploader or a door admin may.",
   kind: "mutation",
+  idempotent: true,
   input: z.object({ id }),
   run: async (actor, input) => {
     await ownSound(actor, input.id)

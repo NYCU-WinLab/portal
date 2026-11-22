@@ -343,6 +343,7 @@ export const deleteDoorCard = defineAction({
   description:
     "Removes a card from the door reader, so it no longer opens the lab door, and from the card list. Door admins only. A card the reader already lacks is just dropped from the list. When the reader does not confirm, the card stays listed as deleting until a comparison finds it gone; delete it again to retry.",
   kind: "mutation",
+  idempotent: true,
   input: z.object({ cardId }),
   run: async (actor, { cardId: card }) =>
     locked("delete", actor.userId, card, async (tx, touched) => {

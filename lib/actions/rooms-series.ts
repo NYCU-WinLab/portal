@@ -616,6 +616,7 @@ export const deleteStandingMeeting = defineAction({
   description:
     "Deletes one of the member's own standing meetings. Occurrences already booked stay booked; cancel them one by one with cancel_meeting.",
   kind: "mutation",
+  idempotent: true,
   input: z.object({ id: z.uuid() }),
   run: async (actor, { id }) => {
     await ownSeries(actor.userId, id)

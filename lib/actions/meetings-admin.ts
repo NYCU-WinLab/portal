@@ -199,6 +199,7 @@ export const deleteLabMeeting = defineAction({
   description:
     "Admins only. Removes the meeting on date with its questioners. Other weeks do not move.",
   kind: "mutation",
+  idempotent: true,
   input: z.object({ date: isoDate }),
   run: async (actor, { date }) => {
     return changeSchedule(async (tx) => {
