@@ -231,6 +231,7 @@ export const createBentoRestaurant = defineAction({
   description:
     "Adds a restaurant (bento admins only). Add its dishes after with set_bento_menu and its options with set_bento_option_groups.",
   kind: "mutation",
+  additive: true,
   input: z.object(restaurantFields),
   run: async (actor, input) => {
     const [created] = await db

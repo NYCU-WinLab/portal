@@ -141,6 +141,7 @@ export const addPaperTag = defineAction({
   title: "新增論文標籤",
   description: "Admins only. Adds a tag papers can be filed under.",
   kind: "mutation",
+  additive: true,
   input: z.object({ name: tagName }),
   run: async (actor, { name }) => {
     try {
@@ -230,6 +231,7 @@ export const addPaper = defineAction({
   description:
     "Admins only. Adds a paper presenters may choose: title, optional link, venue (e.g. NSDI'24) and tagIds from list_paper_tags.",
   kind: "mutation",
+  additive: true,
   input: z.object(paperFields),
   run: async (actor, { tagIds, ...input }) => {
     return db.transaction(async (tx) => {

@@ -104,6 +104,7 @@ export const addLabMeeting = defineAction({
   title: "新增一週",
   description: `Admins only. Adds one meeting on date; its week label comes from the semester (generate_semester). kind is regular (default), thesis, speaker or holiday; holiday says why there is no meeting.`,
   kind: "mutation",
+  additive: true,
   input: z.object({
     date: isoDate,
     kind: kind.default("regular"),

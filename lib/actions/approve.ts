@@ -256,6 +256,7 @@ export const createApproveDocument = defineAction({
   title: "新增簽核文件",
   description: `Starts a draft document for the member to send round: a title and the PDF as base64 (up to ${PDF_LIMIT / 1024 / 1024} MB). Fields are placed with set_approve_fields, then it is sent with submit_approve_document.`,
   kind: "mutation",
+  additive: true,
   input: z.object({
     title: z.string().trim().min(1, "請填標題").max(200),
     base64: z

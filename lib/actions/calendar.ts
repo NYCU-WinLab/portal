@@ -764,6 +764,7 @@ export const addCalendarSource = defineAction({
   description:
     "Adds a calendar to the signed-in member's portal calendar: url is an ICS address (https or webcal, for example Outlook's published calendar or an iCloud public link), re-read every 5 minutes; content is the text of an .ics file, imported once. Give exactly one. label names it; visibility defaults to private (others see busy blocks only). Fails when the calendar cannot be read. Returns the source id and how many events it holds in the synced window.",
   kind: "mutation",
+  additive: true,
   input: z
     .object({
       label: z.string().trim().min(1).max(100),
