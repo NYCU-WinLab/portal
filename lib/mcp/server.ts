@@ -7,12 +7,18 @@ import type { z } from "zod"
 
 import { runAction, type Action } from "@/lib/actions/define"
 import type { AdminApp } from "@/lib/apps"
-import { actions } from "@/lib/actions/registry"
+import {
+  callableActions,
+  listedActions,
+  routing,
+  toolsetNames,
+} from "@/lib/mcp/toolsets"
 
 export const instructions = [
   "WinLab portal (NYCU Wireless Internet Lab). Every tool acts as the signed-in member, with exactly the permissions the web app gives them. Start with whoami.",
   "Tools by area: Monday lab meetings, presenters and papers (*_lab_meeting*, *_presenter*, *_paper*); booking rooms and meetings with members (book_meeting, *_meeting, *_appointment*, list_room_availability); calendars (*_calendar*); lunch orders (*_bento_*); the lab's music player, which the whole lab hears (*_song, *_queue, play_next, set_volume); the door: cards, opening it and what it says or plays (*_door_*, open_door); conference trips and their receipts (*_trip*); the lab fund (*_reimburse_*); accounting receipts (*_receipt*); documents sent round for signatures (*_approve_*); mailing lists (*_mail_group*); announcements (*_announcement*); leave from a lab meeting (*_leave*); SSH keys (*_ssh_*); profile and avatars (get_profile, *_avatar*).",
   "Take ids from a list_ or get_ tool, never guess them. Tools marked destructive change or remove data, mail people or act on the door: confirm those with the member first.",
+  routing,
 ].join("\n")
 
 /** Drops the regex zod adds next to format uuid: about 20 KB of tools/list
@@ -55,20 +61,42 @@ export function annotationsOf(action: Action) {
 // A fresh server per request, built from the action registry, so there is
 // no hand-kept tool list to drift away from the pages. A member's list
 // leaves out the tools only other apps' admins may run (extra.adminApps,
-// from app/mcp/route.ts); runAction refuses those anyway. Serves both the
-// 2026-07-28 protocol and 2025-era clients.
+// from app/mcp/route.ts); runAction refuses those anyway. tools/list shows
+// every tool unless the client named toolsets (extra.toolsets); every tool
+// the member may run stays callable by name. Serves both the 2026-07-28
+// protocol and 2025-era clients.
 export const mcpHandler = createMcpHandler(({ authInfo }) => {
   const userId = authInfo?.extra?.userId
   const adminOf = new Set(
     (authInfo?.extra?.adminApps as AdminApp[] | undefined) ?? []
   )
+  const toolsets = new Set(
+    (authInfo?.extra?.toolsets as string[] | undefined) ?? toolsetNames
+  )
+  const listed = new Set(listedActions(adminOf, toolsets).map((a) => a.name))
   const server = new McpServer(
     { name: "winlab-portal", version: "0.1.0" },
     { instructions }
   )
-  for (const action of actions) {
-    if (action.mcpExcludedBecause) continue
-    if (action.admin && !adminOf.has(action.admin)) continue
+  // The SDK lists every registered tool, so cut the list down on its way out.
+  const setHandler = server.server.setRequestHandler.bind(server.server)
+  server.server.setRequestHandler = ((method: string, handler: never) =>
+    setHandler(
+      method as never,
+      (method === "tools/list"
+        ? async (...args: unknown[]) => {
+            const result = await (handler as (...a: unknown[]) => unknown)(
+              ...args
+            )
+            const { tools } = result as { tools: { name: string }[] }
+            return {
+              ...(result as object),
+              tools: tools.filter((t) => listed.has(t.name)),
+            }
+          }
+        : handler) as never
+    )) as typeof server.server.setRequestHandler
+  for (const action of callableActions(adminOf)) {
     server.registerTool(
       action.name,
       {
