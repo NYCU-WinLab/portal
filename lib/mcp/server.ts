@@ -69,7 +69,9 @@ export function annotationsOf(action: Action) {
 // leaves out the tools only other apps' admins may run (extra.adminApps,
 // from app/mcp/route.ts); runAction refuses those anyway. tools/list shows
 // every tool unless the client named toolsets (extra.toolsets); every tool
-// the member may run stays callable by name. Serves both the 2026-07-28
+// the member may run stays callable by name. Name toolsets in the
+// X-Portal-Toolsets header; ?toolsets= works for plain requests, but keep it
+// out of the OAuth `resource`, which must be exactly /mcp. Serves both the 2026-07-28
 // protocol and 2025-era clients.
 export const mcpHandler = createMcpHandler(({ authInfo }) => {
   const userId = authInfo?.extra?.userId
