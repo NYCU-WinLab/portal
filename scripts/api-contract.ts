@@ -19,6 +19,9 @@ import { breaking, type Entry, type Schema } from "./api-compat"
 import { actions, appOfAction, backgroundChanges } from "@/lib/actions/registry"
 
 const FILE = "contract/actions.json"
+// The output schema of every action MCP serves, API key or not, by name:
+// lib/mcp/output.ts sends it as the tool's outputSchema.
+const MCP_FILE = "contract/mcp-outputs.json"
 
 /** TypeScript files under these folders. */
 async function sources(dirs: string[]): Promise<string[]> {
@@ -204,17 +207,29 @@ function sorted(value: unknown): unknown {
   return value
 }
 
+const outputOf = (name: string): Schema => {
+  const type = outputTypes().get(name)
+  if (!type) throw new Error(`${name}: output type not found`)
+  return sorted(
+    type.flags & ts.TypeFlags.Void ? { type: "null" } : toSchema(type)
+  ) as Schema
+}
+
+function mcpOutputs() {
+  return Object.fromEntries(
+    actions
+      .filter((a) => !a.mcpExcludedBecause)
+      .map((a) => [a.name, outputOf(a.name)] as const)
+      .sort(([a], [b]) => a.localeCompare(b))
+  )
+}
+
 function contract(): Entry[] {
-  const outputs = outputTypes()
   return actions
     .filter((a) => !a.mcpExcludedBecause && appOfAction.get(a.name))
     .map((a) => {
-      const type = outputs.get(a.name)
-      if (!type) throw new Error(`${a.name}: output type not found`)
       const input = sorted(z.toJSONSchema(a.input, { io: "input" })) as Schema
-      const output = sorted(
-        type.flags & ts.TypeFlags.Void ? { type: "null" } : toSchema(type)
-      ) as Schema
+      const output = outputOf(a.name)
       const hash = createHash("sha256")
         .update(JSON.stringify({ input, output }))
         .digest("hex")
@@ -235,12 +250,15 @@ function contract(): Entry[] {
 }
 
 const text = JSON.stringify(contract(), null, 2) + "\n"
+const mcpText = JSON.stringify(mcpOutputs(), null, 2) + "\n"
 
 if (process.argv.includes("--check")) {
   const problems: string[] = []
   const committed = await readFile(FILE, "utf8").catch(() => "")
   if (committed !== text)
     problems.push(`${FILE} is stale: run bun run api:contract`)
+  if ((await readFile(MCP_FILE, "utf8").catch(() => "")) !== mcpText)
+    problems.push(`${MCP_FILE} is stale: run bun run api:contract`)
   // Against the base branch: a breaking change needs "API-Break: <why>" in
   // a commit message on this branch, and a client release to go with it.
   const base = process.env.API_BASE_REF ?? "origin/main"
@@ -299,5 +317,6 @@ if (process.argv.includes("--check")) {
   console.log(`${FILE}: up to date`)
 } else {
   await writeFile(FILE, text)
+  await writeFile(MCP_FILE, mcpText)
   console.log(`${FILE}: ${JSON.parse(text).length} actions`)
 }

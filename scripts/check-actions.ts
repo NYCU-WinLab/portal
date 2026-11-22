@@ -6,6 +6,7 @@ import { readdir, readFile } from "node:fs/promises"
 import { join, relative, resolve } from "node:path"
 import ts from "typescript"
 
+import { servedOutput } from "@/lib/mcp/output"
 import { defined } from "@/lib/actions/define"
 import { actions } from "@/lib/actions/registry"
 
@@ -54,6 +55,14 @@ for (const action of actions) {
   )
     problems.push(`${action.name}: mcpExcludedBecause needs a reason`)
 }
+
+// MCP serves an outputSchema for every tool, read from contract/mcp-outputs.json
+// (bun run api:contract writes it).
+for (const action of actions)
+  if (!action.mcpExcludedBecause && !servedOutput(action.name))
+    problems.push(
+      `${action.name}: no output schema in contract/mcp-outputs.json (run bun run api:contract)`
+    )
 
 // Who may import what. The database is lib/db; the Better Auth instance
 // (lib/auth/index.ts) also reaches it, through auth.api and

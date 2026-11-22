@@ -7,6 +7,7 @@ import type { z } from "zod"
 
 import { runAction, type Action } from "@/lib/actions/define"
 import type { AdminApp } from "@/lib/apps"
+import { asJson, servedOutput } from "@/lib/mcp/output"
 import {
   callableActions,
   listedActions,
@@ -108,6 +109,7 @@ export const mcpHandler = createMcpHandler(({ authInfo }) => {
         title: action.title,
         description: action.description,
         inputSchema: servedInput(action.input),
+        outputSchema: servedOutput(action.name),
         annotations: annotationsOf(action),
       },
       async (input) => {
@@ -119,7 +121,7 @@ export const mcpHandler = createMcpHandler(({ authInfo }) => {
         )
         return {
           content: [{ type: "text", text: JSON.stringify(result) }],
-          structuredContent: result as Record<string, unknown>,
+          structuredContent: asJson(result) as Record<string, unknown>,
         }
       }
     )
