@@ -10,6 +10,7 @@ The rewrite of portal.winlab.tw on plain Postgres. Apps move over one at a time;
 - **Only `lib/actions`, `lib/auth` and `lib/db` import `@/lib/db`.** `bun run actions:check` fails otherwise, and when an action is missing from the registry.
 - **An action stays off MCP only with a reason** in `mcpExcludedBecause`, e.g. a signature image an agent must never supply.
 - **Action fields**: `name` snake_case (the tool name), `title` in Chinese (what members call it), `description` in English for agents, `kind` query or mutation.
+- **MCP hints**: a mutation is destructive unless it sets `additive: true` (only adds its own new record). Set `idempotent: true` when running it again with the same input leaves the same state.
 - **Permissions live in the action's `run`**, checked against `actor.userId`; a page and an MCP call get the same answer.
 - **Schema**: edit `lib/db/*.ts`, run `bun run db:generate`, commit the SQL in `drizzle/`. Tables are snake_case plurals; the Better Auth tables keep its model names as export keys (`user`, `oauthClient`) so its adapter finds them.
 - **External services get one module each** in `lib/<service>.ts` (`lib/keycloak.ts`; later Nextcloud, Teams, mail). It reads its credentials from the environment, never touches the database, and only actions call it.
