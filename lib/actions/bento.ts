@@ -281,6 +281,7 @@ export const addBentoOrderItem = defineAction({
   description:
     "Orders one or more dishes on an open order for the signed-in member, all or nothing. Each item has menuItemId from the order's menu (get_bento_order), optionValueIds picking one value in every required group and at most one in a group that is not multiple, and quantity (1 to 10 lines). A bento admin may order for another member with userId. Confirm the dishes and options with the member first.",
   kind: "mutation",
+  additive: true,
   input: z.object({
     orderId: id,
     items: z
@@ -463,6 +464,7 @@ export const createBentoOrder = defineAction({
   description:
     "Opens a lunch order to one active restaurant (bento admins only). date defaults to today in Taipei; a day may have several orders.",
   kind: "mutation",
+  additive: true,
   input: z.object({ restaurantId: id, date: isoDate.optional() }),
   run: async (actor, { restaurantId, date }) => {
     const [restaurant] = await db

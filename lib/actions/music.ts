@@ -564,6 +564,7 @@ export const likeSong = defineAction({
   title: "按愛心",
   description: `Like a song by YouTube video id, so it is kept in the caller's own list (list_liked_songs). Likes are private to the caller and belong to the song, not to a queue item. Liking a liked song changes nothing. At most ${LIKE_MAX} songs per member.`,
   kind: "mutation",
+  additive: true,
   input: z.object({ videoId }),
   run: async (actor, input) =>
     db.transaction(async (tx) => {
