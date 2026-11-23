@@ -35,7 +35,12 @@ import {
 } from "@/lib/gitlab"
 import { MeetRefused, meetAction, meetConfigured, meetHost } from "@/lib/meet"
 import { agendaItems } from "@/lib/rooms/agenda"
-import { MEETING_FAILURES, plainTitle, teamsSubject } from "@/lib/rooms/meeting"
+import {
+  MEETING_FAILURES,
+  meetTitle,
+  plainTitle,
+  teamsSubject,
+} from "@/lib/rooms/meeting"
 import { dayLabel, taipeiOffsetIso } from "@/lib/rooms/time"
 
 const sha256 = (value: string) =>
@@ -171,7 +176,7 @@ async function askMeet(
         {
           agenda: items,
           // meet files by group and opener; the [prefix]- is for Teams.
-          title: plainTitle(booking),
+          title: meetTitle(booking),
           group: booking.groupName ?? undefined,
           booking: target,
           startsAt: taipeiOffsetIso(booking.date, booking.startTime),
@@ -188,7 +193,7 @@ async function askMeet(
         {
           agenda: items,
           booking: target,
-          title: plainTitle(booking),
+          title: meetTitle(booking),
           group: booking.groupName ?? undefined,
           startsAt: taipeiOffsetIso(booking.date, booking.startTime),
           endsAt: taipeiOffsetIso(booking.date, booking.endTime),
