@@ -46,6 +46,20 @@ export function plainTitle({ title, meetingPrefix }: Titled) {
   return head && title.startsWith(head) ? title.slice(head.length) : title
 }
 
+/** The longest room title meet accepts, in characters. */
+export const MEET_TITLE_MAX = 80
+
+/**
+ * The title sent to meet: plainTitle cut to meet's limit, so a longer one
+ * is not refused. The booking keeps its full title.
+ */
+export function meetTitle(row: Titled) {
+  const chars = Array.from(plainTitle(row))
+  return chars.length > MEET_TITLE_MAX
+    ? chars.slice(0, MEET_TITLE_MAX).join("")
+    : chars.join("")
+}
+
 /**
  * The subject the Teams pipeline gets: "[prefix]-title", the name its
  * recordings are filed by. Only that transport joins them.
