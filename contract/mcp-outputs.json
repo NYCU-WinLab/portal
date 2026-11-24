@@ -3837,6 +3837,7 @@
     "properties": {
       "app": {
         "enum": [
+          "accounts",
           "assets",
           "bento",
           "door",
@@ -4038,6 +4039,7 @@
             },
             "app": {
               "enum": [
+                "accounts",
                 "assets",
                 "bento",
                 "door",
@@ -4051,6 +4053,7 @@
             },
             "label": {
               "enum": [
+                "Accounts",
                 "Assets",
                 "Bento",
                 "Door",
@@ -9604,6 +9607,7 @@
     "properties": {
       "app": {
         "enum": [
+          "accounts",
           "assets",
           "bento",
           "door",
