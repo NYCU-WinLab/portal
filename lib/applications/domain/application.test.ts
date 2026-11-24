@@ -499,7 +499,7 @@ test("returned dates and arrays are copies", async () => {
   const prov = next(
     app.accept(assignment({ mailGroups: ["lab-all"] }), app.version, ADMIN, NOW)
   )
-  ;(prov.assignment!.mailGroups as { groupId: string }[]).push({
+  ;(prov.assignment!.mailGroups as unknown[]).push({
     groupId: "x",
   })
   prov.assignment!.mailGroups[0].groupId = "y"
