@@ -97,6 +97,13 @@ export const MAIL_KINDS = [
 export type MailKind = (typeof MAIL_KINDS)[number]
 
 export const USERNAME_PATTERN = "^[a-z][a-z0-9._-]{2,31}$"
+/**
+ * A conservative ASCII addr-spec, checked after trim and lowercase: no quotes,
+ * comments, brackets, `,` or `;`, so mailers cannot read another recipient
+ * out of it.
+ */
+export const EMAIL_PATTERN =
+  "^[a-z0-9!#$%&'*+/=?^_`{|}~-]+(\\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*@[a-z0-9-]+(\\.[a-z0-9-]+)+$"
 export const PHONE_PATTERN = "^09[0-9]{8}$"
 export const TOKEN_HASH_PATTERN = "^[0-9a-f]{64}$"
 

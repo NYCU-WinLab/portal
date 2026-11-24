@@ -1,5 +1,6 @@
 import {
   BIRTHDAY_RANGE,
+  EMAIL_PATTERN,
   COHORT_RANGE,
   LAB_STATUSES,
   LIMITS,
@@ -25,14 +26,10 @@ export class Email {
 
   static parse(raw: string, field = "email"): Email {
     const s = raw.trim().toLowerCase()
-    const parts = s.split("@")
     if (
       length(s) < 1 ||
       length(s) > LIMITS.email ||
-      parts.length !== 2 ||
-      !parts[0] ||
-      !parts[1] ||
-      /\s/.test(s)
+      !new RegExp(EMAIL_PATTERN).test(s)
     ) {
       throw invalid(field)
     }
@@ -43,11 +40,17 @@ export class Email {
     return new Email(v)
   }
 
-  /** Key for rate limits: Gmail ignores dots and anything after a plus. */
+  /**
+   * Key for rate limits: anything after a plus is dropped on every domain,
+   * since most providers deliver plus tags to the same mailbox; Gmail also
+   * ignores dots.
+   */
   rateKey(): string {
     const [local, domain] = this.value.split("@")
-    if (domain !== "gmail.com" && domain !== "googlemail.com") return this.value
-    return `${local.split("+")[0].replaceAll(".", "")}@gmail.com`
+    const base = local.split("+")[0]
+    if (domain !== "gmail.com" && domain !== "googlemail.com")
+      return `${base}@${domain}`
+    return `${base.replaceAll(".", "")}@gmail.com`
   }
 
   equals(o: Email): boolean {
