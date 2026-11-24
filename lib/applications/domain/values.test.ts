@@ -28,6 +28,26 @@ describe("Email", () => {
     "a@@b.tw",
     "a b@c.tw",
     `${"a".repeat(250)}@b.tw`,
+    // nodemailer reads these as a different or an extra recipient
+    "a,victim@x.com",
+    "x;victim@x.com",
+    "<a@b.tw>",
+    '"a"@b.tw',
+    "a(c)@b.tw",
+    "a\\b@c.tw",
+    "a:b@c.tw",
+    "a@[1.2.3.4]",
+    "a\u0000b@c.tw",
+    "a\u007fb@c.tw",
+    "\u00e9@b.tw",
+    "a@b\u00fc.tw",
+    "a@localhost",
+    "a@b..tw",
+    "a@.b.tw",
+    "a@b.tw.",
+    ".a@b.tw",
+    "a.@b.tw",
+    "a..b@c.tw",
   ])("rejects %p", (raw) =>
     expect(() => Email.parse(raw)).toThrow(refusal("invalid_input", "email"))
   )
@@ -39,10 +59,23 @@ describe("Email", () => {
     expect(Email.parse("A.B+x@gmail.com").rateKey()).toBe("ab@gmail.com")
     expect(Email.parse("ab@googlemail.com").rateKey()).toBe("ab@gmail.com")
   })
-  test("other domains keep dots and plus", () =>
-    expect(Email.parse("a.b+x@nycu.edu.tw").rateKey()).toBe(
-      "a.b+x@nycu.edu.tw"
+  test("accepts the addr-spec characters", () =>
+    expect(Email.parse("a.b+c_d-e'f@mail-1.b.tw").value).toBe(
+      "a.b+c_d-e'f@mail-1.b.tw"
     ))
+  test("other domains keep dots and drop the plus suffix", () =>
+    expect(Email.parse("a.b+x@nycu.edu.tw").rateKey()).toBe("a.b@nycu.edu.tw"))
+  test("plus tags share a rate key on every domain", () => {
+    expect(Email.parse("victim+1@outlook.com").rateKey()).toBe(
+      "victim@outlook.com"
+    )
+    expect(Email.parse("victim+2@outlook.com").rateKey()).toBe(
+      "victim@outlook.com"
+    )
+    expect(Email.parse("victim@outlook.com").rateKey()).toBe(
+      "victim@outlook.com"
+    )
+  })
 })
 
 describe("Username", () => {
