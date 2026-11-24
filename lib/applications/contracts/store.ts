@@ -30,6 +30,11 @@ const DAY = 24 * HOUR
 const at = (ms: number) => new Date(NOW.getTime() + ms)
 const retry = new RetryPolicy()
 
+// keycloak_id is a uuid column; Keycloak ids are UUIDs.
+const KC_A = "0b8c1f2e-6d3a-4c5b-9e7f-1a2b3c4d5e6f"
+const KC_B = "7f6e5d4c-3b2a-4190-8f7e-6d5c4b3a2918"
+const KC_C = "c3d2e1f0-a9b8-4c7d-8e6f-504132231405"
+
 function changed(t: Transition): Changed {
   if (t.kind !== "changed") throw new Error("expected a change")
   return t
@@ -98,6 +103,12 @@ const ALL_STEPS = [
 
 function completeAll(run: ProvisioningRun, when: Date): ProvisioningRun {
   return ALL_STEPS.reduce((r, step) => r.complete(step, when), run)
+}
+
+/** Event kinds of an open (not unverified) application, in id order. */
+async function eventKinds(store: ApplicationStore, id: string) {
+  const rows = await store.reader.list({ closed: false })
+  return rows.find((r) => r.application.id === id)?.events.map((e) => e.kind)
 }
 
 /** Behaviour every ApplicationStore (in memory or Postgres) must share. */
@@ -219,6 +230,31 @@ export function applicationStoreContract(
       expect(after?.version).toBe(b.version)
     })
 
+    test("active_email_taken leaves the transaction usable", async () => {
+      const s = await subject()
+      const tokens = new SequentialTokens()
+      const email = Email.parse("taken@example.com")
+      await seedPending(s.store, { email })
+      const b = await saveOk(
+        s.store,
+        App.submit(await submitInput({ email }), at(1))
+      )
+      const token = tokens.generate()
+      await s.store.transaction(async (uow) => {
+        expect(await uow.save(changed(b.confirm(at(2))))).toBe(
+          "active_email_taken"
+        )
+        await uow.putToken(b.id, "verify", token.hash, at(2))
+        await uow.queueMail(b.id, mail("has_account", "taken@example.com"))
+      })
+      expect(await lock(s.store, b.id)).toMatchObject({ status: "unverified" })
+      const found = await s.store.reader.byToken(token.hash, "verify")
+      expect(found?.application.id).toBe(b.id)
+      expect(await s.queuedMails()).toEqual([
+        { applicationId: b.id, kind: "has_account", to: "taken@example.com" },
+      ])
+    })
+
     test("save reports username_claimed instead of throwing", async () => {
       const s = await subject()
       await seedProvisioning(s, "shared")
@@ -241,6 +277,95 @@ export function applicationStoreContract(
       expect(after?.assignment).toBeNull()
     })
 
+    test("username_claimed leaves the transaction usable", async () => {
+      const s = await subject()
+      await seedProvisioning(s, "shared")
+      const b = await seedPending(s.store)
+      await s.store.transaction(async (uow) => {
+        const t = b.accept(
+          assignment({ username: Username.restore("shared") }),
+          b.version,
+          { kind: "admin", id: s.adminId },
+          at(1)
+        )
+        expect(await uow.save(changed(t))).toBe("username_claimed")
+        await uow.appendEvent(b.id, "link_sent", null, APPLICANT, at(2))
+      })
+      expect(await eventKinds(s.store, b.id)).toEqual([
+        "submitted",
+        "verified",
+        "link_sent",
+      ])
+    })
+
+    test("a store error outside a savepoint aborts the transaction", async () => {
+      const s = await subject()
+      const tokens = new SequentialTokens()
+      const a = await seedPending(s.store)
+      const b = await seedPending(s.store, { at: at(1) })
+      const token = tokens.generate()
+      await s.store.transaction((uow) =>
+        uow.putToken(a.id, "access", token.hash, NOW)
+      )
+      let duplicate: unknown = null
+      let followUp: unknown = null
+      // Postgres rolls back on COMMIT after an error; a store may also reject.
+      await s.store
+        .transaction(async (uow) => {
+          await uow.appendEvent(b.id, "link_sent", null, APPLICANT, at(2))
+          duplicate = await uow
+            .putToken(b.id, "access", token.hash, at(2))
+            .then(
+              () => null,
+              (e: unknown) => e
+            )
+          followUp = await uow
+            .queueMail(b.id, mail("received", "b@example.com"))
+            .then(
+              () => null,
+              (e: unknown) => e
+            )
+        })
+        .catch(() => undefined)
+      expect(duplicate).toBeInstanceOf(Error)
+      expect(followUp).toBeInstanceOf(Error)
+      expect(await eventKinds(s.store, b.id)).toEqual(["submitted", "verified"])
+      expect(await s.queuedMails()).toEqual([])
+      const found = await s.store.reader.byToken(token.hash, "access")
+      expect(found?.application.id).toBe(a.id)
+    })
+
+    test("a savepoint that catches a store error keeps the transaction usable", async () => {
+      const s = await subject()
+      const tokens = new SequentialTokens()
+      const a = await seedPending(s.store)
+      const b = await seedPending(s.store, { at: at(1) })
+      const token = tokens.generate()
+      await s.store.transaction((uow) =>
+        uow.putToken(a.id, "access", token.hash, NOW)
+      )
+      const email = Email.parse("same@example.com")
+      const first = App.submit(await submitInput({ email }), at(2))
+      await s.store.transaction((uow) => uow.save(first))
+      const second = App.submit(await submitInput({ email }), at(3))
+
+      await s.store.transaction(async (uow) => {
+        await expect(
+          uow.savepoint(() => uow.putToken(b.id, "access", token.hash, at(4)))
+        ).rejects.toThrow()
+        await expect(uow.savepoint(() => uow.save(second))).rejects.toThrow()
+        await uow.appendEvent(b.id, "link_sent", null, APPLICANT, at(5))
+      })
+      expect(await eventKinds(s.store, b.id)).toEqual([
+        "submitted",
+        "verified",
+        "link_sent",
+      ])
+      const found = await s.store.reader.byToken(token.hash, "access")
+      expect(found?.application.id).toBe(a.id)
+      expect(await lock(s.store, second.next.id)).toBeNull()
+    })
+
     test("save refuses a stale version", async () => {
       const s = await subject()
       const a = await seedPending(s.store)
@@ -258,7 +383,7 @@ export function applicationStoreContract(
       await s.store.transaction(async (uow) => {
         const locked = await uow.lock(a.id)
         if (!locked) throw new Error("missing")
-        await uow.setKeycloakId(a.id, "kc-123")
+        await uow.setKeycloakId(a.id, KC_A)
         const t = changed(
           locked.reassign({ username: Username.restore("kcother") }, at(1))
         )
@@ -266,7 +391,7 @@ export function applicationStoreContract(
         expect(await uow.save(t)).toBe("ok")
       })
       const after = await lock(s.store, a.id)
-      expect(after?.keycloakId).toBe("kc-123")
+      expect(after?.keycloakId).toBe(KC_A)
       expect(after?.assignment?.username.value).toBe("kcother")
     })
 
@@ -545,7 +670,7 @@ export function applicationStoreContract(
       )
       await saveRun(s.store, failed)
       await saveRun(s.store, completeAll(failed, at(6)))
-      await s.store.transaction((uow) => uow.setKeycloakId(a.id, "kc-9"))
+      await s.store.transaction((uow) => uow.setKeycloakId(a.id, KC_B))
       const locked = await lock(s.store, a.id)
       if (!locked) throw new Error("missing")
       a = await saveOk(s.store, locked.finish(at(7)))
@@ -567,7 +692,7 @@ export function applicationStoreContract(
       expect(after?.email).toBeNull()
       expect(after?.assignment?.username.value).toBe("purged")
       expect(after?.assignment?.cohort.value).toBe(116)
-      expect(after?.keycloakId).toBe("kc-9")
+      expect(after?.keycloakId).toBe(KC_B)
       expect(await s.store.reader.byToken(token.hash, "access")).toBeNull()
       expect(await s.queuedMails()).toEqual([])
       const run = await s.store.transaction((uow) => uow.lockRun(a.id))
@@ -609,7 +734,9 @@ export function applicationStoreContract(
           when
         )
         await saveRun(s.store, run)
-        await s.store.transaction((uow) => uow.setKeycloakId(p.id, username))
+        await s.store.transaction((uow) =>
+          uow.setKeycloakId(p.id, crypto.randomUUID())
+        )
         const locked = await lock(s.store, p.id)
         await saveOk(s.store, locked!.finish(when))
         return { id: p.id, run }
@@ -674,10 +801,10 @@ export function applicationStoreContract(
       })
       await s.store.transaction(async (uow) => {
         await uow.markMailGroupAdded(a.id, "g1", at(1))
-        await uow.setKeycloakId(a.id, "kc-1")
+        await uow.setKeycloakId(a.id, KC_C)
       })
       const after = await lock(s.store, a.id)
-      expect(after?.keycloakId).toBe("kc-1")
+      expect(after?.keycloakId).toBe(KC_C)
       const groups = after?.assignment?.mailGroups ?? []
       expect(
         [...groups].sort((x, y) => x.groupId.localeCompare(y.groupId))
@@ -686,6 +813,15 @@ export function applicationStoreContract(
         { groupId: "g2", addedAt: null },
       ])
       await s.store.transaction((uow) => uow.setKeycloakId(a.id, null))
+      expect((await lock(s.store, a.id))?.keycloakId).toBeNull()
+    })
+
+    test("setKeycloakId refuses an id that is not a UUID", async () => {
+      const s = await subject()
+      const a = await seedProvisioning(s, "notuuid")
+      await expect(
+        s.store.transaction((uow) => uow.setKeycloakId(a.id, "kc-1"))
+      ).rejects.toThrow()
       expect((await lock(s.store, a.id))?.keycloakId).toBeNull()
     })
 
