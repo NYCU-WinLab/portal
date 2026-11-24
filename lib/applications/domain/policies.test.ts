@@ -160,7 +160,7 @@ test.each([
     "recipient_limit",
   ],
 ])("allows(%p) = %p", (counts, expected) =>
-  expect(new MailRatePolicy().allows(counts)).toBe(expected)
+  expect(new MailRatePolicy().allows(counts)).toBe(expected as "ok")
 )
 test("one password mail request per hour", () => {
   const p = new MailRatePolicy()
