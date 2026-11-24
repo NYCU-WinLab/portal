@@ -61,10 +61,8 @@ describe("derivePasswordMail", () => {
 
   test("password_set sets passwordSet", () =>
     expect(
-      derivePasswordMail([
-        ev(1, "password_mail_sent"),
-        ev(2, "password_set"),
-      ]).passwordSet
+      derivePasswordMail([ev(1, "password_mail_sent"), ev(2, "password_set")])
+        .passwordSet
     ).toBe(true))
 
   test("lastSentAt and lastRequestedAt come from the latest events", () => {

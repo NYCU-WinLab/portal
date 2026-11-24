@@ -35,9 +35,9 @@ describe("ProvisioningRun", () => {
   })
 
   test("nextStep returns the first step not completed", () =>
-    expect(
-      started().complete("create_account", NOW).nextStep(STEP_NAMES)
-    ).toBe("join_keycloak_groups"))
+    expect(started().complete("create_account", NOW).nextStep(STEP_NAMES)).toBe(
+      "join_keycloak_groups"
+    ))
 
   test("nextStep is null when everything is completed", () =>
     expect(allDone().nextStep(STEP_NAMES)).toBeNull())
@@ -86,9 +86,9 @@ describe("ProvisioningRun", () => {
       false,
     ])
     expect(once.error).toBe(RESTART_REASON)
-    expect(once.complete("create_account", NOW).restart(policy, NOW).blocked).toBe(
-      true
-    )
+    expect(
+      once.complete("create_account", NOW).restart(policy, NOW).blocked
+    ).toBe(true)
   })
 
   test("restart on a finished run is an error", () =>
@@ -138,9 +138,9 @@ describe("ProvisioningRun", () => {
     const later = new Date(NOW.getTime() + MIN)
     expect(refusal(() => started().requestMail(NOW))).toBe("wrong_state")
     expect(finished().requestMail(later).nextAt).toEqual(later)
-    expect(
-      refusal(() => finished().release(NOW).requestMail(NOW))
-    ).toBe("password_already_set")
+    expect(refusal(() => finished().release(NOW).requestMail(NOW))).toBe(
+      "password_already_set"
+    )
   })
 
   test("scheduleCheck needs a finished run", () => {
