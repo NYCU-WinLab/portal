@@ -154,6 +154,10 @@ const isActive = (s: ApplicationStatus) => OPEN_STATUSES.includes(s)
 const copyDate = (d: Date) => new Date(d.getTime())
 const copyOptionalDate = (d: Date | null) => (d ? copyDate(d) : null)
 const sameTime = (a: Date, b: Date) => a.getTime() === b.getTime()
+// Only the form Postgres reads back; any other spelling is refused.
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
+const ABORTED =
+  "current transaction is aborted, commands ignored until end of transaction block"
 
 function sameProfile(a: ProfileFields, b: ProfileFields): boolean {
   return (Object.keys(a) as (keyof ProfileFields)[]).every((k) => a[k] === b[k])
@@ -573,6 +577,9 @@ class Tables {
   }
 
   setKeycloakId(applicationId: string, id: string | null) {
+    if (id !== null && !UUID.test(id)) {
+      throw new Error(`invalid input syntax for type uuid: "${id}"`)
+    }
     this.requireRow(applicationId).keycloakId = id
   }
 
@@ -688,25 +695,44 @@ export class InMemoryApplicationStore implements ApplicationStore {
     return run
   }
 
+  /**
+   * Like Postgres, an error from a store call aborts the transaction: every
+   * later call throws until a savepoint around the failed call rolls back to
+   * it. Work that swallows the error and returns still commits nothing; here
+   * the transaction rejects, where Postgres would roll back on COMMIT.
+   */
   private async run<T>(work: (uow: UnitOfWork) => Promise<T>): Promise<T> {
     const tables = new Tables(structuredClone(this.state))
-    let open = true
-    const uow = this.unitOfWork(tables, () => open)
+    const tx = { open: true, aborted: false }
+    const uow = this.unitOfWork(tables, tx)
     try {
       const result = await work(uow)
+      if (tx.aborted) throw new Error(ABORTED)
       this.state = tables.s
       return result
     } finally {
-      open = false
+      tx.open = false
     }
   }
 
-  private unitOfWork(t: Tables, isOpen: () => boolean): UnitOfWork {
+  private unitOfWork(
+    t: Tables,
+    tx: { open: boolean; aborted: boolean }
+  ): UnitOfWork {
+    const usable = () => {
+      if (!tx.open) throw new Error("the transaction has ended")
+      if (tx.aborted) throw new Error(ABORTED)
+    }
     const live =
       <A extends unknown[], R>(fn: (...args: A) => R) =>
       async (...args: A): Promise<Awaited<R>> => {
-        if (!isOpen()) throw new Error("the transaction has ended")
-        return await fn(...args)
+        usable()
+        try {
+          return await fn(...args)
+        } catch (error) {
+          tx.aborted = true
+          throw error
+        }
       }
     const rate = this.rate
     return {
@@ -760,14 +786,25 @@ export class InMemoryApplicationStore implements ApplicationStore {
         t.claimAlert(key, notBefore, now)
       ),
       savepoint: async <R>(work: () => Promise<R>): Promise<R> => {
-        if (!isOpen()) throw new Error("the transaction has ended")
+        usable()
         const saved = structuredClone(t.s)
-        try {
-          return await work()
-        } catch (error) {
+        const rollBack = () => {
           Object.assign(t.s, saved)
+          tx.aborted = false
+        }
+        let result: R
+        try {
+          result = await work()
+        } catch (error) {
+          rollBack()
           throw error
         }
+        // The work swallowed a store error; RELEASE fails as in Postgres.
+        if (tx.aborted) {
+          rollBack()
+          throw new Error(ABORTED)
+        }
+        return result
       },
       delete: live((id: string) => t.delete(id)),
       // `at` is unused: purging only clears data.
