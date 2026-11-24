@@ -12,13 +12,7 @@ import { MailRatePolicy, RetryPolicy } from "../domain/policies"
 import { ProvisioningRun } from "../domain/provisioning-run"
 import { Email, Username } from "../domain/values"
 import type { ApplicationStore, ComposedMail } from "../ports"
-import {
-  ADMIN,
-  NOW,
-  assignment,
-  profile,
-  submitInput,
-} from "../testing/fixtures"
+import { NOW, assignment, profile, submitInput } from "../testing/fixtures"
 import { SequentialTokens } from "../testing/tokens"
 
 export type StoreSubject = {
