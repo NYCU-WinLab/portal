@@ -12,23 +12,37 @@ import {
 } from "./values"
 
 const reserved = { has: async (n: string) => ["root", "ssh-gpu"].includes(n) }
-const refusal = (code: RefusalCode, field?: string) => new ApplicationRefusal(code, field)
+const refusal = (code: RefusalCode, field?: string) =>
+  new ApplicationRefusal(code, field)
 
 describe("Email", () => {
   test("trims and lowercases", () =>
-    expect(Email.parse("  Xiao.Ming@Example.COM ").value).toBe("xiao.ming@example.com"))
-  test.each(["", "a", "a@", "@b.tw", "a@@b.tw", "a b@c.tw", `${"a".repeat(250)}@b.tw`])(
-    "rejects %p",
-    (raw) => expect(() => Email.parse(raw)).toThrow(refusal("invalid_input", "email"))
+    expect(Email.parse("  Xiao.Ming@Example.COM ").value).toBe(
+      "xiao.ming@example.com"
+    ))
+  test.each([
+    "",
+    "a",
+    "a@",
+    "@b.tw",
+    "a@@b.tw",
+    "a b@c.tw",
+    `${"a".repeat(250)}@b.tw`,
+  ])("rejects %p", (raw) =>
+    expect(() => Email.parse(raw)).toThrow(refusal("invalid_input", "email"))
   )
   test("names the field it parses", () =>
-    expect(() => Email.parse("x", "nycu_email")).toThrow(refusal("invalid_input", "nycu_email")))
+    expect(() => Email.parse("x", "nycu_email")).toThrow(
+      refusal("invalid_input", "nycu_email")
+    ))
   test("gmail dots and plus suffix share a rate key", () => {
     expect(Email.parse("A.B+x@gmail.com").rateKey()).toBe("ab@gmail.com")
     expect(Email.parse("ab@googlemail.com").rateKey()).toBe("ab@gmail.com")
   })
   test("other domains keep dots and plus", () =>
-    expect(Email.parse("a.b+x@nycu.edu.tw").rateKey()).toBe("a.b+x@nycu.edu.tw"))
+    expect(Email.parse("a.b+x@nycu.edu.tw").rateKey()).toBe(
+      "a.b+x@nycu.edu.tw"
+    ))
 })
 
 describe("Username", () => {
@@ -45,7 +59,10 @@ describe("Username", () => {
   ])("%p valid: %p", async (raw, ok) => {
     const parsing = Username.parse(raw, reserved)
     if (ok) expect((await parsing).value).toBe(raw)
-    else await expect(parsing).rejects.toThrow(refusal("invalid_input", "username"))
+    else
+      await expect(parsing).rejects.toThrow(
+        refusal("invalid_input", "username")
+      )
   })
 })
 
@@ -66,8 +83,12 @@ describe("Cohort", () => {
 describe("TokenHash", () => {
   test("accepts 64 lowercase hex", () =>
     expect(TokenHash.parse("a".repeat(64)).value).toBe("a".repeat(64)))
-  test.each(["A".repeat(64), "a".repeat(63), "g".repeat(64)])("rejects %p", (hex) =>
-    expect(() => TokenHash.parse(hex)).toThrow(refusal("invalid_input", "token_hash"))
+  test.each(["A".repeat(64), "a".repeat(63), "g".repeat(64)])(
+    "rejects %p",
+    (hex) =>
+      expect(() => TokenHash.parse(hex)).toThrow(
+        refusal("invalid_input", "token_hash")
+      )
   )
 })
 
@@ -110,28 +131,42 @@ describe("ApplicantProfile", () => {
       first_name: "firstName",
       line_id: "lineId",
     }[field]!
-    await expect(ApplicantProfile.parse({ ...input, [key]: value }, reserved)).rejects.toThrow(
-      refusal("invalid_input", field)
-    )
+    await expect(
+      ApplicantProfile.parse({ ...input, [key]: value }, reserved)
+    ).rejects.toThrow(refusal("invalid_input", field))
   })
   test("counts code points, not UTF-16 units", async () =>
     expect(
-      (await ApplicantProfile.parse({ ...input, chineseName: "😀".repeat(32) }, reserved)).fields
-        .chineseName
+      (
+        await ApplicantProfile.parse(
+          { ...input, chineseName: "😀".repeat(32) },
+          reserved
+        )
+      ).fields.chineseName
     ).toBe("😀".repeat(32)))
   test("diff lists changed fields only", async () => {
     const a = await ApplicantProfile.parse(input, reserved)
-    const b = await ApplicantProfile.parse({ ...input, phone: "0987654321" }, reserved)
-    expect(a.diff(b)).toEqual({ phone: { from: "0912345678", to: "0987654321" } })
+    const b = await ApplicantProfile.parse(
+      { ...input, phone: "0987654321" },
+      reserved
+    )
+    expect(a.diff(b)).toEqual({
+      phone: { from: "0912345678", to: "0987654321" },
+    })
   })
 })
 
 describe("ApplicationRefusal", () => {
   test("message is the code with its field", () =>
-    expect(refusal("invalid_input", "phone").message).toBe("invalid_input:phone"))
-  test("is a Refusal", () => expect(refusal("wrong_state")).toBeInstanceOf(Refusal))
+    expect(refusal("invalid_input", "phone").message).toBe(
+      "invalid_input:phone"
+    ))
+  test("is a Refusal", () =>
+    expect(refusal("wrong_state")).toBeInstanceOf(Refusal))
   test("chinese names the field", () =>
     expect(refusal("invalid_input", "phone").chinese).toBe("電話格式不對"))
   test("parseRequestedStatus refuses unknown values", () =>
-    expect(() => parseRequestedStatus("phd")).toThrow(refusal("invalid_input", "requested_status")))
+    expect(() => parseRequestedStatus("phd")).toThrow(
+      refusal("invalid_input", "requested_status")
+    ))
 })
