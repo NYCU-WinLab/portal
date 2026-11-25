@@ -11,7 +11,11 @@ import type { ApplicationStatus, MailKind } from "../domain/constants"
 import { MailRatePolicy, RetryPolicy } from "../domain/policies"
 import { ProvisioningRun } from "../domain/provisioning-run"
 import { Email, Username } from "../domain/values"
-import type { ApplicationStore, ComposedMail } from "../ports"
+import {
+  UnverifiedEmailTaken,
+  type ApplicationStore,
+  type ComposedMail,
+} from "../ports"
 import { NOW, assignment, profile, submitInput } from "../testing/fixtures"
 import { SequentialTokens } from "../testing/tokens"
 
@@ -206,7 +210,7 @@ export function applicationStoreContract(
       const second = App.submit(await submitInput({ email }), at(1))
       await expect(
         s.store.transaction((uow) => uow.save(second))
-      ).rejects.toThrow("lab_applications_unverified_email")
+      ).rejects.toBeInstanceOf(UnverifiedEmailTaken)
       expect(await lock(s.store, second.next.id)).toBeNull()
 
       await saveOk(s.store, first.next.confirm(at(2)))
@@ -823,6 +827,65 @@ export function applicationStoreContract(
         s.store.transaction((uow) => uow.setKeycloakId(a.id, "kc-1"))
       ).rejects.toThrow()
       expect((await lock(s.store, a.id))?.keycloakId).toBeNull()
+    })
+
+    test("setKeycloakId(null) on an accepted application is refused", async () => {
+      const s = await subject()
+      const a = await seedProvisioning(s, "nullkc")
+      await expect(
+        s.store.transaction((uow) => uow.setKeycloakId(a.id, null))
+      ).rejects.toThrow()
+    })
+
+    test("event changes read back in their JSON form", async () => {
+      const s = await subject()
+      const a = await seedPending(s.store)
+      await s.store.transaction((uow) =>
+        uow.appendEvent(
+          a.id,
+          "link_sent",
+          { when: at(5), gone: undefined, kept: 1 },
+          APPLICANT,
+          at(5)
+        )
+      )
+      const rows = await s.store.reader.list({ closed: false })
+      const event = rows
+        .find((r) => r.application.id === a.id)
+        ?.events.find((e) => e.kind === "link_sent")
+      expect(event?.changes).toEqual({ when: at(5).toISOString(), kept: 1 })
+    })
+
+    test("mail groups read back sorted by group id", async () => {
+      const s = await subject()
+      const a = await seedProvisioning(s, "sortedgroups", {
+        mailGroups: ["b", "a"],
+      })
+      const locked = await lock(s.store, a.id)
+      expect(locked?.assignment?.mailGroups.map((g) => g.groupId)).toEqual([
+        "a",
+        "b",
+      ])
+    })
+
+    test("a nested transaction rejects instead of hanging", async () => {
+      const s = await subject()
+      await expect(
+        s.store.transaction(async () => {
+          await s.store.transaction(async () => undefined)
+        })
+      ).rejects.toThrow("nested transaction")
+    }, 1000)
+
+    test("updates of a missing application reject", async () => {
+      const s = await subject()
+      const missing = "00000000-0000-4000-8000-000000000000"
+      await expect(
+        s.store.transaction((uow) => uow.markMailGroupAdded(missing, "g", NOW))
+      ).rejects.toThrow()
+      await expect(
+        s.store.transaction((uow) => uow.setKeycloakId(missing, KC_A))
+      ).rejects.toThrow()
     })
 
     test("data handed in or out is copied", async () => {

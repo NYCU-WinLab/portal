@@ -7,7 +7,7 @@ import {
   profile,
   submitInput,
 } from "../testing/fixtures"
-import { Application, SYSTEM, type Transition } from "./application"
+import { Application, APPLICANT, SYSTEM, type Transition } from "./application"
 import { ApplicationRefusal, type RefusalCode } from "./refusal"
 import { Cohort, Username } from "./values"
 
@@ -531,4 +531,41 @@ test("the source snapshot is copied on restore", async () => {
   snapshot.createdAt.setTime(0)
   expect(app.createdAt).toEqual(NOW)
   expect(Object.isFrozen(app)).toBe(true)
+})
+
+test("accept keeps one copy of a duplicated mail group", async () => {
+  const app = await pending()
+  const accepted = next(
+    app.accept(
+      assignment({ mailGroups: ["b", "a", "b"] }),
+      app.version,
+      ADMIN,
+      NOW
+    )
+  )
+  expect(accepted.assignment?.mailGroups.map((g) => g.groupId)).toEqual([
+    "b",
+    "a",
+  ])
+})
+
+test.each([-1, 0])(
+  "requestChanges refuses a dueAt at or before now (%p)",
+  async (offset) => {
+    const app = await pending()
+    expect(() =>
+      app.requestChanges(
+        { note: "補學號", dueAt: at(offset) },
+        app.version,
+        ADMIN,
+        NOW
+      )
+    ).toThrow(refusal("invalid_input", "dueAt"))
+  }
+)
+
+test("reject does not take the applicant as the actor", async () => {
+  const app = await pending()
+  // @ts-expect-error the applicant cannot reject an application
+  expect(() => app.reject(null, APPLICANT, NOW)).not.toThrow()
 })
