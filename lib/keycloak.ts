@@ -312,6 +312,23 @@ export async function systemAccountIds(): Promise<Set<string>> {
   return system.ids
 }
 
+let systemNames: { names: Set<string>; at: number } | null = null
+
+/** Lowercase usernames of the /system group's accounts, for reserved names. */
+export async function systemAccountUsernames(): Promise<Set<string>> {
+  if (systemNames && Date.now() - systemNames.at < LAB_DIRECTORY_TTL_MS)
+    return systemNames.names
+  const group = await adminGet<{ id: string }>("/group-by-path/system")
+  const people = await adminGet<{ username: string }[]>(
+    `/groups/${group.id}/members?max=1000&briefRepresentation=true`
+  )
+  systemNames = {
+    names: new Set(people.map((p) => p.username.toLowerCase())),
+    at: Date.now(),
+  }
+  return systemNames.names
+}
+
 /**
  * Every enabled account in the realm except those in /system, with each
  * attribute's first value. Most alumni are in no /lab-member group, so the
@@ -537,6 +554,7 @@ export function forgetDirectoryCaches(): void {
   projects = null
   accounts = null
   system = null
+  systemNames = null
   const store = globalThis as unknown as Record<symbol, KeycloakAdmin>
   store[readerKey]?.forgetCaches()
 }

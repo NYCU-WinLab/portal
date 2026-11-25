@@ -596,6 +596,45 @@
     ],
     "type": "object"
   },
+  "confirm_lab_application": {
+    "anyOf": [
+      {
+        "additionalProperties": false,
+        "properties": {
+          "already": {
+            "type": "boolean"
+          },
+          "ok": {
+            "const": true,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok",
+          "already"
+        ],
+        "type": "object"
+      },
+      {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "const": "already_applied",
+            "type": "string"
+          },
+          "ok": {
+            "const": false,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok",
+          "code"
+        ],
+        "type": "object"
+      }
+    ]
+  },
   "copy_bento_order": {
     "additionalProperties": false,
     "properties": {
@@ -2344,6 +2383,365 @@
       "kind",
       "deliverables",
       "issues"
+    ],
+    "type": "object"
+  },
+  "get_lab_application_for_confirm": {
+    "additionalProperties": false,
+    "properties": {
+      "chineseName": {
+        "type": "string"
+      },
+      "confirmed": {
+        "type": "boolean"
+      },
+      "department": {
+        "type": "string"
+      },
+      "firstName": {
+        "type": "string"
+      },
+      "lastName": {
+        "type": "string"
+      },
+      "phoneLast3": {
+        "type": "string"
+      },
+      "requestedStatus": {
+        "enum": [
+          "doctoral",
+          "master"
+        ],
+        "type": "string"
+      },
+      "studentId": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string"
+          }
+        ]
+      },
+      "username": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "chineseName",
+      "firstName",
+      "lastName",
+      "studentId",
+      "department",
+      "requestedStatus",
+      "username",
+      "phoneLast3",
+      "confirmed"
+    ],
+    "type": "object"
+  },
+  "get_lab_application_for_edit": {
+    "additionalProperties": false,
+    "properties": {
+      "changeRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "dueAt": {
+            "type": "string"
+          },
+          "expired": {
+            "type": "boolean"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string"
+              }
+            ]
+          }
+        },
+        "required": [
+          "note",
+          "dueAt",
+          "expired"
+        ],
+        "type": "object"
+      },
+      "profile": {
+        "additionalProperties": false,
+        "properties": {
+          "birthday": {
+            "type": "string"
+          },
+          "chineseName": {
+            "type": "string"
+          },
+          "department": {
+            "type": "string"
+          },
+          "firstName": {
+            "type": "string"
+          },
+          "lastName": {
+            "type": "string"
+          },
+          "lineId": {
+            "type": "string"
+          },
+          "nycuEmail": {
+            "anyOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string"
+              }
+            ]
+          },
+          "phone": {
+            "type": "string"
+          },
+          "studentId": {
+            "anyOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string"
+              }
+            ]
+          },
+          "username": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "username",
+          "chineseName",
+          "firstName",
+          "lastName",
+          "studentId",
+          "birthday",
+          "phone",
+          "nycuEmail",
+          "department",
+          "lineId"
+        ],
+        "type": "object"
+      },
+      "requestedStatus": {
+        "enum": [
+          "doctoral",
+          "master"
+        ],
+        "type": "string"
+      }
+    },
+    "required": [
+      "profile",
+      "requestedStatus",
+      "changeRequest"
+    ],
+    "type": "object"
+  },
+  "get_lab_application_status": {
+    "additionalProperties": false,
+    "properties": {
+      "changeRequest": {
+        "anyOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "dueAt": {
+                "type": "string"
+              },
+              "expired": {
+                "type": "boolean"
+              },
+              "note": {
+                "anyOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "note",
+              "dueAt",
+              "expired"
+            ],
+            "type": "object"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "closedAt": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string"
+          }
+        ]
+      },
+      "closure": {
+        "anyOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "has_account",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "rejected",
+                "type": "string"
+              },
+              "note": {
+                "anyOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "kind",
+              "note"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "withdrawn",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "passwordMail": {
+        "anyOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "canResend": {
+                "type": "boolean"
+              },
+              "expiresAt": {
+                "anyOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              },
+              "lastSentAt": {
+                "anyOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              },
+              "passwordSet": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "lastSentAt",
+              "expiresAt",
+              "passwordSet",
+              "canResend"
+            ],
+            "type": "object"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "reviewedAt": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string"
+          }
+        ]
+      },
+      "status": {
+        "enum": [
+          "accepted",
+          "changes_requested",
+          "pending",
+          "provisioning",
+          "rejected",
+          "unverified",
+          "withdrawn"
+        ],
+        "type": "string"
+      },
+      "submittedAt": {
+        "type": "string"
+      },
+      "verifiedAt": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string"
+          }
+        ]
+      }
+    },
+    "required": [
+      "status",
+      "submittedAt",
+      "verifiedAt",
+      "reviewedAt",
+      "closedAt",
+      "changeRequest",
+      "closure",
+      "passwordMail"
     ],
     "type": "object"
   },
@@ -9602,6 +10000,23 @@
     ],
     "type": "object"
   },
+  "resubmit_lab_application": {
+    "additionalProperties": false,
+    "properties": {
+      "ok": {
+        "const": true,
+        "type": "boolean"
+      },
+      "version": {
+        "type": "number"
+      }
+    },
+    "required": [
+      "ok",
+      "version"
+    ],
+    "type": "object"
+  },
   "revoke_admin": {
     "additionalProperties": false,
     "properties": {
@@ -9863,6 +10278,32 @@
     "required": [
       "id",
       "queued"
+    ],
+    "type": "object"
+  },
+  "send_lab_application_link": {
+    "additionalProperties": false,
+    "properties": {
+      "ok": {
+        "const": true,
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "ok"
+    ],
+    "type": "object"
+  },
+  "send_lab_application_password_mail": {
+    "additionalProperties": false,
+    "properties": {
+      "ok": {
+        "const": true,
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "ok"
     ],
     "type": "object"
   },
@@ -10311,6 +10752,19 @@
     ],
     "type": "object"
   },
+  "submit_lab_application": {
+    "additionalProperties": false,
+    "properties": {
+      "ok": {
+        "const": true,
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "ok"
+    ],
+    "type": "object"
+  },
   "swap_lab_meetings": {
     "additionalProperties": false,
     "properties": {
@@ -10726,6 +11180,24 @@
       "name",
       "email",
       "username"
+    ],
+    "type": "object"
+  },
+  "withdraw_lab_application": {
+    "additionalProperties": false,
+    "properties": {
+      "ok": {
+        "const": true,
+        "type": "boolean"
+      },
+      "status": {
+        "const": "withdrawn",
+        "type": "string"
+      }
+    },
+    "required": [
+      "ok",
+      "status"
     ],
     "type": "object"
   }

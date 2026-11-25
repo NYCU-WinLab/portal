@@ -24,10 +24,17 @@ export const apiApps = {
   invitations: "邀請信",
   avatars: "頭像",
   keys: "SSH 金鑰",
+  applications: "帳號申請",
 } as const
 
 export type ApiApp = keyof typeof apiApps
 export const apiAppKeys = Object.keys(apiApps) as [ApiApp, ...ApiApp[]]
+
+// Apps a member's own key may name: applications is for the apply site's
+// service key only, so a member key never reaches the applicant actions.
+export const memberApiAppKeys = apiAppKeys.filter(
+  (a) => a !== "applications"
+) as [ApiApp, ...ApiApp[]]
 
 // The apps a service key can be allowed into: their actions never act as a
 // person (no profile, no "mine"), so a key that belongs to nobody can run
@@ -35,6 +42,7 @@ export const apiAppKeys = Object.keys(apiApps) as [ApiApp, ...ApiApp[]]
 export const serviceApps = [
   "invitations",
   "avatars",
+  "applications",
 ] as const satisfies ApiApp[]
 export type ServiceApp = (typeof serviceApps)[number]
 

@@ -1198,6 +1198,67 @@
     }
   },
   {
+    "name": "confirm_lab_application",
+    "title": "確認申請 email",
+    "description": "Apply site only: confirms the email with the verify token, which submits the application for review and mails the applicant a status link. Returns ok false with code already_applied when the email already has an active application.",
+    "kind": "mutation",
+    "app": "applications",
+    "hash": "1ef8a5e4a9376d36",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "token": {
+          "maxLength": 128,
+          "minLength": 20,
+          "type": "string"
+        }
+      },
+      "required": [
+        "token"
+      ],
+      "type": "object"
+    },
+    "output": {
+      "anyOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "already": {
+              "type": "boolean"
+            },
+            "ok": {
+              "const": true,
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "ok",
+            "already"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "const": "already_applied",
+              "type": "string"
+            },
+            "ok": {
+              "const": false,
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "ok",
+            "code"
+          ],
+          "type": "object"
+        }
+      ]
+    }
+  },
+  {
     "name": "copy_bento_order",
     "title": "偷學",
     "description": "Copies another member's lines on an open order as the signed-in member's own, replacing whatever the member had ordered there. Prices and options are copied as they were ordered.",
@@ -3807,6 +3868,431 @@
         "kind",
         "deliverables",
         "issues"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "get_lab_application_for_confirm",
+    "title": "查看待確認的申請",
+    "description": "Apply site only: the summary an applicant checks before confirming the email, found by the verify token from the mail.",
+    "kind": "query",
+    "app": "applications",
+    "hash": "3cc5c39e171ceca9",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "token": {
+          "maxLength": 128,
+          "minLength": 20,
+          "type": "string"
+        }
+      },
+      "required": [
+        "token"
+      ],
+      "type": "object"
+    },
+    "output": {
+      "additionalProperties": false,
+      "properties": {
+        "chineseName": {
+          "type": "string"
+        },
+        "confirmed": {
+          "type": "boolean"
+        },
+        "department": {
+          "type": "string"
+        },
+        "firstName": {
+          "type": "string"
+        },
+        "lastName": {
+          "type": "string"
+        },
+        "phoneLast3": {
+          "type": "string"
+        },
+        "requestedStatus": {
+          "enum": [
+            "doctoral",
+            "master"
+          ],
+          "type": "string"
+        },
+        "studentId": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "username": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "chineseName",
+        "firstName",
+        "lastName",
+        "studentId",
+        "department",
+        "requestedStatus",
+        "username",
+        "phoneLast3",
+        "confirmed"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "get_lab_application_for_edit",
+    "title": "查看要修改的申請",
+    "description": "Apply site only: the profile an applicant may edit while changes are requested, found by the access token.",
+    "kind": "query",
+    "app": "applications",
+    "hash": "30e4cc460c02445a",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "token": {
+          "maxLength": 128,
+          "minLength": 20,
+          "type": "string"
+        }
+      },
+      "required": [
+        "token"
+      ],
+      "type": "object"
+    },
+    "output": {
+      "additionalProperties": false,
+      "properties": {
+        "changeRequest": {
+          "additionalProperties": false,
+          "properties": {
+            "dueAt": {
+              "type": "string"
+            },
+            "expired": {
+              "type": "boolean"
+            },
+            "note": {
+              "anyOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "required": [
+            "note",
+            "dueAt",
+            "expired"
+          ],
+          "type": "object"
+        },
+        "profile": {
+          "additionalProperties": false,
+          "properties": {
+            "birthday": {
+              "type": "string"
+            },
+            "chineseName": {
+              "type": "string"
+            },
+            "department": {
+              "type": "string"
+            },
+            "firstName": {
+              "type": "string"
+            },
+            "lastName": {
+              "type": "string"
+            },
+            "lineId": {
+              "type": "string"
+            },
+            "nycuEmail": {
+              "anyOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            },
+            "phone": {
+              "type": "string"
+            },
+            "studentId": {
+              "anyOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            },
+            "username": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "username",
+            "chineseName",
+            "firstName",
+            "lastName",
+            "studentId",
+            "birthday",
+            "phone",
+            "nycuEmail",
+            "department",
+            "lineId"
+          ],
+          "type": "object"
+        },
+        "requestedStatus": {
+          "enum": [
+            "doctoral",
+            "master"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "profile",
+        "requestedStatus",
+        "changeRequest"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "get_lab_application_status",
+    "title": "查看申請狀態",
+    "description": "Apply site only: where an application stands, found by the access token from the status link.",
+    "kind": "query",
+    "app": "applications",
+    "hash": "5cfba92bdfc8b441",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "token": {
+          "maxLength": 128,
+          "minLength": 20,
+          "type": "string"
+        }
+      },
+      "required": [
+        "token"
+      ],
+      "type": "object"
+    },
+    "output": {
+      "additionalProperties": false,
+      "properties": {
+        "changeRequest": {
+          "anyOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "dueAt": {
+                  "type": "string"
+                },
+                "expired": {
+                  "type": "boolean"
+                },
+                "note": {
+                  "anyOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "note",
+                "dueAt",
+                "expired"
+              ],
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "closedAt": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "closure": {
+          "anyOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "kind": {
+                  "const": "has_account",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "kind"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "kind": {
+                  "const": "rejected",
+                  "type": "string"
+                },
+                "note": {
+                  "anyOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "kind",
+                "note"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "kind": {
+                  "const": "withdrawn",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "kind"
+              ],
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "passwordMail": {
+          "anyOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "canResend": {
+                  "type": "boolean"
+                },
+                "expiresAt": {
+                  "anyOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "type": "string"
+                    }
+                  ]
+                },
+                "lastSentAt": {
+                  "anyOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "type": "string"
+                    }
+                  ]
+                },
+                "passwordSet": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "lastSentAt",
+                "expiresAt",
+                "passwordSet",
+                "canResend"
+              ],
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "reviewedAt": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "status": {
+          "enum": [
+            "accepted",
+            "changes_requested",
+            "pending",
+            "provisioning",
+            "rejected",
+            "unverified",
+            "withdrawn"
+          ],
+          "type": "string"
+        },
+        "submittedAt": {
+          "type": "string"
+        },
+        "verifiedAt": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "required": [
+        "status",
+        "submittedAt",
+        "verifiedAt",
+        "reviewedAt",
+        "closedAt",
+        "changeRequest",
+        "closure",
+        "passwordMail"
       ],
       "type": "object"
     }
@@ -11789,6 +12275,59 @@
     }
   },
   {
+    "name": "resubmit_lab_application",
+    "title": "重新送出申請",
+    "description": "Apply site only: sends back an application whose changes were requested, with the corrected profile. The email cannot change.",
+    "kind": "mutation",
+    "app": "applications",
+    "hash": "2ea33ef1a1c9ed29",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "profile": {
+          "additionalProperties": {},
+          "propertyNames": {
+            "maxLength": 64,
+            "type": "string"
+          },
+          "type": "object"
+        },
+        "requestedStatus": {
+          "maxLength": 32,
+          "type": "string"
+        },
+        "token": {
+          "maxLength": 128,
+          "minLength": 20,
+          "type": "string"
+        }
+      },
+      "required": [
+        "token",
+        "requestedStatus",
+        "profile"
+      ],
+      "type": "object"
+    },
+    "output": {
+      "additionalProperties": false,
+      "properties": {
+        "ok": {
+          "const": true,
+          "type": "boolean"
+        },
+        "version": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "ok",
+        "version"
+      ],
+      "type": "object"
+    }
+  },
+  {
     "name": "rotate_calendar_feeds",
     "title": "重設訂閱連結",
     "description": "Ends every calendar subscription link the signed-in member has (for example after one leaked) and makes new ones; calendar apps subscribed with the old links stop updating.",
@@ -12033,6 +12572,75 @@
       "required": [
         "id",
         "queued"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "send_lab_application_link",
+    "title": "寄送申請狀態連結",
+    "description": "Apply site only: mails a new status link to an email that has an application. Always answers ok, so it does not reveal whether the email applied.",
+    "kind": "mutation",
+    "app": "applications",
+    "hash": "d78b6c5bf74f3141",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "email": {
+          "maxLength": 254,
+          "type": "string"
+        }
+      },
+      "required": [
+        "email"
+      ],
+      "type": "object"
+    },
+    "output": {
+      "additionalProperties": false,
+      "properties": {
+        "ok": {
+          "const": true,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "ok"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "send_lab_application_password_mail",
+    "title": "重寄設定密碼信",
+    "description": "Apply site only: asks for the set-password mail again after an application was accepted; one request an hour.",
+    "kind": "mutation",
+    "app": "applications",
+    "hash": "7777ff0968bffe4d",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "token": {
+          "maxLength": 128,
+          "minLength": 20,
+          "type": "string"
+        }
+      },
+      "required": [
+        "token"
+      ],
+      "type": "object"
+    },
+    "output": {
+      "additionalProperties": false,
+      "properties": {
+        "ok": {
+          "const": true,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "ok"
       ],
       "type": "object"
     }
@@ -13207,6 +13815,54 @@
       "required": [
         "id",
         "signers"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "submit_lab_application",
+    "title": "送出帳號申請",
+    "description": "Apply site only: starts an account application and mails the applicant a link to verify the email. The answer is the same whether the email is new, already applying or already has an account.",
+    "kind": "mutation",
+    "app": "applications",
+    "hash": "2633fd548247786a",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "email": {
+          "maxLength": 254,
+          "type": "string"
+        },
+        "profile": {
+          "additionalProperties": {},
+          "propertyNames": {
+            "maxLength": 64,
+            "type": "string"
+          },
+          "type": "object"
+        },
+        "requestedStatus": {
+          "maxLength": 32,
+          "type": "string"
+        }
+      },
+      "required": [
+        "email",
+        "requestedStatus",
+        "profile"
+      ],
+      "type": "object"
+    },
+    "output": {
+      "additionalProperties": false,
+      "properties": {
+        "ok": {
+          "const": true,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "ok"
       ],
       "type": "object"
     }
@@ -14648,6 +15304,46 @@
         "name",
         "email",
         "username"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "withdraw_lab_application",
+    "title": "撤回申請",
+    "description": "Apply site only: withdraws the application behind the access token. Withdrawing twice leaves the same state.",
+    "kind": "mutation",
+    "app": "applications",
+    "hash": "2909df4220580e48",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "token": {
+          "maxLength": 128,
+          "minLength": 20,
+          "type": "string"
+        }
+      },
+      "required": [
+        "token"
+      ],
+      "type": "object"
+    },
+    "output": {
+      "additionalProperties": false,
+      "properties": {
+        "ok": {
+          "const": true,
+          "type": "boolean"
+        },
+        "status": {
+          "const": "withdrawn",
+          "type": "string"
+        }
+      },
+      "required": [
+        "ok",
+        "status"
       ],
       "type": "object"
     }

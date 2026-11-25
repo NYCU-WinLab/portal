@@ -6,7 +6,7 @@ import { z } from "zod"
 
 import { isAdmin } from "@/lib/actions/authz"
 import { type Actor, defineAction } from "@/lib/actions/define"
-import { apiAppKeys, type ApiApp } from "@/lib/api-apps"
+import { memberApiAppKeys, type ApiApp } from "@/lib/api-apps"
 import { checkServiceKey } from "@/lib/actions/service-keys"
 import { isLabMember, isLabMemberNow } from "@/lib/auth/member"
 import { db } from "@/lib/db"
@@ -76,7 +76,7 @@ export const createApiKey = defineAction({
   input: z.object({
     name: z.string().trim().min(1, "請填名稱").max(60, "名稱最多 60 字"),
     apps: z
-      .array(z.enum(apiAppKeys))
+      .array(z.enum(memberApiAppKeys))
       .min(1, "至少選一個 app")
       .transform((apps) => [...new Set(apps)]),
   }),
@@ -194,7 +194,7 @@ export async function checkApiKey(
     userId: row.userId,
     keyId: row.id,
     apps: row.apps.filter((app): app is ApiApp =>
-      (apiAppKeys as string[]).includes(app)
+      (memberApiAppKeys as string[]).includes(app)
     ),
   }
 }
