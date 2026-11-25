@@ -3,12 +3,19 @@ import { STEP_NAMES } from "../domain/constants"
 import { MailRatePolicy, RetentionPolicy } from "../domain/policies"
 import { ProvisioningRun } from "../domain/provisioning-run"
 import { APPLICANT_CODES, ApplicationRefusal } from "../domain/refusal"
+import { Application } from "../domain/application"
 import { Email } from "../domain/values"
 import type { ApplicationStore, UnitOfWork } from "../ports"
 import { FixedClock } from "../testing/clock"
 import { FakeKeycloak } from "../testing/fake-keycloak"
 import { FakeAuthority, FixedReservedNames } from "../testing/fakes"
-import { ADMIN, assignment, pending, profileInput } from "../testing/fixtures"
+import {
+  ADMIN,
+  assignment,
+  pending,
+  profile,
+  profileInput,
+} from "../testing/fixtures"
 import { InMemoryApplicationStore } from "../testing/memory-store"
 import { SequentialTokens } from "../testing/tokens"
 import { ApplicantService, type SubmitForm } from "./applicant-service"
@@ -634,5 +641,100 @@ describe("requestPasswordMail", () => {
     expect(await refused(h.service.requestPasswordMail(access))).toBe(
       "password_already_set"
     )
+  })
+})
+
+/** Wraps the memory store; `uow` gets the store's unit of work per call. */
+function wrapUow(
+  change: (uow: UnitOfWork) => Partial<UnitOfWork>
+): (inner: InMemoryApplicationStore) => ApplicationStore {
+  return (inner) => ({
+    reader: inner.reader,
+    transaction: (work) =>
+      inner.transaction((uow) => work({ ...uow, ...change(uow) })),
+  })
+}
+
+describe("races the indexes catch", () => {
+  test("username_claimed from save is invalid_input:username and queues no mail", async () => {
+    let claimed = false
+    const h = await setup({
+      wrap: wrapUow((uow) => ({
+        save: async (t) => (claimed ? "username_claimed" : uow.save(t)),
+      })),
+    })
+    claimed = true
+    const error = await h.service.submit(form()).catch((e: unknown) => e)
+    expect(error).toBeInstanceOf(ApplicationRefusal)
+    expect((error as ApplicationRefusal).code).toBe("invalid_input")
+    expect((error as ApplicationRefusal).field).toBe("username")
+    expect(mails(h)).toEqual([])
+
+    claimed = false
+    const { access, id } = await confirmed(h)
+    await requestChanges(h, id)
+    const before = mails(h).length
+    claimed = true
+    expect(
+      await refused(
+        h.service.resubmit(access, {
+          requestedStatus: "master",
+          profile: profileInput(),
+        })
+      )
+    ).toBe("invalid_input:username")
+    expect(mails(h).length).toBe(before)
+    claimed = false
+    expect((await h.service.getStatus(access)).status).toBe("changes_requested")
+  })
+
+  test("a concurrent unverified submit is replaced once", async () => {
+    const rival = Application.submit(
+      {
+        id: crypto.randomUUID(),
+        email: Email.parse(EMAIL),
+        requestedStatus: "master",
+        profile: await profile({ username: "rival" }),
+      },
+      new Date(0)
+    )
+    let racing = true
+    let hidden = false
+    const h = await setup({
+      wrap: wrapUow((uow) => ({
+        // The rival commits just after this transaction looked: the first
+        // lookup misses it and the save trips the unverified index.
+        savepoint: async (work) => {
+          if (racing) {
+            racing = false
+            hidden = true
+            await uow.save(rival)
+          }
+          return uow.savepoint(work)
+        },
+        lockByEmail: async (email, statuses) => {
+          if (hidden && statuses.includes("unverified")) {
+            hidden = false
+            return null
+          }
+          return uow.lockByEmail(email, statuses)
+        },
+      })),
+    })
+    expect(await h.service.submit(form())).toEqual({ ok: true })
+    expect(racing).toBe(false)
+    expect(hidden).toBe(false)
+    expect(kinds(h)).toEqual(["verify"])
+    const ours = mails(h)[0].applicationId!
+    await h.store.transaction(async (uow) => {
+      expect(await uow.lock(rival.next.id)).toBeNull()
+      expect((await uow.lock(ours))?.status).toBe("unverified")
+      expect(
+        (await uow.lockByEmail(Email.parse(EMAIL), ["unverified"]))?.id
+      ).toBe(ours)
+    })
+    expect(
+      (await h.service.getForConfirm(lastToken(h, "verify"))).username
+    ).toBe("xmwang")
   })
 })
