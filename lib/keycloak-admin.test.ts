@@ -151,3 +151,37 @@ test("groupExists is true on 200 and false on 404", async () => {
   expect(await kc.groupExists("/lab-member/114")).toBe(true)
   expect(await kc.groupExists("/lab-member/999")).toBe(false)
 })
+
+test("by default it calls the fetch under Next's patch, read per call", async () => {
+  const saved = globalThis.fetch
+  const used: string[] = []
+  const answer = (who: string) =>
+    (async (input: string | URL | Request) => {
+      used.push(who)
+      return String(input) === TOKEN_URL
+        ? Response.json({ access_token: "t", expires_in: 300 })
+        : Response.json([])
+    }) as typeof globalThis.fetch
+  try {
+    const admin = new KeycloakAdmin({
+      issuer: ISSUER,
+      clientId: "c",
+      clientSecret: "s",
+      span: (async (_n: string, _a: unknown, fn: () => Promise<unknown>) =>
+        fn()) as never,
+    })
+    // Next patches fetch at request time, after the client is made.
+    globalThis.fetch = Object.assign(answer("patched"), {
+      _nextOriginalFetch: answer("original"),
+    })
+    expect(await admin.emailExists(email("a@b.co"))).toBe(false)
+    expect(used).toEqual(["original", "original"])
+    // Outside Next (scripts, tests) there is no patch: the global fetch.
+    globalThis.fetch = answer("plain")
+    admin.forgetCaches()
+    await admin.emailExists(email("a@b.co"))
+    expect(used.slice(2)).toEqual(["plain", "plain"])
+  } finally {
+    globalThis.fetch = saved
+  }
+})

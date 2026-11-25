@@ -386,6 +386,24 @@ type Span = <T>(
   fn: () => Promise<T>
 ) => Promise<T>
 
+type Fetch = (url: string, init: RequestInit) => Promise<Response>
+
+/**
+ * The fetch under Next's patch, looked up on each call because Next patches
+ * fetch per request, after this module loads. Next's patched fetch records
+ * the full URL, query included, in its own span, and these queries carry an
+ * applicant's email or username. Next keeps the fetch it wrapped on
+ * `_nextOriginalFetch` (node_modules/next/dist/server/lib/patch-fetch.js).
+ * @vercel/otel's fetch span is turned off for these URLs in
+ * instrumentation.ts.
+ */
+const unpatchedFetch: Fetch = (url, init) => {
+  const f = globalThis.fetch as typeof globalThis.fetch & {
+    _nextOriginalFetch?: typeof globalThis.fetch
+  }
+  return (f._nextOriginalFetch ?? f)(url, init)
+}
+
 /**
  * A read-only client of the realm for the account application: its own
  * token per instance, one retry after a 401, and every HTTP call in a span
@@ -396,7 +414,7 @@ type Span = <T>(
 export class KeycloakAdmin implements KeycloakDirectory {
   private token: { value: string; expires: number } | null = null
   private readonly timeoutMs: number
-  private readonly http: typeof globalThis.fetch
+  private readonly http: Fetch
   private readonly span: Span
   private readonly base: string
 
@@ -411,7 +429,7 @@ export class KeycloakAdmin implements KeycloakDirectory {
     }
   ) {
     this.timeoutMs = config.timeoutMs ?? 5000
-    this.http = config.fetch ?? globalThis.fetch
+    this.http = config.fetch ?? unpatchedFetch
     this.span = config.span ?? traced
     this.base = config.issuer.replace("/realms/", "/admin/realms/")
   }

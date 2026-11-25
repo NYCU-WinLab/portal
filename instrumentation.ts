@@ -35,12 +35,25 @@ export async function register() {
       .filter(([key, value]) => key && value)
   )
 
+  // KeycloakAdmin looks applicants up by email or username in the query
+  // (/users?email=…); a fetch span would record the full URL. Its own
+  // `keycloak GET /users` span carries the path only.
+  const keycloakLookups = process.env.KEYCLOAK_ISSUER?.replace(
+    "/realms/",
+    "/admin/realms/"
+  ).concat("/users?")
+
   registerOTel({
     serviceName: process.env.OTEL_SERVICE_NAME ?? "portal",
     // LRCLIB answers 503 now and then and lrclib.ts retries it, so each failed
     // try would be an error span and an alert for a call that recovers.
     instrumentationConfig: {
-      fetch: { ignoreUrls: [/^https:\/\/lrclib\.net\//] },
+      fetch: {
+        ignoreUrls: [
+          /^https:\/\/lrclib\.net\//,
+          ...(keycloakLookups ? [keycloakLookups] : []),
+        ],
+      },
     },
     spanProcessors: [],
     traceExporter: new OTLPHttpJsonTraceExporter({
