@@ -37,11 +37,15 @@ export async function register() {
 
   // KeycloakAdmin looks applicants up by email or username in the query
   // (/users?email=…); a fetch span would record the full URL. Its own
-  // `keycloak GET /users` span carries the path only.
-  const keycloakLookups = process.env.KEYCLOAK_ISSUER?.replace(
+  // `keycloak GET /users` span carries the path only. Only these two lookups
+  // are ignored, so the member directory (/users?max=…) keeps its span.
+  const keycloakUsers = process.env.KEYCLOAK_ISSUER?.replace(
     "/realms/",
     "/admin/realms/"
   ).concat("/users?")
+  const keycloakLookups = keycloakUsers
+    ? [`${keycloakUsers}email=`, `${keycloakUsers}username=`]
+    : []
 
   registerOTel({
     serviceName: process.env.OTEL_SERVICE_NAME ?? "portal",
@@ -49,10 +53,7 @@ export async function register() {
     // try would be an error span and an alert for a call that recovers.
     instrumentationConfig: {
       fetch: {
-        ignoreUrls: [
-          /^https:\/\/lrclib\.net\//,
-          ...(keycloakLookups ? [keycloakLookups] : []),
-        ],
+        ignoreUrls: [/^https:\/\/lrclib\.net\//, ...keycloakLookups],
       },
     },
     spanProcessors: [],
