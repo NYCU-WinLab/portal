@@ -2,6 +2,13 @@
 // only realm-management view-users: it can look members up, never change
 // them. Members change their account in Keycloak's account console.
 
+import type { Email, Username } from "@/lib/applications/domain/values"
+import {
+  KeycloakUnavailable,
+  type KeycloakDirectory,
+} from "@/lib/applications/ports"
+import { traced } from "@/lib/otel"
+
 const issuer = () => process.env.KEYCLOAK_ISSUER!
 const timeout = () => AbortSignal.timeout(5000)
 let cached: { token: string; expires: number } | null = null
@@ -354,4 +361,182 @@ function displayName(person: {
     [person.firstName, person.lastName].filter(Boolean).join(" ") ||
     person.username
   )
+}
+
+type Span = <T>(
+  name: string,
+  attributes: Record<string, string | number | boolean>,
+  fn: () => Promise<T>
+) => Promise<T>
+
+/**
+ * A read-only client of the realm for the account application: its own
+ * token per instance, one retry after a 401, and every HTTP call in a span
+ * named by method and path (never the query, which carries the email or
+ * username being looked up). A 5xx, a timeout or a dropped connection throws
+ * KeycloakUnavailable; any other unexpected answer throws a plain Error.
+ */
+export class KeycloakAdmin implements KeycloakDirectory {
+  private token: { value: string; expires: number } | null = null
+  private readonly timeoutMs: number
+  private readonly http: typeof globalThis.fetch
+  private readonly span: Span
+  private readonly base: string
+
+  constructor(
+    private readonly config: {
+      issuer: string
+      clientId: string
+      clientSecret: string
+      timeoutMs?: number
+      fetch?: typeof globalThis.fetch
+      span?: Span
+    }
+  ) {
+    this.timeoutMs = config.timeoutMs ?? 5000
+    this.http = config.fetch ?? globalThis.fetch
+    this.span = config.span ?? traced
+    this.base = config.issuer.replace("/realms/", "/admin/realms/")
+  }
+
+  forgetCaches(): void {
+    this.token = null
+  }
+
+  async emailExists(email: Email): Promise<boolean> {
+    const found = await this.get<{ email?: string }[]>(
+      "/users",
+      new URLSearchParams({ email: email.value, exact: "true" })
+    )
+    // Keycloak stores emails lowercase, but match on the answer, not on that.
+    return (found ?? []).some((u) => u.email?.toLowerCase() === email.value)
+  }
+
+  async usernamesTaken(names: readonly Username[]): Promise<Set<string>> {
+    const taken = new Set<string>()
+    await Promise.all(
+      names.map(async (name) => {
+        const wanted = name.value.toLowerCase()
+        const found = await this.get<{ username?: string }[]>(
+          "/users",
+          new URLSearchParams({ username: wanted, exact: "true" })
+        )
+        if ((found ?? []).some((u) => u.username?.toLowerCase() === wanted))
+          taken.add(wanted)
+      })
+    )
+    return taken
+  }
+
+  async groupExists(path: string): Promise<boolean> {
+    const segments = path.split("/").filter(Boolean).map(encodeURIComponent)
+    const found = await this.get<unknown>(
+      `/group-by-path/${segments.join("/")}`,
+      undefined,
+      true
+    )
+    return found !== null
+  }
+
+  private async accessToken(): Promise<string> {
+    if (this.token && this.token.expires > Date.now() + 10_000)
+      return this.token.value
+    const path = "/protocol/openid-connect/token"
+    const response = await this.call("POST", this.config.issuer + path, path, {
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "client_credentials",
+        client_id: this.config.clientId,
+        client_secret: this.config.clientSecret,
+      }),
+    })
+    if (!response.ok) throw new Error(`Keycloak token ${response.status}`)
+    const body = (await response.json()) as {
+      access_token: string
+      expires_in: number
+    }
+    this.token = {
+      value: body.access_token,
+      expires: Date.now() + body.expires_in * 1000,
+    }
+    return this.token.value
+  }
+
+  /** GET an admin path; null on 404 when `missingIsNull`. */
+  private async get<T>(
+    path: string,
+    query?: URLSearchParams,
+    missingIsNull = false
+  ): Promise<T | null> {
+    const url = `${this.base}${path}${query ? `?${query}` : ""}`
+    const send = async () =>
+      this.call("GET", url, path, {
+        headers: { authorization: `Bearer ${await this.accessToken()}` },
+      })
+    let response = await send()
+    // A token Keycloak dropped early: fetch a new one, once.
+    if (response.status === 401) {
+      this.token = null
+      response = await send()
+    }
+    if (response.status === 404 && missingIsNull) return null
+    if (!response.ok) throw new Error(`Keycloak ${path} ${response.status}`)
+    return (await response.json()) as T
+  }
+
+  /** One HTTP call in a span; 5xx, timeout and network errors are Unavailable. */
+  private call(
+    method: string,
+    url: string,
+    path: string,
+    init: RequestInit
+  ): Promise<Response> {
+    return this.span(
+      `keycloak ${method} ${path}`,
+      { "http.request.method": method, "url.path": path },
+      async () => {
+        let response: Response
+        try {
+          response = await this.http(url, {
+            ...init,
+            method,
+            cache: "no-store",
+            signal: AbortSignal.timeout(this.timeoutMs),
+          })
+        } catch {
+          throw new KeycloakUnavailable(
+            `Keycloak ${method} ${path} unreachable`
+          )
+        }
+        if (response.status >= 500)
+          throw new KeycloakUnavailable(
+            `Keycloak ${method} ${path} ${response.status}`
+          )
+        return response
+      }
+    )
+  }
+}
+
+const readerKey = Symbol.for("portal.keycloakReader")
+
+/** The portal client's reader, made on first use and kept across reloads. */
+export function keycloakReader(): KeycloakAdmin {
+  const store = globalThis as unknown as Record<symbol, KeycloakAdmin>
+  return (store[readerKey] ??= new KeycloakAdmin({
+    issuer: issuer(),
+    clientId: process.env.KEYCLOAK_CLIENT_ID!,
+    clientSecret: process.env.KEYCLOAK_CLIENT_SECRET!,
+  }))
+}
+
+/** Clears this module's caches and the reader's token. */
+export function forgetDirectoryCaches(): void {
+  cached = null
+  directory = null
+  projects = null
+  accounts = null
+  system = null
+  const store = globalThis as unknown as Record<symbol, KeycloakAdmin>
+  store[readerKey]?.forgetCaches()
 }
