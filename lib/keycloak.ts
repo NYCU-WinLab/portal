@@ -83,6 +83,22 @@ export const labStatuses = [
 export type LabStatus = (typeof labStatuses)[number]
 export type LabMember = { status?: LabStatus; cohort?: number; email?: string }
 
+// alumni first, so a graduate left in an old status group is never kept in;
+// then the order of labStatuses.
+const statusPrecedence: readonly LabStatus[] = [
+  "alumni",
+  ...labStatuses.filter((status) => status !== "alumni"),
+]
+
+/**
+ * The one status of someone in these /lab-member groups (names that are not
+ * a status are skipped), whatever order Keycloak lists them in.
+ */
+export function labStatusOf(names: Iterable<string>): LabStatus | undefined {
+  const held = new Set(names)
+  return statusPrecedence.find((status) => held.has(status))
+}
+
 const LAB_DIRECTORY_TTL_MS = 10 * 60 * 1000
 let directory: { members: Map<string, LabMember>; at: number } | null = null
 
@@ -100,8 +116,9 @@ async function adminGet<T>(path: string): Promise<T> {
 /**
  * Status and cohort of everyone in the realm's /lab-member groups, by
  * Keycloak id: /lab-member/master gives the status, /lab-member/114 the
- * cohort (民國 admission year). Read live, cached for 10 minutes, so
- * nothing copies these into the database to drift.
+ * cohort (民國 admission year). Someone in two status groups gets the one
+ * labStatusOf picks. Read live, cached for 10 minutes, so nothing copies
+ * these into the database to drift.
  */
 export async function labDirectory(): Promise<Map<string, LabMember>> {
   if (directory && Date.now() - directory.at < LAB_DIRECTORY_TTL_MS)
@@ -121,7 +138,7 @@ export async function labDirectory(): Promise<Map<string, LabMember>> {
     for (const { id, email } of people) {
       const member = members.get(id) ?? {}
       if (email) member.email = email
-      if (status) member.status = status
+      if (status) member.status = labStatusOf([status, member.status ?? ""])
       if (cohort !== undefined) member.cohort = cohort
       members.set(id, member)
     }
