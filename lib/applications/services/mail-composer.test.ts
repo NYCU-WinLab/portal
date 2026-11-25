@@ -3,6 +3,9 @@ import { Email } from "../domain/values"
 import { pending, profileInput } from "../testing/fixtures"
 import { MailComposer } from "./mail-composer"
 
+// The footer link reads this; pin it so snapshots do not depend on the env.
+process.env.BETTER_AUTH_URL = "https://portal.example.test"
+
 const urls = {
   siteUrl: "https://portal.example.test",
   applySiteUrl: "https://apply.example.test",
@@ -42,11 +45,10 @@ test("received goes to the applicant with the status link", async () => {
 test("hasAccount points to sign in without a link", () => {
   const mail = composer.hasAccount(to)
   expect(mail.kind).toBe("has_account")
-  expect(mail.text).toContain(
-    "你已經有帳號，請登入或用登入頁的『忘記密碼』"
-  )
+  expect(mail.text).toContain("你已經有帳號，請登入或用登入頁的『忘記密碼』")
   expect(mail.text).not.toMatch(/https?:\/\//)
-  expect(mail.html).not.toMatch(/href=/)
+  expect(mail.html).not.toContain("apply.example.test")
+  expect(mail.html).not.toContain('class="action"')
   expect(mail).toMatchSnapshot()
 })
 
