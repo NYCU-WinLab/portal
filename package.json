@@ -14,7 +14,7 @@
     "db:migrate": "drizzle-kit migrate",
     "actions:check": "bun scripts/check-actions.ts",
     "api:contract": "bun scripts/api-contract.ts",
-    "api:check": "bun test scripts && bun scripts/api-contract.ts --check",
+    "api:check": "bun test scripts lib && bun scripts/api-contract.ts --check",
     "tokens:check": "bun scripts/check-tokens.ts"
   },
   "dependencies": {
