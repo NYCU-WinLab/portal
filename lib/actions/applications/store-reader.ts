@@ -79,25 +79,25 @@ const byCodeUnit = (x: string, y: string) => (x < y ? -1 : x > y ? 1 : 0)
 async function hydrate(q: Q, rows: ApplicationRow[]): Promise<Application[]> {
   if (rows.length === 0) return []
   const ids = rows.map((r) => r.id)
-  const [profiles, changeRequests, mailGroups] = await Promise.all([
-    q
-      .select()
-      .from(labApplicationProfiles)
-      .where(inArray(labApplicationProfiles.applicationId, ids)),
-    q
-      .select()
-      .from(labApplicationChangeRequests)
-      .where(
-        and(
-          inArray(labApplicationChangeRequests.applicationId, ids),
-          isNull(labApplicationChangeRequests.closedAt)
-        )
-      ),
-    q
-      .select()
-      .from(labApplicationMailGroups)
-      .where(inArray(labApplicationMailGroups.applicationId, ids)),
-  ])
+  // One query at a time: inside a transaction q is a single client, and pg
+  // does not allow overlapping queries on one client.
+  const profiles = await q
+    .select()
+    .from(labApplicationProfiles)
+    .where(inArray(labApplicationProfiles.applicationId, ids))
+  const changeRequests = await q
+    .select()
+    .from(labApplicationChangeRequests)
+    .where(
+      and(
+        inArray(labApplicationChangeRequests.applicationId, ids),
+        isNull(labApplicationChangeRequests.closedAt)
+      )
+    )
+  const mailGroups = await q
+    .select()
+    .from(labApplicationMailGroups)
+    .where(inArray(labApplicationMailGroups.applicationId, ids))
   const profileOf = new Map(profiles.map((p) => [p.applicationId, p]))
   const openOf = new Map(changeRequests.map((c) => [c.applicationId, c]))
   const groupsOf = groupBy(mailGroups, (g) => g.applicationId)
