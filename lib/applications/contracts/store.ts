@@ -597,6 +597,16 @@ export function applicationStoreContract(
       expect(await reserve("d@example.com", at(HOUR + 2))).toBe("key_limit")
     })
 
+    test("lockMailLimit leaves reserveMail working, even twice", async () => {
+      const s = await subject()
+      const result = await s.store.transaction(async (uow) => {
+        await uow.lockMailLimit()
+        await uow.lockMailLimit()
+        return uow.reserveMail(Email.parse("a@example.com"), "verify", NOW)
+      })
+      expect(result).toBe("ok")
+    })
+
     test("delete removes the application's queued mails", async () => {
       const s = await subject()
       const a = await seedPending(s.store)

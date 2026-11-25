@@ -473,14 +473,20 @@ class DrizzleUnitOfWork implements UnitOfWork {
     }
   }
 
+  async lockMailLimit() {
+    this.usable()
+    // Re-entrant: a second call in the same transaction returns at once.
+    await this.tx.execute(
+      sql`select pg_advisory_xact_lock(hashtext('lab_applications'), hashtext('mail_limit'))`
+    )
+  }
+
   async reserveMail(recipient: Email, kind: AnonymousMailKind, now: Date) {
     this.usable()
     const secret = this.opts.hashSecret()
     if (!secret) throw new Error("APPLICATION_HASH_SECRET is not set")
     // One reservation at a time, so concurrent counts cannot both pass.
-    await this.tx.execute(
-      sql`select pg_advisory_xact_lock(hashtext('lab_applications'), hashtext('mail_limit'))`
-    )
+    await this.lockMailLimit()
     const hash = createHmac("sha256", secret)
       .update(recipient.rateKey())
       .digest("hex")

@@ -794,6 +794,8 @@ export class InMemoryApplicationStore implements ApplicationStore {
       queueMail: live((id: string | null, mail: ComposedMail) =>
         t.queueMail(id, mail)
       ),
+      // Transactions run one at a time here, so there is nothing to lock.
+      lockMailLimit: live(() => undefined),
       reserveMail: live(
         (recipient: Email, kind: AnonymousMailKind, now: Date) =>
           t.reserveMail(recipient, kind, now, rate)

@@ -136,6 +136,12 @@ export interface UnitOfWork {
   ): Promise<void>
   queueMail(applicationId: string | null, mail: ComposedMail): Promise<void>
   /**
+   * Takes the lock `reserveMail` takes, held until the transaction ends. A
+   * command that reserves mail and also locks rows calls this first, so
+   * every such command takes the locks in one order.
+   */
+  lockMailLimit(): Promise<void>
+  /**
    * Counts records with the same rate key at > now - 1h and > now - 24h, and
    * all records at > now - 1h, and hands them to `MailRatePolicy.allows`.
    * Records one entry only when the result is `ok`.

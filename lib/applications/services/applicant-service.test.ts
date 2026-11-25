@@ -738,3 +738,55 @@ describe("races the indexes catch", () => {
     ).toBe("xmwang")
   })
 })
+
+describe("lock order", () => {
+  // submit and sendLink both reserve mail and lock rows. Postgres holds the
+  // mail lock to commit, so both take it before any row lock or they can
+  // deadlock on the same email.
+  function recording() {
+    const calls: string[] = []
+    const wrap = wrapUow((uow) => {
+      const out: Partial<UnitOfWork> = {}
+      for (const [name, fn] of Object.entries(uow)) {
+        if (typeof fn !== "function") continue
+        ;(out as Record<string, unknown>)[name] = (...args: unknown[]) => {
+          calls.push(name)
+          return (fn as (...a: unknown[]) => unknown)(...args)
+        }
+      }
+      return out
+    })
+    return { calls, wrap }
+  }
+  const firstLock = (calls: string[]) =>
+    calls.findIndex((c) => c.startsWith("lock") && c !== "lockMailLimit")
+
+  test("submit for an active application locks mail first", async () => {
+    const r = recording()
+    const h = await setup({ wrap: r.wrap })
+    await confirmed(h)
+    h.clock.advance(HOUR + 1)
+    r.calls.length = 0
+    expect(await h.service.submit(form())).toEqual({ ok: true })
+    expect(r.calls[0]).toBe("lockMailLimit")
+    expect(firstLock(r.calls)).toBeGreaterThan(0)
+  })
+
+  test("submit for a new email locks mail first", async () => {
+    const r = recording()
+    const h = await setup({ wrap: r.wrap })
+    expect(await h.service.submit(form())).toEqual({ ok: true })
+    expect(r.calls[0]).toBe("lockMailLimit")
+  })
+
+  test("sendLink locks mail first", async () => {
+    const r = recording()
+    const h = await setup({ wrap: r.wrap })
+    await confirmed(h)
+    h.clock.advance(HOUR + 1)
+    r.calls.length = 0
+    await h.service.sendLink(EMAIL)
+    expect(r.calls[0]).toBe("lockMailLimit")
+    expect(firstLock(r.calls)).toBeGreaterThan(0)
+  })
+})

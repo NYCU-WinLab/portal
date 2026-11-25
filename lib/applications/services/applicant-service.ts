@@ -128,6 +128,8 @@ export class ApplicantService {
     const hasAccount = await this.d.directory.emailExists(email)
     const now = this.d.clock.now()
     return this.d.store.transaction(async (uow) => {
+      // Before any row lock: sendLink takes the same two locks.
+      await uow.lockMailLimit()
       // The kind must be known before the reservation.
       const active = hasAccount
         ? null
@@ -250,6 +252,8 @@ export class ApplicantService {
     const email = Email.parse(rawEmail)
     const now = this.d.clock.now()
     await this.d.store.transaction(async (uow) => {
+      // Before any row lock: submit takes the same two locks.
+      await uow.lockMailLimit()
       // Neither the limit nor whether the email is known is revealed.
       if ((await uow.reserveMail(email, "link", now)) !== "ok") return
       const target = await this.linkTarget(uow, email, now)
