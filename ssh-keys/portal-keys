@@ -10,7 +10,7 @@
 #   SERVICE=b09            the service's slug on portal.winlab.tw/keys/services
 #   SHARED="p4user"        accounts every member of the service logs in to
 #   OWN=yes                also let a member in to the local account that
-#                          has their username (uid 1000 or above); off
+#                          has their username (uid 1000 to 59999); off
 #                          unless set
 #   MAX_AGE=1440           minutes the last list is served while the portal
 #                          cannot be reached (default one day)
@@ -34,6 +34,13 @@ MAX_AGE=1440
 [ -r "${PORTAL_KEYS_ENV:-/etc/portal-keys/env}" ] && . "${PORTAL_KEYS_ENV:-/etc/portal-keys/env}"
 [ -n "$SERVICE" ] || exit 0
 
+# A refusal for a local reason leaves one line in the system log: sshd drops
+# what the command writes to stderr.
+refuse() {
+  logger -t portal-keys -p auth.warning -- "$1" 2>/dev/null || echo "portal-keys: $1" >&2
+  exit 1
+}
+
 path=
 for shared in $SHARED; do
   [ "$shared" = "$user" ] && path=$SERVICE
@@ -41,14 +48,16 @@ done
 if [ -z "$path" ]; then
   # A member's own account: only when asked for, and never a system
   # account, so nobody logs in to root by holding its name on the portal.
+  # 60000 and above holds nobody (65534) and other reserved accounts.
   [ "$OWN" = yes ] || exit 0
   uid=$(id -u "$user" 2>/dev/null) || exit 0
-  [ "$uid" -ge 1000 ] || exit 0
+  [ "$uid" -ge 1000 ] && [ "$uid" -lt 60000 ] || exit 0
   path=$SERVICE/$user
 fi
 
 cache=$CACHE_DIR/$user
-tmp=$(mktemp "$CACHE_DIR/.new.XXXXXX")
+tmp=$(mktemp "$CACHE_DIR/.new.XXXXXX" 2>/dev/null) ||
+  refuse "cannot write to $CACHE_DIR, refusing $user"
 trap 'rm -f "$tmp"' EXIT
 code=$(curl -sS --max-time 5 -o "$tmp" -w '%{http_code}' \
   -H "Authorization: Bearer $(cat "$TOKEN_FILE")" \
@@ -58,7 +67,7 @@ case $code in
     # This login is answered with what this request read, never with a copy
     # another login wrote meanwhile.
     cat "$tmp"
-    mv "$tmp" "$cache"
+    mv "$tmp" "$cache" || refuse "cannot save the keys of $user in $CACHE_DIR, refusing"
     exit 0
     ;;
   # The portal refused the read key: nobody is served, cached or not.

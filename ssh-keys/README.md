@@ -38,7 +38,9 @@ printf 'AuthorizedKeysCommand /usr/local/bin/portal-keys %%u\nAuthorizedKeysComm
 sudo sshd -t && sudo systemctl reload ssh
 ```
 
-`SHARED` lists the accounts every member of the service logs in to (B09's `p4user`); no other account is answered. Add `OWN=yes` to also let a member in to the local account that has their username. It skips accounts under uid 1000, but an account such as `ubuntu` or `admin` is then open to whoever holds that username in Keycloak, so set it only on a machine whose accounts are all members'. Check a login with a key before turning `PasswordAuthentication` off.
+`/var/cache/portal-keys` must exist and be writable by the `AuthorizedKeysCommandUser`: when it is not, `portal-keys` refuses every login, even while the portal answers, and writes why to the system log (`journalctl -t portal-keys`).
+
+`SHARED` lists the accounts every member of the service logs in to (B09's `p4user`); no other account is answered. Add `OWN=yes` to also let a member in to the local account that has their username. It skips accounts under uid 1000 and from 60000 up (`nobody` is 65534), but an account such as `ubuntu` or `admin` is then open to whoever holds that username in Keycloak, so set it only on a machine whose accounts are all members'. Check a login with a key before turning `PasswordAuthentication` off.
 
 A machine that cannot reach the portal serves the list it read last for one day (`MAX_AGE`, in minutes, in `/etc/portal-keys/env`), then nobody. To cut a member off during an outage, delete `/var/cache/portal-keys/<account>`. When the portal refuses the read key (`401`, `403`), the copy is deleted and nobody gets in until the machine holds a working key.
 
