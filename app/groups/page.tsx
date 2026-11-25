@@ -26,7 +26,8 @@ const failed = (error: unknown) => ({
 
 // The lists the member receives mail from, in one list with the ones they
 // manage: a managed list carries a pencil to its page, and one they manage
-// but do not receive mail from follows the others.
+// but do not receive mail from follows the others. A managed list's name
+// links there too.
 export default async function GroupsPage() {
   const actor = await requireActor("/groups")
   const [mine, managed] = await Promise.all([
@@ -53,7 +54,7 @@ export default async function GroupsPage() {
       .map((group) => ({
         email: group.email,
         name: group.name,
-        note: "你管理，但不在群組裡",
+        note: "你可管理",
         manageId: group.id,
       })),
   ]
@@ -76,7 +77,11 @@ export default async function GroupsPage() {
           <section className="flex flex-col gap-2">
             <SectionHeader
               title={
-                mine.status === "ok" ? `${mine.address} 在的群組` : "你在的群組"
+                rows.length > memberOf.length
+                  ? "你在與可管理的群組"
+                  : mine.status === "ok"
+                    ? `${mine.address} 在的群組`
+                    : "你在的群組"
               }
             />
             {mine.status === "failed" && (
@@ -86,7 +91,8 @@ export default async function GroupsPage() {
               <p className="text-destructive">{managed.detail}</p>
             )}
             {rows.length === 0 ? (
-              mine.status === "ok" && <EmptyState noun="你在的群組" />
+              mine.status === "ok" &&
+              managed.status !== "failed" && <EmptyState noun="你在的群組" />
             ) : (
               <ul className="flex stagger-rise flex-col">
                 {rows.map((group) => (
@@ -95,7 +101,17 @@ export default async function GroupsPage() {
                     className="flex min-h-14 items-center gap-4 border-b border-border py-2"
                   >
                     <span className="flex min-w-0 flex-1 flex-col">
-                      <span className="truncate">{group.name}</span>
+                      {group.manageId ? (
+                        <Link
+                          prefetch
+                          href={`/groups/${group.manageId}`}
+                          className="truncate transition-colors duration-state hover:text-muted-foreground"
+                        >
+                          {group.name}
+                        </Link>
+                      ) : (
+                        <span className="truncate">{group.name}</span>
+                      )}
                       {group.note && (
                         <span className="truncate text-muted-foreground">
                           {group.note}
@@ -109,7 +125,7 @@ export default async function GroupsPage() {
                       <Link
                         prefetch
                         href={`/groups/${group.manageId}`}
-                        aria-label={`管理 ${group.name}`}
+                        aria-label={`編輯 ${group.name} 的成員`}
                         className={buttonVariants({
                           variant: "ghost",
                           size: "icon",
