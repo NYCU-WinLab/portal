@@ -105,7 +105,12 @@ export interface UnitOfWork {
    * `derivePasswordMail`.
    */
   passwordMail(applicationId: string): Promise<PasswordMailState>
-  /** Writes the main table and the profile only. */
+  /**
+   * Writes the application row (version-checked), its profile, ends and
+   * inserts change requests, inserts mail-group rows when an assignment
+   * first appears, and appends the transition's events. `keycloak_id` is
+   * written only by `setKeycloakId`.
+   */
   save(t: Changed): Promise<SaveResult>
   saveRun(run: ProvisioningRun): Promise<void>
   deleteRun(applicationId: string): Promise<void>
@@ -258,4 +263,15 @@ export interface Tracer {
     fn: () => Promise<T>,
     expected?: (error: unknown) => boolean
   ): Promise<T>
+}
+
+/**
+ * A second unverified application for the same email. Both stores throw
+ * this class; callers match on the class, never on a message.
+ */
+export class UnverifiedEmailTaken extends Error {
+  constructor() {
+    super("lab_applications_unverified_email")
+    this.name = "UnverifiedEmailTaken"
+  }
 }

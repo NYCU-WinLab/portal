@@ -832,9 +832,16 @@ export function applicationStoreContract(
     test("setKeycloakId(null) on an accepted application is refused", async () => {
       const s = await subject()
       const a = await seedProvisioning(s, "nullkc")
+      await saveRun(s.store, completeAll(ProvisioningRun.start(a.id, NOW), NOW))
+      await s.store.transaction((uow) => uow.setKeycloakId(a.id, KC_A))
+      const locked = await lock(s.store, a.id)
+      if (!locked) throw new Error("missing")
+      const accepted = await saveOk(s.store, locked.finish(at(1)))
+      expect(accepted.status).toBe("accepted")
       await expect(
         s.store.transaction((uow) => uow.setKeycloakId(a.id, null))
       ).rejects.toThrow()
+      expect((await lock(s.store, a.id))?.keycloakId).toBe(KC_A)
     })
 
     test("event changes read back in their JSON form", async () => {

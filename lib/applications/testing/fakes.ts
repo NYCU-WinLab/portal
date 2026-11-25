@@ -47,7 +47,7 @@ export class FakeMailGroups implements MailGroups {
     return "ok" as const
   }
   async isManageable(groupId: string): Promise<boolean> {
-    return this.groups[groupId]?.manageable ?? true
+    return this.groups[groupId]?.manageable ?? false
   }
   async addresses(groupIds: readonly string[]): Promise<Map<string, string>> {
     const out = new Map<string, string>()

@@ -156,6 +156,9 @@ const SNAKE: Record<keyof ProfileFields, string> = {
 function text(raw: string, field: string, max: number): string {
   const s = raw.trim()
   if (length(s) < 1 || length(s) > max) throw invalid(field)
+  // Control and invisible format characters are refused; a zero width
+  // joiner stays so emoji sequences survive.
+  if (/[\p{Cc}\p{Cf}]/u.test(s.replace(/\u200d/g, ""))) throw invalid(field)
   return s
 }
 
