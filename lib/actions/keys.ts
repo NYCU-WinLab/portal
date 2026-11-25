@@ -20,8 +20,8 @@ import {
 import {
   findKeycloakUser,
   getKeycloakUserGroupPaths,
-  labStatuses,
   labDirectory,
+  labStatusOf,
   realmAccounts,
 } from "@/lib/keycloak"
 import {
@@ -978,10 +978,11 @@ export async function readCertificatePrincipals(
   const paths = await getKeycloakUserGroupPaths(sub)
   if (paths.some((path) => path === "/system" || path.startsWith("/system/")))
     return { member: false }
-  const current = paths.some((path) => {
-    const status = LAB_STATUS_GROUP.exec(path)?.[1]
-    return !!status && status !== "alumni" && isLabStatus(status)
-  })
+  // The same status labDirectory gives: alumni wins over a current group.
+  const status = labStatusOf(
+    paths.flatMap((path) => LAB_STATUS_GROUP.exec(path)?.[1] ?? [])
+  )
+  const current = !!status && status !== "alumni"
 
   const [member] = await db
     .select({ userId: account.userId })
@@ -1022,5 +1023,3 @@ export async function readCertificatePrincipals(
 
 const PROJECT_GROUP = /^\/winlab-projects\/([a-z0-9][a-z0-9-]{0,62})$/
 const LAB_STATUS_GROUP = /^\/lab-member\/([a-z]+)$/
-const isLabStatus = (name: string) =>
-  (labStatuses as readonly string[]).includes(name)
