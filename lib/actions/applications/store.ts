@@ -6,6 +6,7 @@ import { createHmac } from "node:crypto"
 
 import { and, asc, eq, gt, inArray, isNull, lte, sql } from "drizzle-orm"
 
+import { scrubbed, scrubbedMethods } from "@/lib/actions/applications/db-errors"
 import { queueMail } from "@/lib/actions/mail"
 import {
   applicationReader,
@@ -597,22 +598,27 @@ export class DrizzleApplicationStore implements ApplicationStore {
       hashSecret: () => string
     }
   ) {
-    this.reader = applicationReader(db)
+    this.reader = scrubbedMethods(applicationReader(db))
   }
 
-  /** Read committed. Transactions do not nest. */
+  /**
+   * Read committed. Transactions do not nest. A query error leaves without
+   * its parameters; the unit of work maps 23505 before that.
+   */
   async transaction<T>(work: (uow: UnitOfWork) => Promise<T>): Promise<T> {
     // A nested call would hold a second connection while the first waits.
     if (this.inTransaction.getStore()) throw new Error("nested transaction")
     return this.inTransaction.run(true, () =>
-      this.db.transaction(async (tx) => {
-        const uow = new DrizzleUnitOfWork(tx, this.opts)
-        try {
-          return await work(uow)
-        } finally {
-          uow.end()
-        }
-      })
+      scrubbed(() =>
+        this.db.transaction(async (tx) => {
+          const uow = new DrizzleUnitOfWork(tx, this.opts)
+          try {
+            return await work(uow)
+          } finally {
+            uow.end()
+          }
+        })
+      )
     )
   }
 }
