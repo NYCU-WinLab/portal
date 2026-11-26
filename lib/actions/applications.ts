@@ -292,7 +292,7 @@ export const applicationReviewActions = (get: () => Applications) => ({
     name: "set_application_mail_group",
     title: "設定預設群組信",
     description:
-      "Turns a mail group on or off as a default for accepted applicants. Turning one on is refused unless the portal may manage that group and the member manages it; turning one off is always allowed. Setting the same state again changes nothing. Only accounts admins may call it.",
+      "Turns a mail group on or off as a default for accepted applicants. Turning one on is refused unless the portal may manage that group and the member manages it, and fails as unavailable while Google Groups cannot be reached; turning one off is always allowed. Setting the same state again changes nothing. Only accounts admins may call it.",
     admin: "accounts",
     kind: "mutation",
     idempotent: true,

@@ -201,7 +201,7 @@ test("a Google error during isManageable is unavailable, not false", async () =>
   const api: GroupsApi = {
     domain: "winlab.tw",
     token: async () => "token",
-    fetch: (async () => json({}, 503)) as typeof fetch,
+    fetch: (async () => json({}, 503)) as unknown as typeof fetch,
   }
   const groups = new GoogleMailGroups(() => api)
   const quiet = console.error

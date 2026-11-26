@@ -2,11 +2,12 @@ import { Refusal } from "@/lib/refusal"
 
 import { ApplicationRefusal } from "../domain/refusal"
 import { ApplySiteUrl } from "../domain/values"
-import type {
-  Clock,
-  MailGroups,
-  ProcessorAuthority,
-  SettingsStore,
+import {
+  MailGroupsUnavailable,
+  type Clock,
+  type MailGroups,
+  type ProcessorAuthority,
+  type SettingsStore,
 } from "../ports"
 import type { SettingsView } from "../views"
 
@@ -62,8 +63,15 @@ export class SettingsService {
     for (const groupId of managed) {
       const address = managedAddresses.get(groupId)
       // A group Google does not give, or the portal may not touch, is not offered.
-      if (address && (await this.d.mailGroups.isManageable(groupId)))
-        offerableGroups.push({ groupId, address })
+      if (!address) continue
+      // Fail closed: while Google cannot be asked, nothing is offered.
+      const manageable = await this.d.mailGroups
+        .isManageable(groupId)
+        .catch((error: unknown) => {
+          if (error instanceof MailGroupsUnavailable) return false
+          throw error
+        })
+      if (manageable) offerableGroups.push({ groupId, address })
     }
     const processors = await this.d.authority.processorEmails()
     return {

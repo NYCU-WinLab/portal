@@ -10,7 +10,7 @@ import {
   type StepName,
 } from "./domain/constants"
 import { ApplicationRefusal, FIELD_NAMES } from "./domain/refusal"
-import { KeycloakUnavailable } from "./ports"
+import { KeycloakUnavailable, MailGroupsUnavailable } from "./ports"
 import type { PasswordMailView, ProfileView, ReviewItem } from "./views"
 
 type BadgeVariant =
@@ -115,6 +115,8 @@ export function actorName(
 export function refusalText(error: unknown): string | null {
   if (error instanceof KeycloakUnavailable)
     return "暫時連不到 Keycloak，請稍後再試"
+  if (error instanceof MailGroupsUnavailable)
+    return "暫時連不到 Google 群組，請稍後再試"
   if (!(error instanceof ApplicationRefusal)) return null
   if (error.code === "cohort_group_missing")
     return `${error.chinese}，已通知 Portal 管理員`

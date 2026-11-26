@@ -1,5 +1,8 @@
 import type { Email } from "@/lib/applications/domain/values"
-import type { MailGroups } from "@/lib/applications/ports"
+import {
+  MailGroupsUnavailable,
+  type MailGroups,
+} from "@/lib/applications/ports"
 import { groupsApiFromEnv } from "@/lib/groups/google-auth"
 import {
   addMember,
@@ -37,6 +40,10 @@ const brief = (error: unknown) => ({
  *   error         Google is not set up or failed; nothing is known to have
  *                 been written, or it is unknown
  *
+ * isManageable answers true or false for the rules, and throws
+ * MailGroupsUnavailable when Google cannot be asked, so an outage is not
+ * reported as "not allowed".
+ *
  * Spans and logs carry the group id, never the address.
  */
 export class GoogleMailGroups implements MailGroups {
@@ -65,14 +72,17 @@ export class GoogleMailGroups implements MailGroups {
     })
   }
 
+  /** Throws MailGroupsUnavailable when Google is not set up or fails. */
   async isManageable(groupId: string): Promise<boolean> {
     const api = this.apiFor()
-    if (!api) return false
+    if (!api) throw new MailGroupsUnavailable("Google Groups not configured")
     try {
       return (await this.touchable(api, groupId)) === "ok"
     } catch (error) {
       console.error("[mail-groups] lookup failed", { groupId, ...brief(error) })
-      return false
+      throw new MailGroupsUnavailable("Google Groups lookup failed", {
+        cause: error,
+      })
     }
   }
 

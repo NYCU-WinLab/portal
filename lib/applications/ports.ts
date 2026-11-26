@@ -208,6 +208,13 @@ export interface ReservedNames {
 /** Keycloak answered 5xx or timed out: the service is broken. */
 export class KeycloakUnavailable extends Error {}
 
+/**
+ * Google Groups cannot be asked: no credentials are set up, or Google failed.
+ * Unlike "not manageable" this is nobody's refusal; it is setup or a broken
+ * service, so it is an Error (alerts), not an ApplicationRefusal.
+ */
+export class MailGroupsUnavailable extends Error {}
+
 /** A user is always created disabled. */
 export type NewKeycloakUser = {
   username: string
@@ -259,6 +266,7 @@ export interface MailGroups {
     email: Email,
     as: { actorId: string | null; isManager(groupId: string): Promise<boolean> }
   ): Promise<"ok" | "already" | "protected" | "denied" | "error">
+  /** Throws MailGroupsUnavailable when Google cannot be asked; callers stay fail-closed. */
   isManageable(groupId: string): Promise<boolean>
   addresses(groupIds: readonly string[]): Promise<Map<string, string>>
 }
