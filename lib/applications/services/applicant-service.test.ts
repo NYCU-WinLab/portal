@@ -762,6 +762,24 @@ describe("requestPasswordMail", () => {
     )
   })
 
+  test("a deleted processor's request still reads and counts toward the hour", async () => {
+    const h = await setup()
+    const { access, id } = await confirmed(h)
+    await accept(h, id)
+    await h.store.transaction((uow) =>
+      uow.appendEvent(id, "password_mail_requested", null, ADMIN, h.clock.now())
+    )
+    h.store.forgetAdmin(ADMIN.id)
+    expect((await h.service.getStatus(access)).passwordMail?.canResend).toBe(
+      false
+    )
+    expect(await refused(h.service.requestPasswordMail(access))).toBe(
+      "rate_limited"
+    )
+    h.clock.advance(HOUR)
+    expect(await h.service.requestPasswordMail(access)).toEqual({ ok: true })
+  })
+
   test("after release it is password_already_set; before acceptance wrong_state", async () => {
     const h = await setup()
     const { access, id } = await confirmed(h)

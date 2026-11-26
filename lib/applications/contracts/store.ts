@@ -26,6 +26,9 @@ export type StoreSubject = {
     { applicationId: string | null; kind: MailKind; to: string }[]
   >
   changeRequestNotes(applicationId: string): Promise<(string | null)[]>
+  /** Deletes the member `adminId`, as the FK does: their events keep the row
+   * with actor_id set to null. */
+  forgetAdmin(adminId: string): Promise<void>
 }
 
 const MINUTE = 60_000
@@ -574,6 +577,28 @@ export function applicationStoreContract(
       expect(inTx).toEqual(state)
     })
 
+    test("an event whose admin was deleted reads back with a null id", async () => {
+      const s = await subject()
+      const a = await seedPending(s.store)
+      const admin = { kind: "admin" as const, id: s.adminId }
+      await s.store.transaction(async (uow) => {
+        await uow.appendEvent(a.id, "password_mail_requested", null, admin, NOW)
+      })
+      await s.forgetAdmin(s.adminId)
+      const gone = { kind: "admin", id: null }
+      const state = await s.store.reader.passwordMail(a.id)
+      expect(state.pendingRequest).toEqual(gone)
+      const inTx = await s.store.transaction((uow) => uow.passwordMail(a.id))
+      expect(inTx).toEqual(state)
+      const row = (await s.store.reader.list({ closed: false })).find(
+        (r) => r.application.id === a.id
+      )
+      expect(row?.events.at(-1)).toMatchObject({
+        kind: "password_mail_requested",
+        actor: gone,
+      })
+    })
+
     test("claimAlert is won once per window", async () => {
       const s = await subject()
       const claim = (notBefore: Date, now: Date) =>
@@ -809,6 +834,17 @@ export function applicationStoreContract(
       expect(rows.find((r) => r.application.id === second.id)?.history).toEqual(
         h1
       )
+    })
+
+    test("history leaves out unverified applications", async () => {
+      const s = await subject()
+      const email = Email.parse("unverified-history@example.com")
+      const current = await seedPending(s.store, { email })
+      const input = await submitInput({ email })
+      const unverified = await saveOk(s.store, App.submit(input, at(HOUR)))
+      expect(unverified.status).toBe("unverified")
+      const rows = await s.store.reader.history(email, current.id)
+      expect(rows.map((r) => r.id)).not.toContain(unverified.id)
     })
 
     test("markMailGroupAdded and setKeycloakId persist", async () => {
