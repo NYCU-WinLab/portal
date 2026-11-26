@@ -160,18 +160,26 @@ export class ReviewService {
         inKeycloak = null
       }
     }
+    // One read for every row. The set cannot say who claims a name, so a
+    // row that is provisioning as its own candidate is not counted against
+    // itself (assigned usernames are unique among provisioning rows).
+    const claimed = inKeycloak
+      ? named.length > 0
+        ? await this.d.store.reader.claimedUsernames(named)
+        : new Set<string>()
+      : null
     const assignable = [...labStatusPolicy.assignable({ isPortalAdmin })]
     const items: ReviewItem[] = []
     for (const row of rows) {
       const name = candidates.get(row.application.id) ?? null
       let usernameTaken: boolean | null = null
-      if (name && inKeycloak) {
-        const claimed = await this.d.store.reader.claimedUsernames(
-          [name],
-          row.application.id
-        )
+      if (name && inKeycloak && claimed) {
+        const own =
+          row.application.status === "provisioning" &&
+          row.application.assignment?.username.value === name.value
         usernameTaken =
-          inKeycloak.has(name.value.toLowerCase()) || claimed.has(name.value)
+          inKeycloak.has(name.value.toLowerCase()) ||
+          (claimed.has(name.value) && !own)
       }
       items.push(
         await this.item(row, {
