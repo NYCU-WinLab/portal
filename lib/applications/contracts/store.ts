@@ -845,6 +845,9 @@ export function applicationStoreContract(
       expect(unverified.status).toBe("unverified")
       const rows = await s.store.reader.history(email, current.id)
       expect(rows.map((r) => r.id)).not.toContain(unverified.id)
+      const listed = await s.store.reader.list({ closed: false })
+      const item = listed.find((r) => r.application.id === current.id)
+      expect(item?.history.map((r) => r.id)).not.toContain(unverified.id)
     })
 
     test("markMailGroupAdded and setKeycloakId persist", async () => {
