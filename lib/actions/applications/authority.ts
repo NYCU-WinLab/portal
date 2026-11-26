@@ -50,7 +50,7 @@ export class DbProcessorAuthority implements ProcessorAuthority {
   }
 
   processorEmails(): Promise<string[]> {
-    return this.adminEmails(["accounts", "portal"])
+    return this.adminEmails(["accounts"])
   }
 
   portalAdminEmails(): Promise<string[]> {
