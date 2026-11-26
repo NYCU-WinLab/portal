@@ -109,6 +109,8 @@ describe("Cohort", () => {
   ])("defaultFor(%p) = %p", (at, value) =>
     expect(Cohort.defaultFor(new Date(at)).value).toBe(value)
   )
+  test("groupPath is the cohort's Keycloak group", () =>
+    expect(Cohort.parse(116).groupPath).toBe("/lab-member/116"))
   test.each([99, 1000, 116.5])("rejects %p", (n) =>
     expect(() => Cohort.parse(n)).toThrow(refusal("invalid_input", "cohort"))
   )

@@ -76,7 +76,7 @@ async function setup(opts: Setup = {}) {
     [SETTER]: { name: "王小明", email: "xmwang@winlab.tw" },
   })
   await settings.setApplySite(APPLY_SITE, SETTER, NOW)
-  await settings.setMailGroup("g-all", true, SETTER, NOW)
+  await settings.setMailGroup("g-all", true, SETTER)
   const mailGroups = new FakeMailGroups({
     "g-all": { address: "all@winlab.tw", manageable: true },
     "g-lab": { address: "lab@winlab.tw", manageable: true },
@@ -215,7 +215,9 @@ describe("list", () => {
     await h.service.reject(ACCOUNTS, old.id)
     h.clock.advance(DAY)
     const app = await seed(h, { email: "same@example.com", username: "abcdef" })
-    const accountsView = await item(h, app.id)
+    const accountsView = (
+      await h.service.list(ACCOUNTS, { closed: false })
+    ).find((i) => i.id === app.id)!
     expect(accountsView).toMatchObject({
       id: app.id,
       status: "pending",
