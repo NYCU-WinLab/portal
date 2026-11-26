@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm"
 import {
   bigint,
+  boolean,
   check,
   date,
   index,
@@ -382,6 +383,18 @@ export const applicationDefaultMailGroups = pgTable(
     createdBy: uuid().references(() => user.id, { onDelete: "set null" }),
     createdAt: timestamp({ withTimezone: true }).notNull(),
   }
+)
+
+// Settings of the account applications: exactly one row (id is always true).
+export const applicationSettings = pgTable(
+  "application_settings",
+  {
+    id: boolean().primaryKey().default(true),
+    applySiteUrl: text(),
+    updatedBy: uuid().references(() => user.id, { onDelete: "set null" }),
+    updatedAt: timestamp({ withTimezone: true }),
+  },
+  (t) => [check("application_settings_single_row", sql`${t.id}`)]
 )
 
 // Rate-limit log for mail sent to strangers; only a hash of the address.
