@@ -7,6 +7,16 @@ import type { ComposedMail } from "../ports"
 type Urls = { siteUrl: string }
 
 /**
+ * The token rides in the query string, never the path, so the apply site can
+ * keep it out of access logs and spans by dropping the query. The apply site
+ * owns the rest: its GET only shows a page, a button's POST spends the token
+ * (a mail scanner's GET must not confirm), and the page sends
+ * `Referrer-Policy: no-referrer`.
+ */
+const tokenLink = (applySite: string, page: string, token: string) =>
+  `${applySite}/${page}?token=${encodeURIComponent(token)}`
+
+/**
  * The mails an applicant (or a processor) gets; text in Chinese. The apply
  * site's address is a setting, so the caller passes it in.
  */
@@ -17,7 +27,10 @@ export class MailComposer {
     return this.compose("verify", to.value, "確認你的 Email", {
       title: "確認你的 Email",
       paragraphs: ["請按下按鈕確認這個 Email，確認後才會送出你的帳號申請。"],
-      action: { label: "確認 Email", url: `${applySite}/confirm/${token}` },
+      action: {
+        label: "確認 Email",
+        url: tokenLink(applySite, "confirm", token),
+      },
     })
   }
 
@@ -25,7 +38,10 @@ export class MailComposer {
     return this.compose("link", to.value, "你的申請狀態連結", {
       title: "你的申請狀態連結",
       paragraphs: ["用這個連結查看申請進度。請不要轉給別人。"],
-      action: { label: "查看申請狀態", url: `${applySite}/status/${token}` },
+      action: {
+        label: "查看申請狀態",
+        url: tokenLink(applySite, "status", token),
+      },
     })
   }
 
@@ -40,7 +56,7 @@ export class MailComposer {
       paragraphs: ["審核後會再通知你。你可以隨時用下面的連結查看進度。"],
       action: {
         label: "查看申請狀態",
-        url: `${applySite}/status/${accessToken}`,
+        url: tokenLink(applySite, "status", accessToken),
       },
     })
   }
