@@ -189,7 +189,7 @@ export const applicationReviewActions = (get: () => Applications) => ({
     name: "update_lab_application",
     title: "修改帳號申請資料",
     description:
-      "Corrects an application's profile fields or requested status while it is pending. Pass the application's current version; a stale version is refused. patch.profile holds only the fields to change (null clears an optional one). Refused when the application cannot be edited in its state, the version is stale or a value is invalid. Sending the same values again changes nothing.",
+      "Corrects an application's profile fields or requested status while it is pending. Pass the application's current version; a stale version is refused. patch.profile holds only the fields to change (null clears an optional one). Refused when the application cannot be edited in its state, the version is stale or a value is invalid. Sending the same values again with the current version changes nothing; a stale version is refused with version_conflict even if the values are the same, so read the application again first.",
     admin: "accounts",
     kind: "mutation",
     idempotent: true,
@@ -201,7 +201,7 @@ export const applicationReviewActions = (get: () => Applications) => ({
     name: "request_lab_application_changes",
     title: "請申請人修改",
     description:
-      "Asks the applicant to correct their application: mails them a fresh link with the note and a 7-day deadline, and moves the application to changes_requested. Pass the current version; a stale version or a blank note is refused, and an application that is not pending is left as it is. Each call that changes the application mails the applicant.",
+      "Asks the applicant to correct their application: mails them a fresh link with the note and a 7-day deadline, and moves the application to changes_requested. Pass the current version; a stale version or a blank note is refused, and an application that is not pending is refused with wrong_state (a new request is allowed again only once the open one has expired). Each call that changes the application mails the applicant.",
     admin: "accounts",
     kind: "mutation",
     input: z.object({ id: applicationId, version, note: note.min(1) }),
@@ -247,7 +247,7 @@ export const applicationReviewActions = (get: () => Applications) => ({
     name: "reject_lab_application",
     title: "退回帳號申請",
     description:
-      "Rejects an application and mails the applicant, with the note when one is given. An application whose state does not allow rejection is left as it is. Rejecting an already rejected application changes nothing and sends no second mail.",
+      "Rejects an application and mails the applicant, with the note when one is given. An application whose state does not allow rejection (for example one already accepted) is refused with wrong_state. Rejecting an already rejected application changes nothing and sends no second mail.",
     admin: "accounts",
     kind: "mutation",
     idempotent: true,
