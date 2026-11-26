@@ -14,6 +14,7 @@ export const REFUSAL_CODES = [
   "email_has_account",
   "cohort_group_missing",
   "mail_group_not_allowed",
+  "member_not_found",
 ] as const
 export type RefusalCode = (typeof REFUSAL_CODES)[number]
 
@@ -52,6 +53,7 @@ const MESSAGES: Record<Exclude<RefusalCode, "invalid_input">, string> = {
   email_has_account: "這個 email 已經有帳號",
   cohort_group_missing: "Keycloak 還沒有這個學年度的群組",
   mail_group_not_allowed: "你不能把人加進這個群組信",
+  member_not_found: "找不到這位成員",
 }
 
 export class ApplicationRefusal extends Refusal {
