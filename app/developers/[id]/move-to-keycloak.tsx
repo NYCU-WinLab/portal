@@ -22,13 +22,11 @@ export function MoveToKeycloak({
   const [secret, setSecret] = React.useState<string | null>(null)
   return (
     <section className="flex flex-col items-start gap-3">
-      <p className="text-muted-foreground">
-        這個應用程式還在用 Portal 的舊登入。改用 Keycloak 後 Client ID 不變
-        {confidential
-          ? "，會拿到新的 secret；舊的 secret 在舊網址繼續可用到停用日"
-          : ""}
-        。
-      </p>
+      {confidential && (
+        <p className="text-muted-foreground">
+          改用後會拿到新的 secret，舊的 secret 在舊網址可用到停用日。
+        </p>
+      )}
       <ConfirmDialog
         trigger={<Button variant="outline">改用 Keycloak</Button>}
         title={`「${name}」改由 Keycloak 登入？`}

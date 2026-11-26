@@ -2165,6 +2165,9 @@
           "id": {
             "type": "string"
           },
+          "keycloak": {
+            "type": "boolean"
+          },
           "name": {
             "type": "string"
           },
@@ -2192,9 +2195,13 @@
           "approvedScopes",
           "enabled",
           "ownerId",
-          "createdAt"
+          "createdAt",
+          "keycloak"
         ],
         "type": "object"
+      },
+      "movable": {
+        "type": "boolean"
       },
       "requests": {
         "items": {
@@ -2273,7 +2280,8 @@
     "required": [
       "app",
       "requests",
-      "activeGrants"
+      "activeGrants",
+      "movable"
     ],
     "type": "object"
   },
@@ -5207,6 +5215,9 @@
             "id": {
               "type": "string"
             },
+            "keycloak": {
+              "type": "boolean"
+            },
             "name": {
               "type": "string"
             },
@@ -5234,7 +5245,8 @@
             "approvedScopes",
             "enabled",
             "ownerId",
-            "createdAt"
+            "createdAt",
+            "keycloak"
           ],
           "type": "object"
         },
@@ -7312,9 +7324,13 @@
           "type": "object"
         },
         "type": "array"
+      },
+      "keycloakConsole": {
+        "type": "string"
       }
     },
     "required": [
+      "keycloakConsole",
       "grants"
     ],
     "type": "object"

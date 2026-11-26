@@ -101,24 +101,37 @@ async function lockApp(tx: Tx, id: string) {
 async function syncClient(
   tx: Tx,
   row: AppRow,
-  change: { secret?: string; revoke?: boolean } = {}
+  change: { secret?: string; revoke?: boolean; offline?: boolean } = {}
 ) {
   if (!row.keycloakRat) return
-  let rat: string
+  const notBefore = change.revoke ? Math.floor(Date.now() / 1000) : undefined
+  let rat: string | undefined
   try {
-    rat = await updateClient(specOf(row), open(row.keycloakRat), change)
+    rat = await updateClient(specOf(row), open(row.keycloakRat), {
+      secret: change.secret,
+      notBefore,
+    })
   } catch (error) {
-    if (error instanceof RegistrationLost)
-      throw new Error(
-        `developer app ${row.id}: Keycloak registration token no longer works`
-      )
-    throw error
+    if (!(error instanceof RegistrationLost)) throw error
+    // Turning an application off must work even then: portal's API checks
+    // enabled and notBefore itself, so the row alone cuts the data off.
+    if (!change.offline) throw lost(row.id)
+    console.error(lost(row.id).message)
   }
   await tx
     .update(developerApps)
-    .set({ keycloakRat: seal(rat) })
+    .set({
+      ...(rat ? { keycloakRat: seal(rat) } : {}),
+      ...(notBefore ? { keycloakNotBefore: notBefore } : {}),
+    })
     .where(eq(developerApps.id, row.id))
 }
+
+/** Portal no longer holds a working registration token for this client. */
+const lost = (id: string) =>
+  new Error(
+    `developer app ${id}: Keycloak registration token no longer works; an admin must issue a new one`
+  )
 
 const appRow = (row: typeof developerApps.$inferSelect): Application => ({
   id: row.id,
@@ -310,8 +323,13 @@ export async function keycloakMemberData(token: string, scope: Scope) {
     : []
   if (!app?.enabled || !app.keycloakRat)
     throw new TokenRefused(401, "token not issued to an active application")
+  // Keycloak's notBefore stops refreshes; a token issued earlier still
+  // verifies here until it expires, so compare it with the last revocation.
+  if ((claims.iat ?? 0) < (app.keycloakNotBefore ?? 0))
+    throw new TokenRefused(401, "token revoked")
   const granted = String(claims.scope ?? "").split(" ")
-  const needed = scope === "profile" ? "profile" : RESTRICTED_SCOPES[scope]
+  const needed =
+    scope === "profile" ? "portal-profile" : RESTRICTED_SCOPES[scope]
   if (!granted.includes(needed) || !app.approvedScopes.includes(scope))
     throw new TokenRefused(403, "insufficient_scope")
   return {
@@ -607,7 +625,7 @@ export const setDeveloperAppEnabled = defineAction({
         .where(eq(developerApps.id, id))
         .returning()
       // Off closes sign-in at Keycloak and ends the tokens already issued.
-      await syncClient(tx, row, { revoke: true })
+      await syncClient(tx, row, { revoke: true, offline: !enabled })
     })
     await invalidateGrants(id)
     return { id, enabled }
@@ -630,11 +648,10 @@ export const deleteDeveloperApp = defineAction({
         try {
           await deleteClient(row.id, open(row.keycloakRat))
         } catch (error) {
-          if (error instanceof RegistrationLost)
-            throw new Error(
-              `developer app ${row.id}: Keycloak registration token no longer works`
-            )
-          throw error
+          // Without the row the client reads nothing from portal; an admin
+          // removes the leftover Keycloak client.
+          if (!(error instanceof RegistrationLost)) throw error
+          console.error(lost(row.id).message)
         }
       }
       // Scope requests, grants, codes and tokens cascade from the application.

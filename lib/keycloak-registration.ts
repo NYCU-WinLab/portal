@@ -18,7 +18,10 @@ export const registrarConfigured = () =>
   Boolean(
     process.env.KEYCLOAK_REGISTRAR_CLIENT_ID &&
     process.env.KEYCLOAK_REGISTRAR_SECRET &&
-    process.env.KEYCLOAK_ISSUER
+    process.env.KEYCLOAK_ISSUER &&
+    // The registration token is sealed with it: without it a new client
+    // would be left in Keycloak with no way to manage it.
+    process.env.DEVELOPERS_SECRET
   )
 
 /** The audience of portal's developer API in these clients' access tokens. */
@@ -92,9 +95,15 @@ function representation(
     frontchannelLogout: false,
     redirectUris: spec.redirectUris,
     webOrigins: origins(spec.redirectUris),
-    // Named in full: the realm's default scopes include chinese_name, which
-    // only an approved name scope may reveal (through portal's API).
-    defaultClientScopes: ["basic", "profile", "email", "portal-developers"],
+    // Named in full: the realm's default scopes include chinese_name, and
+    // Keycloak's profile scope carries the name. Only an approved name scope
+    // may reveal it (through portal's API); portal-profile maps the username.
+    defaultClientScopes: [
+      "basic",
+      "email",
+      "portal-profile",
+      "portal-developers",
+    ],
     optionalClientScopes: spec.restricted.map((s) => RESTRICTED_SCOPES[s]),
     attributes: {
       "pkce.code.challenge.method": "S256",
@@ -153,14 +162,16 @@ export function registerClient(spec: ClientSpec, secret?: string) {
 
 /**
  * Writes the client again from spec. A new secret replaces the old one;
- * revoke ends every token issued so far. Keycloak rotates the registration
+ * notBefore (epoch seconds) ends every token issued before it. Keycloak
+ * checks it only when it sees a token: portal's API compares iat itself.
+ * Keycloak rotates the registration
  * token on every update: the caller must store the one returned, in the
  * same transaction that holds the application row.
  */
 export function updateClient(
   spec: ClientSpec,
   rat: string,
-  change: { secret?: string; revoke?: boolean } = {}
+  change: { secret?: string; notBefore?: number } = {}
 ) {
   return traced("keycloak.update_client", {}, async () => {
     const updated = await call(
@@ -169,7 +180,7 @@ export function updateClient(
       rat,
       representation(spec, {
         secret: change.secret,
-        notBefore: change.revoke ? Math.floor(Date.now() / 1000) : undefined,
+        notBefore: change.notBefore,
       })
     )
     if (!updated?.registrationAccessToken)

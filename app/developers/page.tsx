@@ -72,16 +72,12 @@ export default async function DevelopersPage() {
         </section>
         <section className="flex flex-col gap-2">
           <SectionHeader title="你授權的" />
-          <p className="text-muted-foreground">
-            用 Keycloak 登入的應用程式，在
-            <a
-              href={keycloakConsole}
-              className="underline underline-offset-4 hover:text-foreground"
-            >
-              帳號主控台
-            </a>
-            查看與撤銷。
-          </p>
+          <a
+            href={keycloakConsole}
+            className="self-start text-muted-foreground underline underline-offset-4 hover:text-foreground"
+          >
+            Keycloak 授權
+          </a>
           {grants.length === 0 ? (
             <EmptyState noun="授權" />
           ) : (
