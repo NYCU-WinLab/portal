@@ -26,6 +26,20 @@ export class DbProcessorAuthority implements ProcessorAuthority {
     return row !== undefined
   }
 
+  async isProcessor(userId: string): Promise<boolean> {
+    const [row] = await this.db
+      .select({ userId: admins.userId })
+      .from(admins)
+      .where(
+        and(
+          eq(admins.userId, userId),
+          inArray(admins.app, ["accounts", "portal"])
+        )
+      )
+      .limit(1)
+    return row !== undefined
+  }
+
   async managesGroup(userId: string, groupId: string): Promise<boolean> {
     const [row] = await this.db
       .select({ userId: groupManagers.userId })

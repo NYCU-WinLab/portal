@@ -63,6 +63,7 @@ export class FakeAuthority implements ProcessorAuthority {
   portalAdmins: string[]
   managers: Record<string, string[]>
   processors: string[]
+  processorIds: string[]
   adminEmails: string[]
   notifiees: string[]
   constructor(
@@ -70,6 +71,8 @@ export class FakeAuthority implements ProcessorAuthority {
       portalAdmins?: string[]
       managers?: Record<string, string[]>
       processorEmails?: string[]
+      /** Accounts admins; portal admins are processors too. */
+      processorIds?: string[]
       portalAdminEmails?: string[]
       notifieeEmails?: string[]
     } = {}
@@ -77,11 +80,17 @@ export class FakeAuthority implements ProcessorAuthority {
     this.portalAdmins = init.portalAdmins ?? []
     this.managers = init.managers ?? {}
     this.processors = init.processorEmails ?? []
+    this.processorIds = init.processorIds ?? []
     this.adminEmails = init.portalAdminEmails ?? []
     this.notifiees = init.notifieeEmails ?? []
   }
   async isPortalAdmin(userId: string) {
     return this.portalAdmins.includes(userId)
+  }
+  async isProcessor(userId: string) {
+    return (
+      this.portalAdmins.includes(userId) || this.processorIds.includes(userId)
+    )
   }
   async managesGroup(userId: string, groupId: string) {
     return (this.managers[groupId] ?? []).includes(userId)

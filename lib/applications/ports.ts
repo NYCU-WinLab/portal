@@ -186,6 +186,14 @@ export interface SettingsStore {
     by: string,
     now: Date
   ): Promise<void>
+  /** Null fields until a processor sets the apply site's address. */
+  applySite(): Promise<{
+    url: string | null
+    updatedAt: Date | null
+    updatedBy: string | null
+  }>
+  /** Upserts the single settings row; the latest call wins. */
+  setApplySite(url: string, by: string, now: Date): Promise<void>
 }
 
 export interface ReservedNames {
@@ -252,6 +260,8 @@ export interface MailGroups {
 
 export interface ProcessorAuthority {
   isPortalAdmin(userId: string): Promise<boolean>
+  /** Portal admins and accounts admins: those `processorEmails` lists. */
+  isProcessor(userId: string): Promise<boolean>
   managesGroup(userId: string, groupId: string): Promise<boolean>
   processorEmails(): Promise<string[]>
   portalAdminEmails(): Promise<string[]>
