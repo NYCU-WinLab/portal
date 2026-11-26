@@ -77,6 +77,24 @@ const iso = (d: Date | null) => (d ? d.toISOString() : null)
 const OPEN_STATUSES = ["pending", "changes_requested", "provisioning"]
 const labStatusPolicy = new LabStatusPolicy()
 
+/** The profile as it would be with the patch applied; bad keys are refused. */
+function patchedInput(
+  fields: Readonly<ProfileInput>,
+  patch: UpdatePatch
+): ProfileInput {
+  const input: ProfileInput = { ...fields }
+  for (const [key, value] of Object.entries(patch.profile ?? {})) {
+    if (value === undefined) continue
+    if (
+      !Object.hasOwn(input, key) ||
+      (typeof value !== "string" && value !== null)
+    )
+      throw new ApplicationRefusal("invalid_input")
+    ;(input as Record<string, string | null>)[key] = value
+  }
+  return input
+}
+
 const admin = (id: string): AdminActor => ({ kind: "admin", id })
 
 function changeRequestView(c: OpenChangeRequest, now: Date): ChangeRequestView {
@@ -176,20 +194,33 @@ export class ReviewService {
   ): Promise<MutationResult> {
     const now = this.d.clock.now()
     const by = admin(actorUserId)
+    // As in accept, the reserved names (Keycloak and the pool) are read
+    // before the transaction, and only when the username moves.
+    const before = await this.d.store.transaction((uow) => this.locked(uow, id))
+    if (!before.profile) throw new ApplicationRefusal("wrong_state")
+    const kept = before.profile.fields.username
+    let asked: { name: string; taken: boolean } | null = null
+    await Username.parse(patchedInput(before.profile.fields, patch).username, {
+      has: async (name) => {
+        const taken = name !== kept && (await this.d.reserved.has(name))
+        asked = { name, taken }
+        return taken
+      },
+    })
+
     return this.d.store.transaction(async (uow) => {
       const app = await this.locked(uow, id)
       if (!app.profile) throw new ApplicationRefusal("wrong_state")
-      const input: ProfileInput = { ...app.profile.fields }
-      for (const [key, value] of Object.entries(patch.profile ?? {})) {
-        if (value === undefined) continue
-        if (!(key in input) || (typeof value !== "string" && value !== null))
-          throw new ApplicationRefusal("invalid_input")
-        ;(input as Record<string, string | null>)[key] = value
-      }
-      // The reserved names live in Keycloak: ask only when the username moves.
-      const kept = app.profile.fields.username
+      // The row changed its username since the check: ask again, not here.
+      if (app.profile.fields.username !== kept)
+        throw new ApplicationRefusal("version_conflict")
+      const input = patchedInput(app.profile.fields, patch)
       const reserved: ReservedNames = {
-        has: async (name) => name !== kept && (await this.d.reserved.has(name)),
+        has: async (name) => {
+          if (name === kept) return false
+          if (asked && name === asked.name) return asked.taken
+          throw new ApplicationRefusal("version_conflict")
+        },
       }
       const change = {
         profile: await ApplicantProfile.parse(input, reserved),
