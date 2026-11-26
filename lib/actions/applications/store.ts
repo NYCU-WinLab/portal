@@ -23,11 +23,12 @@ import type {
   EventActor,
   OpenChangeRequest,
 } from "@/lib/applications/domain/application"
-import type {
-  AnonymousMailKind,
-  ApplicationStatus,
-  EventKind,
-  TokenPurpose,
+import {
+  LINK_MAIL_KINDS,
+  type AnonymousMailKind,
+  type ApplicationStatus,
+  type EventKind,
+  type TokenPurpose,
 } from "@/lib/applications/domain/constants"
 import type { MailRatePolicy } from "@/lib/applications/domain/policies"
 import type { ProvisioningRun } from "@/lib/applications/domain/provisioning-run"
@@ -469,6 +470,9 @@ class DrizzleUnitOfWork implements UnitOfWork {
       subject: mail.subject,
       text: mail.text,
       html: mail.html,
+      redactAfterSend: (LINK_MAIL_KINDS as readonly string[]).includes(
+        mail.kind
+      ),
     })
     if (mailId === null) throw new Error("mail has no recipient")
     if (applicationId !== null) {

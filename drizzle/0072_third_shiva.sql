@@ -1,0 +1,1 @@
+ALTER TABLE "mail_outbox" ADD COLUMN "redact_after_send" boolean DEFAULT false NOT NULL;

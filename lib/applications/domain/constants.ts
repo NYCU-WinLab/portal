@@ -96,6 +96,14 @@ export const MAIL_KINDS = [
 ] as const
 export type MailKind = (typeof MAIL_KINDS)[number]
 
+/** Kinds whose text carries a token link; the outbox blanks them after sending. */
+export const LINK_MAIL_KINDS = [
+  "verify",
+  "link",
+  "received",
+  "changes_requested",
+] as const satisfies readonly MailKind[]
+
 export const USERNAME_PATTERN = "^[a-z][a-z0-9._-]{2,31}$"
 /**
  * A conservative ASCII addr-spec, checked after trim and lowercase: no quotes,
