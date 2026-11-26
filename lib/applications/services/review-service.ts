@@ -74,6 +74,7 @@ export type AcceptInput = {
 export type RetryChange = { username?: string; cohort?: number }
 
 const iso = (d: Date | null) => (d ? d.toISOString() : null)
+const SITE_UNSET = "申請網站網址尚未設定"
 const OPEN_STATUSES = ["pending", "changes_requested", "provisioning"]
 const labStatusPolicy = new LabStatusPolicy()
 
@@ -259,6 +260,9 @@ export class ReviewService {
       const app = await this.locked(uow, id)
       const t = app.requestChanges({ note: text, dueAt }, version, by, now)
       if (t.kind === "unchanged") return { ok: true, version: app.version }
+      // The command would send its mail: only now is a missing site a setup
+      // error, after the application had its say; nothing is saved yet.
+      if (!site) throw new Error(SITE_UNSET)
       await this.save(uow, t)
       // A new link: the old one is replaced, as for every mail with a link.
       const access = this.d.tokens.generate()
@@ -440,11 +444,9 @@ export class ReviewService {
     })
   }
 
-  /** Read once, outside any transaction; missing setup is an error. */
-  private async applySite(): Promise<string> {
-    const { url } = await this.d.settings.applySite()
-    if (!url) throw new Error("申請網站網址尚未設定")
-    return url
+  /** Read once, outside any transaction; null when it is not set up yet. */
+  private async applySite(): Promise<string | null> {
+    return (await this.d.settings.applySite()).url
   }
 
   private async locked(
