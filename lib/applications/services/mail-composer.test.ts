@@ -86,7 +86,7 @@ test("changesRequested carries the note, the due date and the status link", asyn
   )
   expect(mail.kind).toBe("changes_requested")
   expect(mail.to).toBe(app.email!.value)
-  expect(applyLinks(mail)).toEqual([`${applySite}/status/${token}`])
+  expect(applyLinks(mail)).toEqual([`${applySite}/status?token=${token}`])
   expect(mail.text).toContain("請補上指導教授的名字")
   expect(mail.text).toContain("2026-12-04")
   expect(mail.html).toContain("請補上指導教授的名字")
