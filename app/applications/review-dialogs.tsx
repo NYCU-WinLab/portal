@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
-import { USERNAME_PATTERN } from "@/lib/applications/domain/constants"
+import { USERNAME_PATTERN_CLIENT } from "@/lib/applications/domain/constants"
 import {
   LAB_STATUS_LABELS,
   PROFILE_FIELDS,
@@ -246,7 +246,7 @@ export function AcceptDialog({
       <FormField label="username" required>
         <Input
           name="username"
-          pattern={USERNAME_PATTERN}
+          pattern={USERNAME_PATTERN_CLIENT}
           autoCapitalize="none"
           className="font-mono"
           defaultValue={item.profile?.username ?? ""}
@@ -323,7 +323,7 @@ export function RetryDialog({
         <FormField label="username" required>
           <Input
             name="username"
-            pattern={USERNAME_PATTERN}
+            pattern={USERNAME_PATTERN_CLIENT}
             autoCapitalize="none"
             className="font-mono"
             defaultValue={current.username}
