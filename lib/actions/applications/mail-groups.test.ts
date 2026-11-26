@@ -159,6 +159,19 @@ test("isManageable follows the groups rules", async () => {
   expect(await groups.isManageable("missing")).toBe(false)
 })
 
+test("isManageable: a group nested in a gcp-* group is not manageable", async () => {
+  const { api } = fake({
+    groups: [
+      { id: "g1", email: "lab-all@winlab.tw" },
+      { id: "g2", email: "alumni@winlab.tw" },
+    ],
+    parents: { "lab-all@winlab.tw": ["gcp-admins@winlab.tw"] },
+  })
+  const groups = new GoogleMailGroups(() => api)
+  expect(await groups.isManageable("g1")).toBe(false)
+  expect(await groups.isManageable("g2")).toBe(true)
+})
+
 test("addresses maps ids to addresses and skips the unknown", async () => {
   const { api } = fake({
     groups: [
