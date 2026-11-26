@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 
 import { REFUSAL_CODES, ApplicationRefusal } from "./domain/refusal"
+import { KeycloakUnavailable } from "./ports"
 import {
   actorName,
   awaitsPassword,
@@ -50,6 +51,13 @@ describe("refusalText", () => {
       expect(text).toBeTruthy()
       expect(text).not.toContain(code)
     }
+  })
+
+  test("a Keycloak outage is put in Chinese, other errors are not", () => {
+    expect(refusalText(new KeycloakUnavailable("fetch failed"))).toBe(
+      "暫時連不到 Keycloak，請稍後再試"
+    )
+    expect(refusalText(new Error("boom"))).toBeNull()
   })
 
   test("a version conflict asks to reload", () => {

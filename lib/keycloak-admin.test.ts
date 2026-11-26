@@ -2,7 +2,7 @@ import { expect, test } from "bun:test"
 
 import { Email, Username } from "@/lib/applications/domain/values"
 import { KeycloakUnavailable } from "@/lib/applications/ports"
-import { KeycloakAdmin } from "@/lib/keycloak"
+import { KeycloakAdmin, systemAccountUsernames } from "@/lib/keycloak"
 
 const ISSUER = "https://sso.example.test/realms/lab"
 const TOKEN_URL = `${ISSUER}/protocol/openid-connect/token`
@@ -183,5 +183,23 @@ test("by default it calls the fetch under Next's patch, read per call", async ()
     expect(used.slice(2)).toEqual(["plain", "plain"])
   } finally {
     globalThis.fetch = saved
+  }
+})
+
+test("the module-level reads turn a network error into KeycloakUnavailable", async () => {
+  const saved = globalThis.fetch
+  const env = { ...process.env }
+  process.env.KEYCLOAK_ISSUER = ISSUER
+  process.env.KEYCLOAK_CLIENT_ID = "c"
+  process.env.KEYCLOAK_CLIENT_SECRET = "s"
+  globalThis.fetch = (async () => {
+    throw new TypeError("fetch failed")
+  }) as unknown as typeof globalThis.fetch
+  try {
+    const error = await systemAccountUsernames().catch((e: unknown) => e)
+    expect(error).toBeInstanceOf(KeycloakUnavailable)
+  } finally {
+    globalThis.fetch = saved
+    process.env = env
   }
 })
