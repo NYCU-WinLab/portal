@@ -2,11 +2,17 @@ import { describe, expect, test } from "bun:test"
 
 import {
   applicationActions,
+  applicationReviewActions,
   applicationSettingsActions,
   type ApplicantActions,
 } from "@/lib/actions/applications"
-import { build, type Deps } from "@/lib/actions/applications/container"
+import {
+  build,
+  type Applications,
+  type Deps,
+} from "@/lib/actions/applications/container"
 import type { Actor } from "@/lib/actions/define"
+import { actions, appOfAction } from "@/lib/actions/registry"
 import {
   MailRatePolicy,
   RetentionPolicy,
@@ -17,6 +23,7 @@ import { FixedClock } from "@/lib/applications/testing/clock"
 import { FakeKeycloak } from "@/lib/applications/testing/fake-keycloak"
 import {
   FakeAuthority,
+  FakeMailGroups,
   FixedReservedNames,
 } from "@/lib/applications/testing/fakes"
 import { profileInput } from "@/lib/applications/testing/fixtures"
@@ -49,6 +56,7 @@ async function setup() {
     directory: new FakeKeycloak(),
     authority: new FakeAuthority({ processorEmails: [] }),
     settings,
+    mailGroups: new FakeMailGroups({}),
     reserved: new FixedReservedNames([]),
     mail: new MailComposer({ siteUrl: "https://portal.example.test" }),
     tokens: new SequentialTokens(),
@@ -72,6 +80,7 @@ async function setupSettings() {
     directory: new FakeKeycloak(),
     authority: new FakeAuthority({ accountsAdminIds: [processor.userId] }),
     settings,
+    mailGroups: new FakeMailGroups({}),
     reserved: new FixedReservedNames([]),
     mail: new MailComposer({ siteUrl: "https://portal.example.test" }),
     tokens: new SequentialTokens(),
@@ -211,5 +220,161 @@ describe("settings actions", () => {
         expect(await call().catch((e: unknown) => e)).toBeInstanceOf(Refusal)
       }
     }
+  })
+})
+
+// The review actions: each hands the signed-in member's id and its input to
+// one service method. The service's own tests cover what the methods do.
+describe("review actions", () => {
+  const ID = "00000000-0000-4000-8000-000000000001"
+  const calls: unknown[][] = []
+  const spy =
+    (name: string) =>
+    async (...args: unknown[]) => {
+      calls.push([name, ...args])
+      return { ok: true }
+    }
+  const stub = {
+    review: {
+      list: spy("list"),
+      update: spy("update"),
+      requestChanges: spy("requestChanges"),
+      accept: spy("accept"),
+      retryProvisioning: spy("retryProvisioning"),
+      reject: spy("reject"),
+      resendPasswordMail: spy("resendPasswordMail"),
+    },
+    settings: {
+      list: spy("settingsList"),
+      setNotifiee: spy("setNotifiee"),
+      setMailGroup: spy("setMailGroup"),
+    },
+  } as unknown as Applications
+  const r = applicationReviewActions(() => stub)
+  const accept = {
+    status: "master",
+    cohort: 116,
+    username: "alice",
+    mailGroups: ["g1"],
+  }
+  const cases = [
+    [r.list, { closed: true }, ["list", processor.userId, { closed: true }]],
+    [
+      r.update,
+      { id: ID, version: 2, patch: { profile: { phone: "0912" } } },
+      ["update", processor.userId, ID, 2, { profile: { phone: "0912" } }],
+    ],
+    [
+      r.requestChanges,
+      { id: ID, version: 2, note: "請補學號" },
+      ["requestChanges", processor.userId, ID, 2, "請補學號"],
+    ],
+    [
+      r.accept,
+      { id: ID, version: 3, ...accept },
+      ["accept", processor.userId, ID, 3, accept],
+    ],
+    [
+      r.retryProvisioning,
+      { id: ID, username: "bob" },
+      ["retryProvisioning", processor.userId, ID, { username: "bob" }],
+    ],
+    [r.reject, { id: ID }, ["reject", processor.userId, ID, undefined]],
+    [
+      r.resendPasswordMail,
+      { id: ID },
+      ["resendPasswordMail", processor.userId, ID],
+    ],
+    [r.listSettings, {}, ["settingsList", processor.userId]],
+    [
+      r.setNotifiee,
+      { userId: ID, notify: true },
+      ["setNotifiee", processor.userId, ID, true],
+    ],
+    [
+      r.setMailGroup,
+      { groupId: "g1", enabled: false },
+      ["setMailGroup", processor.userId, "g1", false],
+    ],
+  ] as const
+
+  test("ten actions, accounts admins only, in no API app", () => {
+    expect(cases.map(([a]) => a.name)).toEqual([
+      "list_lab_applications",
+      "update_lab_application",
+      "request_lab_application_changes",
+      "accept_lab_application",
+      "retry_lab_application_provisioning",
+      "reject_lab_application",
+      "resend_lab_application_password_mail",
+      "list_application_settings",
+      "set_application_notifiee",
+      "set_application_mail_group",
+    ])
+    for (const [a] of cases) {
+      expect(a.admin).toBe("accounts")
+      expect(a.mcpExcludedBecause).toBeUndefined()
+      expect(a.additive).toBeUndefined()
+      expect(/[一-鿿]/.test(a.title)).toBe(true)
+      expect(actions.some((x) => x.name === a.name)).toBe(true)
+      expect(appOfAction.get(a.name)).toBeNull()
+    }
+  })
+
+  test("kind and idempotent flags", () => {
+    expect(
+      Object.fromEntries(
+        cases.map(([a]) => [a.name, [a.kind, a.idempotent === true]])
+      )
+    ).toEqual({
+      list_lab_applications: ["query", false],
+      update_lab_application: ["mutation", true],
+      request_lab_application_changes: ["mutation", false],
+      accept_lab_application: ["mutation", true],
+      retry_lab_application_provisioning: ["mutation", true],
+      reject_lab_application: ["mutation", true],
+      resend_lab_application_password_mail: ["mutation", false],
+      list_application_settings: ["query", false],
+      set_application_notifiee: ["mutation", true],
+      set_application_mail_group: ["mutation", true],
+    })
+  })
+
+  test("each calls its service method with the member's id", async () => {
+    for (const [action, input, expected] of cases) {
+      calls.length = 0
+      await (action.run as (a: Actor, i: unknown) => Promise<unknown>)(
+        processor,
+        action.input.parse(input)
+      )
+      expect(calls).toEqual([expected as unknown as unknown[]])
+    }
+  })
+
+  test("a service key is refused before the service is called", async () => {
+    for (const [action, input] of cases) {
+      calls.length = 0
+      const error = await (
+        action.run as (a: Actor, i: unknown) => Promise<unknown>
+      )(apply, input).catch((e: unknown) => e)
+      expect(error).toBeInstanceOf(Refusal)
+      expect(calls).toEqual([])
+    }
+  })
+
+  test("inputs are bounded", () => {
+    const ok = (
+      a: { input: { safeParse(v: unknown): { success: boolean } } },
+      v: unknown
+    ) => a.input.safeParse(v).success
+    expect(ok(r.requestChanges, { id: "x", version: 1, note: "n" })).toBe(false)
+    expect(
+      ok(r.requestChanges, { id: ID, version: 1, note: "n".repeat(2001) })
+    ).toBe(false)
+    expect(ok(r.reject, { id: ID, note: "n".repeat(2001) })).toBe(false)
+    expect(ok(r.accept, { id: ID, version: 1, ...accept, cohort: 1.5 })).toBe(
+      false
+    )
+    expect(ok(r.update, { id: ID, version: 0, patch: {} })).toBe(false)
   })
 })
