@@ -27,7 +27,7 @@ WinLab members book rooms, file receipts, sign documents and open the lab door t
 
 - **Signs members in** with the lab's Keycloak (OIDC); there are no passwords here.
 - **Defines each action once**: a page and its MCP tool run the same code, so neither can drift.
-- **Serves MCP** at `/mcp`, with Keycloak as the OAuth 2.1 authorization server. The portal's own OAuth server stays for the developer apps.
+- **Serves MCP** at `/mcp`, with Keycloak as the OAuth 2.1 authorization server.
 - **Keeps members' SSH keys** and hands each lab service the keys of the members allowed into it; see [ssh-keys/README.md](ssh-keys/README.md).
 
 ## Deploy
