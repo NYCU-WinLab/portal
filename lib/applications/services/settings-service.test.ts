@@ -3,7 +3,7 @@ import { describe, expect, test } from "bun:test"
 import { Refusal } from "@/lib/refusal"
 import { ApplicationRefusal } from "../domain/refusal"
 import { FixedClock } from "../testing/clock"
-import { FakeAuthority } from "../testing/fakes"
+import { FakeAuthority, FakeMailGroups } from "../testing/fakes"
 import { NOW } from "../testing/fixtures"
 import { InMemorySettingsStore } from "../testing/memory-store"
 import { SettingsService } from "./settings-service"
@@ -19,15 +19,22 @@ function setup() {
     [MEMBER]: { name: "林小美", email: "c@winlab.tw" },
   })
   const clock = new FixedClock(NOW)
+  const authority = new FakeAuthority({
+    portalAdmins: [PORTAL_ADMIN],
+    accountsAdminIds: [ACCOUNTS_ADMIN],
+  })
+  const mailGroups = new FakeMailGroups({
+    g1: { address: "lab@winlab.tw", manageable: true },
+    g2: { address: "other@winlab.tw", manageable: true },
+    gp: { address: "gcp-x@winlab.tw", manageable: false },
+  })
   const service = new SettingsService({
     settings,
-    authority: new FakeAuthority({
-      portalAdmins: [PORTAL_ADMIN],
-      accountsAdminIds: [ACCOUNTS_ADMIN],
-    }),
+    authority,
+    mailGroups,
     clock,
   })
-  return { settings, clock, service }
+  return { settings, clock, service, authority }
 }
 
 describe("SettingsService", () => {
@@ -100,5 +107,85 @@ describe("SettingsService", () => {
       .catch((e: unknown) => e)
     expect(error).not.toBeInstanceOf(ApplicationRefusal)
     expect(error).toBeInstanceOf(Refusal)
+  })
+})
+
+describe("SettingsService notifiees and mail groups", () => {
+  test("list shows notifiees, default groups with addresses and warnings", async () => {
+    const { service, settings } = setup()
+    expect(await service.list(ACCOUNTS_ADMIN)).toEqual({
+      notifiees: [],
+      mailGroups: [],
+      warnings: { noProcessors: true, noNotifiees: true },
+    })
+    await service.setNotifiee(ACCOUNTS_ADMIN, MEMBER, true)
+    await service.setMailGroup(ACCOUNTS_ADMIN, "g1", true)
+    await settings.setMailGroup("gone", true, MEMBER, NOW)
+    const view = await service.list(ACCOUNTS_ADMIN)
+    expect(view.notifiees).toEqual([
+      { userId: MEMBER, name: "林小美", email: "c@winlab.tw" },
+    ])
+    expect(view.mailGroups).toEqual([
+      { groupId: "g1", address: "lab@winlab.tw" },
+      { groupId: "gone", address: null },
+    ])
+    expect(view.warnings.noNotifiees).toBe(false)
+  })
+
+  test("noProcessors follows the processors' addresses", async () => {
+    const { service, authority } = setup()
+    authority.processors = ["b@winlab.tw"]
+    expect((await service.list(ACCOUNTS_ADMIN)).warnings.noProcessors).toBe(
+      false
+    )
+  })
+
+  test("setNotifiee adds and removes, repeating changes nothing", async () => {
+    const { service, settings } = setup()
+    for (let i = 0; i < 2; i++)
+      await service.setNotifiee(ACCOUNTS_ADMIN, MEMBER, true)
+    expect(await settings.notifiees()).toHaveLength(1)
+    for (let i = 0; i < 2; i++)
+      await service.setNotifiee(ACCOUNTS_ADMIN, MEMBER, false)
+    expect(await settings.notifiees()).toHaveLength(0)
+  })
+
+  test("enabling a group needs a manageable group the actor manages", async () => {
+    const { service, settings, authority } = setup()
+    authority.managers = { g1: [ACCOUNTS_ADMIN], gp: [ACCOUNTS_ADMIN] }
+    await service.setMailGroup(ACCOUNTS_ADMIN, "g1", true)
+    await service.setMailGroup(ACCOUNTS_ADMIN, "g1", true)
+    expect(await settings.defaultMailGroups()).toEqual(["g1"])
+    for (const group of ["g2", "gp"]) {
+      const error = await service
+        .setMailGroup(ACCOUNTS_ADMIN, group, true)
+        .catch((e: unknown) => e)
+      expect(error).toBeInstanceOf(ApplicationRefusal)
+      expect((error as ApplicationRefusal).code).toBe("mail_group_not_allowed")
+    }
+    expect(await settings.defaultMailGroups()).toEqual(["g1"])
+  })
+
+  test("disabling never checks the group or the manager", async () => {
+    const { service, settings } = setup()
+    await settings.setMailGroup("g2", true, MEMBER, NOW)
+    await service.setMailGroup(ACCOUNTS_ADMIN, "g2", false)
+    await service.setMailGroup(ACCOUNTS_ADMIN, "g2", false)
+    expect(await settings.defaultMailGroups()).toEqual([])
+  })
+
+  test("only accounts admins reach the three; a portal admin does not", async () => {
+    const { service, settings } = setup()
+    for (const who of [PORTAL_ADMIN, MEMBER]) {
+      for (const call of [
+        () => service.list(who),
+        () => service.setNotifiee(who, MEMBER, true),
+        () => service.setMailGroup(who, "g1", false),
+      ]) {
+        const error = await call().catch((e: unknown) => e)
+        expect(error).toBeInstanceOf(Refusal)
+      }
+    }
+    expect(await settings.notifiees()).toHaveLength(0)
   })
 })
