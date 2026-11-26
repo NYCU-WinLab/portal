@@ -52,20 +52,38 @@ async function setup(opts: Setup = {}) {
   })
   await settings.setApplySite(APPLY_SITE, SETTER, new Date())
   // Lets a test take the address away after the application exists.
-  const site = { set: !opts.noApplySite }
+  const site = { set: !opts.noApplySite, inTransaction: false }
   const visible: InMemorySettingsStore = Object.create(settings, {
     applySite: {
-      value: async () =>
-        site.set
+      value: async () => {
+        // A read inside a transaction would take a second pooled connection
+        // while the mail-limit lock is held.
+        if (site.inTransaction)
+          throw new Error("settings read inside a transaction")
+        return site.set
           ? settings.applySite()
-          : { url: null, updatedAt: null, updatedBy: null },
+          : { url: null, updatedAt: null, updatedBy: null }
+      },
     },
   })
+  const tracked: ApplicationStore = {
+    get reader() {
+      return store.reader
+    },
+    transaction: async (work) => {
+      site.inTransaction = true
+      try {
+        return await store.transaction(work)
+      } finally {
+        site.inTransaction = false
+      }
+    },
+  }
   const clock = new FixedClock()
   const retention = new RetentionPolicy()
   let ids = 0
   const service = new ApplicantService({
-    store: opts.wrap ? opts.wrap(store) : store,
+    store: opts.wrap ? opts.wrap(store) : tracked,
     directory: keycloak,
     authority,
     settings: visible,
@@ -211,6 +229,39 @@ describe("the apply site's address", () => {
     await h.service.submit(form())
     expect(mails(h).at(-1)!.mail.text).toContain(
       "https://apply2.winlab.tw/confirm/"
+    )
+  })
+
+  test("an unset address fails the same for a new and an applied email", async () => {
+    const outcome = async (p: Promise<unknown>) =>
+      p.then(
+        () => "ok",
+        (e: unknown) =>
+          `${(e as Error).constructor.name}:${(e as Error).message}`
+      )
+    const h = await setup()
+    await confirmed(h, "applied@example.com")
+    h.site.set = false
+    h.clock.advance(HOUR + 1)
+    const results = [
+      await outcome(h.service.submit(form("new@example.com"))),
+      await outcome(h.service.submit(form("applied@example.com"))),
+      await outcome(h.service.sendLink("new2@example.com")),
+      await outcome(h.service.sendLink("applied@example.com")),
+    ]
+    expect(new Set(results).size).toBe(1)
+    expect(results[0]).toBe("Error:申請網站網址尚未設定")
+    // An account holder gets no apply link, but fails the same way.
+    await h.keycloak.createUser({
+      username: "someone",
+      email: "acct@example.com",
+      firstName: "A",
+      lastName: "B",
+      attributes: {},
+      groups: [],
+    })
+    expect(await outcome(h.service.submit(form("acct@example.com")))).toBe(
+      results[0]
     )
   })
 
