@@ -48,6 +48,7 @@ const ADMIN_EMAILS = ["root1@winlab.tw", "root2@winlab.tw"]
 type Setup = {
   wrap?: (store: InMemoryApplicationStore) => ApplicationStore
   reserved?: ReservedNames
+  noSite?: boolean
 }
 
 /** Any pool or HTTP read made while a transaction is open fails the test. */
@@ -82,7 +83,7 @@ async function setup(opts: Setup = {}) {
   const settings = new InMemorySettingsStore({
     [SETTER]: { name: "王小明", email: "xmwang@winlab.tw" },
   })
-  await settings.setApplySite(APPLY_SITE, SETTER, NOW)
+  if (!opts.noSite) await settings.setApplySite(APPLY_SITE, SETTER, NOW)
   await settings.setMailGroup("g-all", true, SETTER)
   const mailGroups = new FakeMailGroups({
     "g-all": { address: "all@winlab.tw", manageable: true },
@@ -523,6 +524,32 @@ describe("update", () => {
 })
 
 describe("requestChanges", () => {
+  test("an unset apply site does not pre-empt the application's refusal", async () => {
+    const h = await setup({ noSite: true })
+    const app = await seed(h)
+    await h.service.reject(ACCOUNTS, app.id)
+    const rejected = await item(h, app.id, true)
+    expect(
+      await code(
+        h.service.requestChanges(ACCOUNTS, app.id, rejected.version, "note")
+      )
+    ).toBe("wrong_state")
+    const pending = await seed(h)
+    expect(
+      await code(h.service.requestChanges(ACCOUNTS, pending.id, 99, "note"))
+    ).toBe("version_conflict")
+  })
+
+  test("an unset apply site stops a request that would send mail", async () => {
+    const h = await setup({ noSite: true })
+    const app = await seed(h)
+    await expect(
+      h.service.requestChanges(ACCOUNTS, app.id, app.version, "note")
+    ).rejects.toThrow("申請網站網址尚未設定")
+    expect(mails(h)).toEqual([])
+    expect((await item(h, app.id)).status).toBe("pending")
+  })
+
   test("asks for changes for 7 days, with a new link and a mail", async () => {
     const h = await setup()
     const app = await seed(h)
