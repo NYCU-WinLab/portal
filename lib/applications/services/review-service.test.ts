@@ -307,6 +307,19 @@ describe("list", () => {
     expect(down.every((i) => i.usernameTaken === null)).toBe(true)
   })
 
+  test("any directory error leaves the list up, with usernameTaken null", async () => {
+    const h = await setup()
+    await seed(h)
+    h.keycloak.fail(
+      "usernamesTaken",
+      1,
+      new Error("KEYCLOAK_ISSUER is not set")
+    )
+    const items = await h.service.list(ACCOUNTS, { closed: false })
+    expect(items.length).toBeGreaterThan(0)
+    expect(items.every((i) => i.usernameTaken === null)).toBe(true)
+  })
+
   test("open lists accepted applications until released; closed has the rest", async () => {
     const h = await setup()
     const done = await accepted(h)
@@ -862,6 +875,102 @@ describe("retryProvisioning", () => {
         )
       ).field
     ).toBe("cohort")
+  })
+
+  describe("a changed value is checked first, as accept does", () => {
+    const state = async (h: H, id: string) => {
+      const v = await item(h, id)
+      return [v.assignment?.username, v.assignment?.cohort, v.version]
+    }
+
+    test("a username Keycloak has is refused and nothing is written", async () => {
+      const h = await setup()
+      const app = await provisioning(h)
+      await block(h, app.id, [])
+      await h.keycloak.createUser({
+        username: "inuse111",
+        email: "x@example.com",
+        firstName: "A",
+        lastName: "B",
+        attributes: {},
+        groups: [],
+      })
+      const before = await state(h, app.id)
+      expect(
+        await code(
+          h.service.retryProvisioning(ACCOUNTS, app.id, {
+            username: "inuse111",
+          })
+        )
+      ).toBe("username_unavailable")
+      expect(await state(h, app.id)).toEqual(before)
+    })
+
+    test("a username another application is provisioning as is refused", async () => {
+      const h = await setup()
+      const app = await provisioning(h)
+      await block(h, app.id, [])
+      const other = await seed(h)
+      await h.service.accept(
+        ACCOUNTS,
+        other.id,
+        other.version,
+        assignment({ username: "claimed2" })
+      )
+      expect(
+        await code(
+          h.service.retryProvisioning(ACCOUNTS, app.id, {
+            username: "claimed2",
+          })
+        )
+      ).toBe("username_unavailable")
+    })
+
+    test("Keycloak being down is a plain error, not a retry", async () => {
+      const h = await setup()
+      const app = await provisioning(h)
+      await block(h, app.id, [])
+      h.keycloak.fail("usernamesTaken")
+      const error = await h.service
+        .retryProvisioning(ACCOUNTS, app.id, { username: "newname2" })
+        .catch((e: unknown) => e)
+      expect(error).toBeInstanceOf(Error)
+      expect(error).not.toBeInstanceOf(ApplicationRefusal)
+    })
+
+    test("a missing cohort group is refused and alerts the admins once a day", async () => {
+      const h = await setup()
+      const app = await provisioning(h)
+      await block(h, app.id, [])
+      const before = await state(h, app.id)
+      const sent = mails(h).length
+      for (let i = 0; i < 2; i++)
+        expect(
+          await code(
+            h.service.retryProvisioning(ACCOUNTS, app.id, { cohort: 117 })
+          )
+        ).toBe("cohort_group_missing")
+      expect(
+        mails(h)
+          .slice(sent)
+          .map((m) => m.mail.kind)
+      ).toEqual(ADMIN_EMAILS.map(() => "cohort_missing"))
+      expect(await state(h, app.id)).toEqual(before)
+    })
+
+    test("unchanged values ask Keycloak nothing", async () => {
+      const h = await setup()
+      const app = await provisioning(h)
+      await block(h, app.id, [])
+      h.keycloak.fail("usernamesTaken", 5)
+      h.keycloak.fail("groupExists", 5)
+      expect(
+        await h.service.retryProvisioning(ACCOUNTS, app.id, {
+          username: "xmwang",
+          cohort: 116,
+        })
+      ).toEqual({ ok: true })
+    })
   })
 
   test("only a provisioning application can be retried", async () => {

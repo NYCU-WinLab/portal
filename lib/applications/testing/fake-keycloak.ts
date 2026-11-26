@@ -24,6 +24,7 @@ export class FakeKeycloak implements KeycloakDirectory, KeycloakProvisioner {
   private readonly users = new Map<string, FakeUser>()
   private readonly groups = new Set<string>()
   private readonly failures = new Map<Method, number>()
+  private readonly errors = new Map<Method, Error>()
   private badMail = false
 
   addGroup(path: string): void {
@@ -47,9 +48,11 @@ export class FakeKeycloak implements KeycloakDirectory, KeycloakProvisioner {
       attributes: structuredClone(u.attributes),
     }
   }
-  /** The next `times` calls of the method throw KeycloakUnavailable. */
-  fail(method: Method, times = 1): void {
+  /** The next `times` calls of the method throw KeycloakUnavailable, or `error`. */
+  fail(method: Method, times = 1, error?: Error): void {
     this.failures.set(method, times)
+    if (error) this.errors.set(method, error)
+    else this.errors.delete(method)
   }
   misconfigureMail(on = true): void {
     this.badMail = on
@@ -59,7 +62,10 @@ export class FakeKeycloak implements KeycloakDirectory, KeycloakProvisioner {
     const left = this.failures.get(method) ?? 0
     if (left > 0) {
       this.failures.set(method, left - 1)
-      throw new KeycloakUnavailable(`fake keycloak: ${method} unavailable`)
+      throw (
+        this.errors.get(method) ??
+        new KeycloakUnavailable(`fake keycloak: ${method} unavailable`)
+      )
     }
   }
 
