@@ -7,6 +7,7 @@ import {
   callableActions,
   listedActions,
   parseToolsets,
+  routing,
   toolsetNames,
 } from "@/lib/mcp/toolsets"
 
@@ -73,6 +74,16 @@ describe("toolsets", () => {
     ])
     expect([...parseToolsets("nope")].sort()).toEqual([...toolsetNames].sort())
     expect([...parseToolsets("music,nope")]).toEqual(["music"])
+  })
+
+  test("the access toolset names account-application review", () => {
+    const access = listedActions(
+      new Set<AdminApp>(["accounts"]),
+      parseToolsets("access")
+    ).map((a) => a.name)
+    expect(access).toContain("list_lab_applications")
+    expect(access).toContain("set_application_notifiee")
+    expect(routing).toContain("account-application review")
   })
 
   test("the instructions tell how to ask for another toolset", () => {
