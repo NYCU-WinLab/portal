@@ -24,7 +24,6 @@ import {
   type ProfileInput,
 } from "../domain/values"
 import {
-  KeycloakUnavailable,
   type ApplicationStore,
   type Clock,
   type EventRecord,
@@ -134,8 +133,12 @@ export class ReviewService {
       try {
         inKeycloak = await this.d.directory.usernamesTaken(named)
       } catch (error) {
-        if (!(error instanceof KeycloakUnavailable)) throw error
-        // The page still lists; it cannot say whether the name is free.
+        // The page still lists, whatever went wrong (Keycloak down, setup
+        // missing); it cannot say whether the name is free. Accept's check
+        // stays strict. Only the error's type is logged.
+        console.error("[applications] username check failed", {
+          type: error instanceof Error ? error.name : typeof error,
+        })
         inKeycloak = null
       }
     }
@@ -285,6 +288,46 @@ export class ReviewService {
         : await Username.parse(change.username, this.d.reserved)
     const cohort =
       change.cohort === undefined ? undefined : Cohort.parse(change.cohort)
+
+    // As in accept, a new value is checked before the transaction: Keycloak
+    // and the pool are read here. A value equal to the current one needs no
+    // check, and a state the retry refuses is left to the transaction.
+    if (username || cohort) {
+      const { current, run } = await this.d.store.transaction(async (uow) => ({
+        current: await this.locked(uow, id),
+        run: await uow.lockRun(id),
+      }))
+      const was = current.assignment
+      const done = (step: string) =>
+        run?.snapshot.completed.some((c) => c.step === step) ?? false
+      if (current.status === "provisioning" && was) {
+        // A step already done refuses the change itself, in the transaction.
+        if (
+          username &&
+          username.value !== was.username.value &&
+          !done("create_account")
+        ) {
+          const claimed = await this.d.store.reader.claimedUsernames(
+            [username],
+            id
+          )
+          const taken = await this.d.directory.usernamesTaken([username])
+          if (claimed.size > 0 || taken.size > 0)
+            throw new ApplicationRefusal("username_unavailable")
+        }
+        if (
+          cohort &&
+          cohort.value !== was.cohort.value &&
+          !done("join_keycloak_groups")
+        ) {
+          if (!(await this.d.directory.groupExists(cohort.groupPath))) {
+            await this.alertCohortMissing(cohort, now)
+            throw new ApplicationRefusal("cohort_group_missing")
+          }
+        }
+      }
+    }
+
     return this.d.store.transaction(async (uow) => {
       const app = await this.locked(uow, id)
       if (app.status !== "provisioning")
