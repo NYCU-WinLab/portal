@@ -1,0 +1,1 @@
+ALTER TABLE "developer_apps" ADD COLUMN "keycloak_rat" text;

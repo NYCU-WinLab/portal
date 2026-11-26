@@ -1,0 +1,2 @@
+- 開發者應用程式改由實驗室 Keycloak 登入：新註冊的應用程式直接使用 Keycloak，舊的應用程式在詳情頁按「改用 Keycloak」，Client ID 不變。
+- 成員在 Keycloak 的同意畫面授權，之後可在帳號主控台的應用程式頁撤銷。

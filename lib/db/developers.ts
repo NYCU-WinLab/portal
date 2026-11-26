@@ -34,6 +34,10 @@ export const developerApps = pgTable(
       .notNull(),
     enabled: boolean().default(true).notNull(),
     secretHash: text(),
+    // Set once the application is a Keycloak client (same client id): its
+    // registration access token, sealed (lib/developers/seal.ts). Null for
+    // an application still on portal's own OAuth service.
+    keycloakRat: text(),
     createdAt: timestamp({ withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [

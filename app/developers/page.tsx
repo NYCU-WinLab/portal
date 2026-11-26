@@ -29,7 +29,7 @@ const scopeNames = (scopes: string[]) =>
 
 export default async function DevelopersPage() {
   const actor = await requireActor("/developers")
-  const [{ apps }, { grants }] = await Promise.all([
+  const [{ apps }, { grants, keycloakConsole }] = await Promise.all([
     runAction(listDeveloperApps, actor, {}),
     runAction(listMyAuthorizations, actor, {}),
   ])
@@ -72,6 +72,16 @@ export default async function DevelopersPage() {
         </section>
         <section className="flex flex-col gap-2">
           <SectionHeader title="你授權的" />
+          <p className="text-muted-foreground">
+            用 Keycloak 登入的應用程式，在
+            <a
+              href={keycloakConsole}
+              className="underline underline-offset-4 hover:text-foreground"
+            >
+              帳號主控台
+            </a>
+            查看與撤銷。
+          </p>
           {grants.length === 0 ? (
             <EmptyState noun="授權" />
           ) : (
