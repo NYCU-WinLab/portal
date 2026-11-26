@@ -1,0 +1,1 @@
+- MCP 改用實驗室 Keycloak 登入：Claude Code 的 life 外掛已設定好；claude.ai 的 Portal 連接器需要再按一次「連接」。已連上的不受影響，直到下次重新登入。

@@ -27,7 +27,7 @@ WinLab members book rooms, file receipts, sign documents and open the lab door t
 
 - **Signs members in** with the lab's Keycloak (OIDC); there are no passwords here.
 - **Defines each action once**: a page and its MCP tool run the same code, so neither can drift.
-- **Serves MCP** at `/mcp`, with the portal itself as the OAuth 2.1 authorization server (Client ID Metadata Documents, plus dynamic registration for older clients).
+- **Serves MCP** at `/mcp`, with Keycloak as the OAuth 2.1 authorization server.
 - **Keeps members' SSH keys** and hands each lab service the keys of the members allowed into it; see [ssh-keys/README.md](ssh-keys/README.md).
 
 ## Deploy
@@ -59,7 +59,8 @@ portal.winlab.tw deploys on every push to `main`. The release workflow pushes th
      "insert into admins (user_id, app) select id, 'portal' from users where username = '<their account>'"
    ```
 
-4. Add the MCP server to a client, for example `claude mcp add --transport http portal <BETTER_AUTH_URL>/mcp`, approve it on the consent page, then ask it to call `whoami`.
+4. For MCP, create a public OpenID Connect client in the same realm (`portal-mcp`): standard flow with PKCE S256, the redirect URIs `http://localhost:3118/callback` and `https://claude.ai/api/mcp/auth_callback`, and an audience mapper that adds `<BETTER_AUTH_URL>/mcp` to the access token. [NYCU-WinLab/pki](https://github.com/NYCU-WinLab/pki) `keycloak/apply-mcp-client.sh` does this from a JSON file.
+5. Sign in on the website once, so your account exists here. Then add the MCP server to a client, for example `claude mcp add --transport http portal <BETTER_AUTH_URL>/mcp --client-id portal-mcp --callback-port 3118`, and ask it to call `whoami`. In claude.ai, choose "use your own OAuth client" and enter `portal-mcp`.
 
 ## Configure
 
@@ -72,6 +73,7 @@ Set these in `.env`; [.env.example](.env.example) documents every one.
 | `BETTER_AUTH_SECRET` | Signs sessions and OAuth queries; also the source of the key for the account-application mail rate-limit log (only the hash of the address is stored), so rotating it also resets that rate-limit history | required |
 | `KEYCLOAK_ISSUER` | The realm URL, e.g. `https://auth.example.com/realms/lab` | required |
 | `KEYCLOAK_CLIENT_ID`, `KEYCLOAK_CLIENT_SECRET` | The portal's Keycloak client | required |
+| `KEYCLOAK_MCP_CLIENT_ID` | The public client MCP tokens must be issued to | `portal-mcp` |
 | _(not env)_ apply-site URL | The address account-application mails link to is a setting, not env: after deploy, a portal or accounts admin sets it with `set_apply_site_url` (MCP); until then applicant mails fail with 「申請網站網址尚未設定」. Old `APPLY_SITE_URL` and `APPLICATION_HASH_SECRET` lines in `.env` can be deleted | set after first deploy |
 | `PORTAL_VERSION` | Image tag | `main` |
 | `PORTAL_BIND`, `PORTAL_PORT` | Where web listens on the host | `127.0.0.1`, `3000` |
