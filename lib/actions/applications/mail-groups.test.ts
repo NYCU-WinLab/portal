@@ -108,7 +108,8 @@ test("add: a group Google does not know is protected", async () => {
 test("add: a Google failure is an error, and nothing logs the address", async () => {
   const { api } = fake({
     groups: [{ id: "g1", email: "lab-all@winlab.tw" }],
-    post: () => json({ error: { message: "boom new.member@example.com" } }, 500),
+    post: () =>
+      json({ error: { message: "boom new.member@example.com" } }, 500),
   })
   const logged: string[] = []
   const spy = (...args: unknown[]) => void logged.push(JSON.stringify(args))
