@@ -209,7 +209,7 @@ function Details({
           PROFILE_FIELDS.map(({ key, label }) => (
             <FieldRow key={key} label={label}>
               {item.profile?.[key] ?? "未填"}
-              {key === "username" && !item.assignment && (
+              {key === "username" && open && !item.assignment && (
                 <UsernameTaken taken={item.usernameTaken} />
               )}
             </FieldRow>
