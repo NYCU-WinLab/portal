@@ -318,6 +318,37 @@ describe("list", () => {
     expect(down.every((i) => i.usernameTaken === null)).toBe(true)
   })
 
+  test("list asks for claimed usernames once for all rows", async () => {
+    const calls: number[] = []
+    const h = await setup({
+      wrap: (inner) => ({
+        transaction: (work) => inner.transaction(work),
+        reader: {
+          ...inner.reader,
+          claimedUsernames: (names, exceptId) => {
+            calls.push(names.length)
+            return inner.reader.claimedUsernames(names, exceptId)
+          },
+        },
+      }),
+    })
+    const a = await seed(h, { username: "multi1" })
+    await seed(h, { username: "multi2" })
+    await seed(h, { username: "multi3" })
+    // One of them is provisioning as itself: that is not another's claim.
+    await h.service.accept(
+      ACCOUNTS,
+      a.id,
+      a.version,
+      assignment({ username: "multi1" })
+    )
+    calls.length = 0
+    const items = await h.service.list(ACCOUNTS, { closed: false })
+    expect(items.length).toBeGreaterThanOrEqual(3)
+    expect(calls).toEqual([items.length])
+    expect(items.find((i) => i.id === a.id)!.usernameTaken).toBe(false)
+  })
+
   test("any directory error leaves the list up, with usernameTaken null", async () => {
     const h = await setup()
     await seed(h)
