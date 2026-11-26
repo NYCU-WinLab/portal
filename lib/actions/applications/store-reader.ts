@@ -441,7 +441,12 @@ async function loadList(q: Q, closed: boolean): Promise<ReviewRow[]> {
       : q
           .select(historyColumns)
           .from(labApplications)
-          .where(inArray(labApplications.email, emails))
+          .where(
+            and(
+              inArray(labApplications.email, emails),
+              ne(labApplications.status, "unverified")
+            )
+          )
           .orderBy(asc(labApplications.createdAt), asc(labApplications.id)),
   ])
   const byEmail = groupBy(
