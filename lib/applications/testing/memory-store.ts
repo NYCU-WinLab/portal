@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks"
 import {
   Application,
   type ApplicationSnapshot,
@@ -31,6 +32,7 @@ import {
   type ProfileFields,
   type TokenHash,
 } from "../domain/values"
+import { UnverifiedEmailTaken } from "../ports"
 import type {
   ApplicationReader,
   ApplicationStore,
@@ -223,6 +225,9 @@ class Tables {
             username: Username.restore(row.assignedUsername),
             mailGroups: this.s.mailGroups
               .filter((g) => g.applicationId === id)
+              .sort((x, y) =>
+                x.groupId < y.groupId ? -1 : x.groupId > y.groupId ? 1 : 0
+              )
               .map((g) => ({
                 groupId: g.groupId,
                 addedAt: copyOptionalDate(g.addedAt),
@@ -369,9 +374,7 @@ class Tables {
       email !== null &&
       others.some((a) => a.email === email && a.status === "unverified")
     ) {
-      throw new Error(
-        'duplicate key value violates unique constraint "lab_applications_unverified_email"'
-      )
+      throw new UnverifiedEmailTaken()
     }
     return null
   }
@@ -489,7 +492,8 @@ class Tables {
       kind,
       actorKind: actor.kind,
       actorId: actor.kind === "admin" ? actor.id : null,
-      changes: changes === null ? null : structuredClone(changes),
+      // jsonb round trip: a Date becomes a string, an undefined key goes.
+      changes: changes === null ? null : JSON.parse(JSON.stringify(changes)),
       at: copyDate(at),
     })
   }
@@ -580,7 +584,11 @@ class Tables {
     if (id !== null && !UUID.test(id)) {
       throw new Error(`invalid input syntax for type uuid: "${id}"`)
     }
-    this.requireRow(applicationId).keycloakId = id
+    const row = this.requireRow(applicationId)
+    if (id === null && row.status === "accepted") {
+      throw new Error('violates check constraint "lab_applications_account"')
+    }
+    row.keycloakId = id
   }
 
   queueMail(applicationId: string | null, mail: ComposedMail) {
@@ -688,9 +696,17 @@ export class InMemoryApplicationStore implements ApplicationStore {
     return new InMemoryApplicationStore(opts.rate ?? new MailRatePolicy())
   }
 
+  private readonly inTransaction = new AsyncLocalStorage<true>()
+
   /** Runs one transaction at a time, in the order they were started. */
   transaction<T>(work: (uow: UnitOfWork) => Promise<T>): Promise<T> {
-    const run = this.queue.then(() => this.run(work))
+    // A nested call would wait for its own parent; refuse it at once.
+    if (this.inTransaction.getStore()) {
+      return Promise.reject(new Error("nested transaction"))
+    }
+    const run = this.queue.then(() =>
+      this.inTransaction.run(true, () => this.run(work))
+    )
     this.queue = run.catch(() => undefined)
     return run
   }
@@ -778,6 +794,8 @@ export class InMemoryApplicationStore implements ApplicationStore {
       queueMail: live((id: string | null, mail: ComposedMail) =>
         t.queueMail(id, mail)
       ),
+      // Transactions run one at a time here, so there is nothing to lock.
+      lockMailLimit: live(() => undefined),
       reserveMail: live(
         (recipient: Email, kind: AnonymousMailKind, now: Date) =>
           t.reserveMail(recipient, kind, now, rate)

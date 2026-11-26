@@ -168,6 +168,32 @@ describe("ApplicantProfile", () => {
       ApplicantProfile.parse({ ...input, [key]: value }, reserved)
     ).rejects.toThrow(refusal("invalid_input", field))
   })
+  test.each([
+    ["nul", "\u0000"],
+    ["bell", "\u0007"],
+    ["rlo", "\u202e"],
+    ["zwsp", "\u200b"],
+    ["bom", "\ufeff"],
+  ])("rejects a %s in a text field", async (_name, ch) => {
+    for (const [key, field] of [
+      ["chineseName", "chinese_name"],
+      ["firstName", "first_name"],
+      ["lastName", "last_name"],
+      ["department", "department"],
+      ["lineId", "line_id"],
+    ] as const) {
+      await expect(
+        ApplicantProfile.parse({ ...input, [key]: `a${ch}b` }, reserved)
+      ).rejects.toThrow(refusal("invalid_input", field))
+    }
+  })
+  test("accepts a zero width joiner in an emoji sequence", async () => {
+    const name = "👨\u200d👩"
+    expect(
+      (await ApplicantProfile.parse({ ...input, firstName: name }, reserved))
+        .fields.firstName
+    ).toBe(name)
+  })
   test("counts code points, not UTF-16 units", async () =>
     expect(
       (

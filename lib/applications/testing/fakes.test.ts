@@ -43,6 +43,7 @@ test("FakeMailGroups outcomes", async () => {
   expect(await groups.add("mine", email, yes)).toBe("error")
   expect(await groups.add("mine", email, yes)).toBe("ok")
   expect(await groups.add("nope", email, yes)).toBe("error")
+  expect(await groups.isManageable("unknown-group")).toBe(false)
 })
 
 test("FakeKeycloak fail throws KeycloakUnavailable the given number of times", async () => {

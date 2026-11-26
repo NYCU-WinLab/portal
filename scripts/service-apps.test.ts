@@ -10,7 +10,7 @@ import { serviceApps } from "@/lib/api-apps"
 // updates the list.
 describe("service keys", () => {
   test("reach only the apps checked for them", () => {
-    expect([...serviceApps]).toEqual(["invitations", "avatars"])
+    expect([...serviceApps]).toEqual(["invitations", "avatars", "applications"])
   })
 
   test("reach only the actions checked for them", () => {
@@ -23,6 +23,20 @@ describe("service keys", () => {
       .filter((action) => !action.mcpExcludedBecause)
       .map((action) => action.name)
       .sort()
-    expect(reachable).toEqual(["get_member_avatar", "send_invitation"])
+    expect(reachable).toEqual(
+      [
+        "confirm_lab_application",
+        "get_lab_application_for_confirm",
+        "get_lab_application_for_edit",
+        "get_lab_application_status",
+        "get_member_avatar",
+        "resubmit_lab_application",
+        "send_invitation",
+        "send_lab_application_link",
+        "send_lab_application_password_mail",
+        "submit_lab_application",
+        "withdraw_lab_application",
+      ].sort()
+    )
   })
 })

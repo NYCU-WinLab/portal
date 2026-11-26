@@ -14,7 +14,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
-import { apiAppKeys, listLine, type ApiApp } from "@/lib/api-apps"
+import { memberApiAppKeys, listLine, type ApiApp } from "@/lib/api-apps"
 import { report } from "@/lib/report"
 
 import { type AppActions, AppPicker } from "./app-picker"
@@ -52,7 +52,7 @@ export function CreateKey({ actions }: { actions: AppActions }) {
           <Input name="name" maxLength={60} placeholder="iPhone 捷徑" />
         </FormField>
         <AppPicker
-          apps={apiAppKeys}
+          apps={memberApiAppKeys}
           actions={actions}
           value={apps}
           onChange={setApps}

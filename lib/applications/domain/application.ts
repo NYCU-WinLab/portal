@@ -12,8 +12,10 @@ export type EventActor =
   { kind: "applicant" } | { kind: "admin"; id: string } | { kind: "system" }
 export type AdminActor = Extract<EventActor, { kind: "admin" }>
 
-export const APPLICANT: EventActor = Object.freeze({ kind: "applicant" })
-export const SYSTEM: EventActor = Object.freeze({ kind: "system" })
+export type SystemActor = Extract<EventActor, { kind: "system" }>
+export const APPLICANT: Extract<EventActor, { kind: "applicant" }> =
+  Object.freeze({ kind: "applicant" as const })
+export const SYSTEM: SystemActor = Object.freeze({ kind: "system" as const })
 
 export type DomainEvent = {
   kind: EventKind
@@ -275,6 +277,9 @@ export class Application {
     this.checkVersion(version)
     const note = input.note.trim()
     if (note === "") throw new ApplicationRefusal("invalid_input", "note")
+    if (input.dueAt.getTime() <= now.getTime()) {
+      throw new ApplicationRefusal("invalid_input", "dueAt")
+    }
     const open = this.#s.changeRequest
     if (
       this.#s.status === "changes_requested" &&
@@ -354,7 +359,7 @@ export class Application {
           status: a.status,
           cohort: a.cohort,
           username: a.username,
-          mailGroups: a.mailGroups.map((groupId) => ({
+          mailGroups: [...new Set(a.mailGroups)].map((groupId) => ({
             groupId,
             addedAt: null,
           })),
@@ -370,7 +375,7 @@ export class Application {
             status: a.status,
             cohort: a.cohort.value,
             username: a.username.value,
-            mail_groups: [...a.mailGroups],
+            mail_groups: [...new Set(a.mailGroups)],
           },
           now
         ),
@@ -424,7 +429,7 @@ export class Application {
 
   reject(
     note: string | null,
-    by: AdminActor | typeof SYSTEM,
+    by: AdminActor | SystemActor,
     now: Date
   ): Transition {
     const to = this.target("reject")

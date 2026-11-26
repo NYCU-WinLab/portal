@@ -72,6 +72,8 @@ Set these in `.env`; [.env.example](.env.example) documents every one.
 | `BETTER_AUTH_SECRET` | Signs sessions and OAuth queries | required |
 | `KEYCLOAK_ISSUER` | The realm URL, e.g. `https://auth.example.com/realms/lab` | required |
 | `KEYCLOAK_CLIENT_ID`, `KEYCLOAK_CLIENT_SECRET` | The portal's Keycloak client | required |
+| `APPLICATION_HASH_SECRET` | HMAC key for the account-application mail rate-limit log (only the hash of the address is stored); changing it only resets that rate-limit history, no dual key needed | required for account applications |
+| `APPLY_SITE_URL` | Base URL of the applicant site, used in application mail links | required for account applications |
 | `PORTAL_VERSION` | Image tag | `main` |
 | `PORTAL_BIND`, `PORTAL_PORT` | Where web listens on the host | `127.0.0.1`, `3000` |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | OTLP/HTTP endpoint for traces and error logs; off when empty | empty |

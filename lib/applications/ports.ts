@@ -105,7 +105,12 @@ export interface UnitOfWork {
    * `derivePasswordMail`.
    */
   passwordMail(applicationId: string): Promise<PasswordMailState>
-  /** Writes the main table and the profile only. */
+  /**
+   * Writes the application row (version-checked), its profile, ends and
+   * inserts change requests, inserts mail-group rows when an assignment
+   * first appears, and appends the transition's events. `keycloak_id` is
+   * written only by `setKeycloakId`.
+   */
   save(t: Changed): Promise<SaveResult>
   saveRun(run: ProvisioningRun): Promise<void>
   deleteRun(applicationId: string): Promise<void>
@@ -130,6 +135,12 @@ export interface UnitOfWork {
     at: Date
   ): Promise<void>
   queueMail(applicationId: string | null, mail: ComposedMail): Promise<void>
+  /**
+   * Takes the lock `reserveMail` takes, held until the transaction ends. A
+   * command that reserves mail and also locks rows calls this first, so
+   * every such command takes the locks in one order.
+   */
+  lockMailLimit(): Promise<void>
   /**
    * Counts records with the same rate key at > now - 1h and > now - 24h, and
    * all records at > now - 1h, and hands them to `MailRatePolicy.allows`.
@@ -258,4 +269,15 @@ export interface Tracer {
     fn: () => Promise<T>,
     expected?: (error: unknown) => boolean
   ): Promise<T>
+}
+
+/**
+ * A second unverified application for the same email. Both stores throw
+ * this class; callers match on the class, never on a message.
+ */
+export class UnverifiedEmailTaken extends Error {
+  constructor() {
+    super("lab_applications_unverified_email")
+    this.name = "UnverifiedEmailTaken"
+  }
 }

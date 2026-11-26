@@ -70,6 +70,17 @@ import {
 import type { Action } from "@/lib/actions/define"
 import type { ApiApp } from "@/lib/api-apps"
 import { listHomePins, setHomePin } from "@/lib/actions/home"
+import {
+  confirmLabApplication,
+  getLabApplicationForConfirm,
+  getLabApplicationForEdit,
+  getLabApplicationStatus,
+  resubmitLabApplication,
+  sendLabApplicationLink,
+  sendLabApplicationPasswordMail,
+  submitLabApplication,
+  withdrawLabApplication,
+} from "@/lib/actions/applications"
 import { sendInvitation } from "@/lib/actions/invitations"
 import { getDoorStatus, listDoorEvents, openDoor } from "@/lib/actions/door"
 import { listMyDoorCards, listMyDoorEvents } from "@/lib/actions/door-mine"
@@ -514,6 +525,21 @@ export const actionGroups: { app: ApiApp | null; actions: Action[] }[] = [
   {
     app: "invitations",
     actions: [sendInvitation],
+  },
+  {
+    // The apply site's service key only: every action refuses anyone else.
+    app: "applications",
+    actions: [
+      submitLabApplication,
+      getLabApplicationForConfirm,
+      confirmLabApplication,
+      getLabApplicationStatus,
+      sendLabApplicationLink,
+      withdrawLabApplication,
+      getLabApplicationForEdit,
+      resubmitLabApplication,
+      sendLabApplicationPasswordMail,
+    ],
   },
   {
     // Its own app so a service key (viewer.winlab.tw's presence avatars)
