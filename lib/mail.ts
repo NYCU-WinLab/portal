@@ -19,7 +19,11 @@ export type Mail = {
 
 /** A mail as actions queue it: always with the html from mailBody
  * (lib/mail-body.ts), so every mail has the ui.winlab.tw look. */
-export type QueuedMail = Mail & { html: string }
+export type QueuedMail = Mail & {
+  html: string
+  /** The body holds a secret: the outbox blanks it once sent or given up. */
+  redactAfterSend?: boolean
+}
 
 let transport: Transporter | null = null
 

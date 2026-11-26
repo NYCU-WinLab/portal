@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import { Email, Username } from "../domain/values"
-import { KeycloakUnavailable } from "../ports"
+import { KeycloakUnavailable, MailGroupsUnavailable } from "../ports"
 import { FakeKeycloak } from "./fake-keycloak"
 import { FakeMailGroups } from "./fakes"
 import { FixedClock } from "./clock"
@@ -44,6 +44,10 @@ test("FakeMailGroups outcomes", async () => {
   expect(await groups.add("mine", email, yes)).toBe("ok")
   expect(await groups.add("nope", email, yes)).toBe("error")
   expect(await groups.isManageable("unknown-group")).toBe(false)
+  groups.unreachable = true
+  await expect(groups.isManageable("open")).rejects.toBeInstanceOf(
+    MailGroupsUnavailable
+  )
 })
 
 test("FakeKeycloak fail throws KeycloakUnavailable the given number of times", async () => {

@@ -14,6 +14,7 @@ import {
   type ApplicationStore,
   type Clock,
   type KeycloakDirectory,
+  type MailGroups,
   type ProcessorAuthority,
   type ReservedNames,
   type SettingsStore,
@@ -21,15 +22,18 @@ import {
 } from "@/lib/applications/ports"
 import { MailComposer } from "@/lib/applications/services/mail-composer"
 import { ApplicantService } from "@/lib/applications/services/applicant-service"
+import { ReviewService } from "@/lib/applications/services/review-service"
 import { SettingsService } from "@/lib/applications/services/settings-service"
 import { CryptoTokens } from "@/lib/applications/tokens"
+import { GoogleMailGroups } from "@/lib/actions/applications/mail-groups"
 import { db } from "@/lib/db"
 import { keycloakReader, systemAccountUsernames } from "@/lib/keycloak"
 
-/** What the actions call. PR 3 adds the review service. */
+/** What the actions call. */
 export type Applications = {
   applicant: ApplicantService
   settings: SettingsService
+  review: ReviewService
 }
 
 export type Deps = {
@@ -37,6 +41,7 @@ export type Deps = {
   directory: KeycloakDirectory
   authority: ProcessorAuthority
   settings: SettingsStore
+  mailGroups: MailGroups
   reserved: ReservedNames
   mail: MailComposer
   tokens: TokenGenerator
@@ -50,22 +55,36 @@ export function build(deps: Deps): Applications {
   return {
     applicant: new ApplicantService(deps),
     settings: new SettingsService(deps),
+    review: new ReviewService(deps),
+  }
+}
+
+/** The Keycloak reader is made on the first call, since making it needs KEYCLOAK_ISSUER. */
+function lazyDirectory(): KeycloakDirectory {
+  return {
+    emailExists: (email) => keycloakReader().emailExists(email),
+    usernamesTaken: (names) => keycloakReader().usernamesTaken(names),
+    groupExists: (path) => keycloakReader().groupExists(path),
+    forgetCaches: () => keycloakReader().forgetCaches(),
   }
 }
 
 /**
  * The real wiring. Nothing here fails for a missing setting: the mail rate
  * key is derived when a mail is reserved, the portal URL when a mail is
- * composed, and the apply site's address (a setting) when a mail with its
- * link is composed, so only the request that needs them fails.
+ * composed, the apply site's address (a setting) when a mail with its link
+ * is composed, the Keycloak reader when it is first asked, and the Google
+ * Groups client when a group is first looked at, so only the request that
+ * needs them fails.
  */
 export function productionDeps(): Deps {
   const rate = new MailRatePolicy()
   return {
     store: new DrizzleApplicationStore(db, { rate, hashSecret: mailRateKey }),
-    directory: keycloakReader(),
+    directory: lazyDirectory(),
     authority: new DbProcessorAuthority(db),
     settings: new DrizzleSettingsStore(db),
+    mailGroups: new GoogleMailGroups(),
     reserved: new DbReservedNames(db, systemAccountUsernames),
     mail: new MailComposer({
       get siteUrl() {

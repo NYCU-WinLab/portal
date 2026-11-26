@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm"
 import {
+  boolean,
   index,
   integer,
   pgTable,
@@ -31,6 +32,9 @@ export const mailOutbox = pgTable(
     lastError: text(),
     createdAt: timestamp({ withTimezone: true }).defaultNow().notNull(),
     sentAt: timestamp({ withTimezone: true }),
+    // The body holds a secret (a link token): blank text and html once the
+    // mail is sent or given up on.
+    redactAfterSend: boolean().default(false).notNull(),
   },
   (table) => [
     index()

@@ -14,13 +14,15 @@ export const REFUSAL_CODES = [
   "email_has_account",
   "cohort_group_missing",
   "mail_group_not_allowed",
+  "member_not_found",
 ] as const
 export type RefusalCode = (typeof REFUSAL_CODES)[number]
 
 /** The codes an applicant may see; the rest are for processors. */
 export const APPLICANT_CODES: readonly RefusalCode[] = REFUSAL_CODES.slice(0, 6)
 
-const FIELD_NAMES: Record<string, string> = {
+/** Chinese names of input fields, by their snake_case key. */
+export const FIELD_NAMES: Readonly<Record<string, string>> = {
   email: "Email",
   username: "username",
   chinese_name: "中文名字",
@@ -52,6 +54,7 @@ const MESSAGES: Record<Exclude<RefusalCode, "invalid_input">, string> = {
   email_has_account: "這個 email 已經有帳號",
   cohort_group_missing: "Keycloak 還沒有這個學年度的群組",
   mail_group_not_allowed: "你不能把人加進這個群組信",
+  member_not_found: "找不到這位成員",
 }
 
 export class ApplicationRefusal extends Refusal {

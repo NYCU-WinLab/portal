@@ -1,10 +1,11 @@
 import type { Email } from "../domain/values"
-import type {
-  ChangeNotifier,
-  MailGroups,
-  ProcessorAuthority,
-  ReservedNames,
-  Tracer,
+import {
+  MailGroupsUnavailable,
+  type ChangeNotifier,
+  type MailGroups,
+  type ProcessorAuthority,
+  type ReservedNames,
+  type Tracer,
 } from "../ports"
 
 export class FixedReservedNames implements ReservedNames {
@@ -22,6 +23,8 @@ type GroupInit = { address: string; manageable?: boolean; protected?: boolean }
 export class FakeMailGroups implements MailGroups {
   private readonly joined = new Map<string, Set<string>>()
   private readonly failing = new Set<string>()
+  /** isManageable throws MailGroupsUnavailable, as with no Google credentials. */
+  unreachable = false
   constructor(private readonly groups: Record<string, GroupInit>) {}
 
   members(groupId: string): string[] {
@@ -47,6 +50,7 @@ export class FakeMailGroups implements MailGroups {
     return "ok" as const
   }
   async isManageable(groupId: string): Promise<boolean> {
+    if (this.unreachable) throw new MailGroupsUnavailable("fake groups down")
     return this.groups[groupId]?.manageable ?? false
   }
   async addresses(groupIds: readonly string[]): Promise<Map<string, string>> {
@@ -92,6 +96,11 @@ export class FakeAuthority implements ProcessorAuthority {
   }
   async managesGroup(userId: string, groupId: string) {
     return (this.managers[groupId] ?? []).includes(userId)
+  }
+  async managedGroups(userId: string) {
+    return Object.entries(this.managers)
+      .filter(([, ids]) => ids.includes(userId))
+      .map(([groupId]) => groupId)
   }
   async processorEmails() {
     return [...this.processors]

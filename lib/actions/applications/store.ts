@@ -23,14 +23,16 @@ import type {
   EventActor,
   OpenChangeRequest,
 } from "@/lib/applications/domain/application"
-import type {
-  AnonymousMailKind,
-  ApplicationStatus,
-  EventKind,
-  TokenPurpose,
+import {
+  LINK_MAIL_KINDS,
+  type AnonymousMailKind,
+  type ApplicationStatus,
+  type EventKind,
+  type TokenPurpose,
 } from "@/lib/applications/domain/constants"
 import type { MailRatePolicy } from "@/lib/applications/domain/policies"
 import type { ProvisioningRun } from "@/lib/applications/domain/provisioning-run"
+import { ApplicationRefusal } from "@/lib/applications/domain/refusal"
 import type {
   ApplicantProfile,
   Email,
@@ -76,6 +78,14 @@ export function uniqueViolation(error: unknown): string | null {
   const cause = (error as { cause?: { code?: unknown; constraint?: unknown } })
     ?.cause
   if (cause?.code !== "23505") return null
+  return typeof cause.constraint === "string" ? cause.constraint : null
+}
+
+/** The constraint a foreign key violation (23503) broke, or null. */
+export function foreignKeyViolation(error: unknown): string | null {
+  const cause = (error as { cause?: { code?: unknown; constraint?: unknown } })
+    ?.cause
+  if (cause?.code !== "23503") return null
   return typeof cause.constraint === "string" ? cause.constraint : null
 }
 
@@ -469,6 +479,9 @@ class DrizzleUnitOfWork implements UnitOfWork {
       subject: mail.subject,
       text: mail.text,
       html: mail.html,
+      redactAfterSend: (LINK_MAIL_KINDS as readonly string[]).includes(
+        mail.kind
+      ),
     })
     if (mailId === null) throw new Error("mail has no recipient")
     if (applicationId !== null) {
@@ -640,10 +653,19 @@ export class DrizzleSettingsStore implements SettingsStore {
 
   async setNotifiee(userId: string, notify: boolean, by: string, now: Date) {
     if (notify) {
-      await this.db
-        .insert(applicationNotifiees)
-        .values({ userId, createdBy: by, createdAt: now })
-        .onConflictDoNothing()
+      try {
+        await this.db
+          .insert(applicationNotifiees)
+          .values({ userId, createdBy: by, createdAt: now })
+          .onConflictDoNothing()
+      } catch (error) {
+        if (
+          foreignKeyViolation(error) ===
+          "application_notifiees_user_id_users_id_fk"
+        )
+          throw new ApplicationRefusal("member_not_found")
+        throw error
+      }
     } else {
       await this.db
         .delete(applicationNotifiees)

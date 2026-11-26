@@ -4,6 +4,7 @@ import {
   type ApplicationSnapshot,
   type Changed,
   type EventActor,
+  type RecordedActor,
   type OpenChangeRequest,
 } from "../domain/application"
 import {
@@ -165,11 +166,8 @@ function sameProfile(a: ProfileFields, b: ProfileFields): boolean {
   return (Object.keys(a) as (keyof ProfileFields)[]).every((k) => a[k] === b[k])
 }
 
-function actorOf(row: EventRow): EventActor {
-  if (row.actorKind === "admin") {
-    if (row.actorId === null) throw new Error(`event ${row.id} has no admin id`)
-    return { kind: "admin", id: row.actorId }
-  }
+function actorOf(row: EventRow): RecordedActor {
+  if (row.actorKind === "admin") return { kind: "admin", id: row.actorId }
   return { kind: row.actorKind }
 }
 
@@ -305,7 +303,10 @@ class Tables {
 
   history(email: string, exceptId: string): HistoryRow[] {
     return this.s.applications
-      .filter((a) => a.email === email && a.id !== exceptId)
+      .filter(
+        (a) =>
+          a.email === email && a.id !== exceptId && a.status !== "unverified"
+      )
       .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
       .map((a) => ({
         id: a.id,
@@ -827,6 +828,13 @@ export class InMemoryApplicationStore implements ApplicationStore {
       delete: live((id: string) => t.delete(id)),
       // `at` is unused: purging only clears data.
       purge: live((id: string) => t.purge(id)),
+    }
+  }
+
+  /** Deletes a member as the FK does: their events lose the id. */
+  forgetAdmin(adminId: string): void {
+    for (const e of this.state.events) {
+      if (e.actorKind === "admin" && e.actorId === adminId) e.actorId = null
     }
   }
 

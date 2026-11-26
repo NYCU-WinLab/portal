@@ -41,6 +41,7 @@ import type {
   WithdrawResult,
 } from "../views"
 import type { MailComposer } from "./mail-composer"
+import { passwordMailView, requestPasswordMail } from "./password-mail-request"
 
 export type SubmitForm = {
   email: string
@@ -231,20 +232,13 @@ export class ApplicantService {
     const releasedAt = found?.releasedAt ?? null
     let passwordMail: PasswordMailView | null = null
     if (app.status === "accepted") {
-      const state = await this.d.store.reader.passwordMail(app.id)
-      const passwordSet = state.passwordSet || releasedAt !== null
-      passwordMail = {
-        lastSentAt: iso(state.lastSentAt),
-        expiresAt: state.lastSentAt
-          ? this.d.retention
-              .passwordMailExpiresAt(state.lastSentAt)
-              .toISOString()
-          : null,
-        passwordSet,
-        canResend:
-          !passwordSet &&
-          this.d.rate.passwordMailRequestAllowed(state.lastRequestedAt, now),
-      }
+      passwordMail = passwordMailView(
+        await this.d.store.reader.passwordMail(app.id),
+        releasedAt,
+        this.d.retention,
+        this.d.rate,
+        now
+      )
     }
     const cr = app.changeRequest
     return {
@@ -339,23 +333,8 @@ export class ApplicantService {
         await uow.lockByToken(hash, "access"),
         now
       ).application
-      if (app.status !== "accepted") throw new ApplicationRefusal("wrong_state")
-      const run = await uow.lockRun(app.id)
-      if (!run) throw new Error(`accepted application ${app.id} has no run`)
-      if (run.released) throw new ApplicationRefusal("password_already_set")
       // Shared with processors: one request an hour, whoever asked.
-      const state = await uow.passwordMail(app.id)
-      if (!this.d.rate.passwordMailRequestAllowed(state.lastRequestedAt, now))
-        throw new ApplicationRefusal("rate_limited")
-      const next = run.requestMail(now)
-      await uow.appendEvent(
-        app.id,
-        "password_mail_requested",
-        null,
-        APPLICANT,
-        now
-      )
-      await uow.saveRun(next)
+      await requestPasswordMail(uow, this.d.rate, app, APPLICANT, now)
       return { ok: true } as const
     })
   }

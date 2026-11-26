@@ -51,7 +51,7 @@ export const routing = [
     .map((t) =>
       t in apiApps
         ? `${t} (${apiApps[t as ApiApp]})`
-        : `${t} (admins, door cards, API keys, developer apps)`
+        : `${t} (admins, door cards, API keys, developer apps, account-application review)`
     )
     .join(", ")}.`,
 ].join(" ")

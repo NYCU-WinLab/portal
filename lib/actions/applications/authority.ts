@@ -49,6 +49,14 @@ export class DbProcessorAuthority implements ProcessorAuthority {
     return row !== undefined
   }
 
+  async managedGroups(userId: string): Promise<string[]> {
+    const rows = await this.db
+      .select({ groupId: groupManagers.groupId })
+      .from(groupManagers)
+      .where(eq(groupManagers.userId, userId))
+    return rows.map((r) => r.groupId)
+  }
+
   processorEmails(): Promise<string[]> {
     return this.adminEmails(["accounts"])
   }

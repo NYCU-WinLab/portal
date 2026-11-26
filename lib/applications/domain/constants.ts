@@ -96,7 +96,21 @@ export const MAIL_KINDS = [
 ] as const
 export type MailKind = (typeof MAIL_KINDS)[number]
 
+/** Kinds whose text carries a token link; the outbox blanks them after sending. */
+export const LINK_MAIL_KINDS = [
+  "verify",
+  "link",
+  "received",
+  "changes_requested",
+] as const satisfies readonly MailKind[]
+
 export const USERNAME_PATTERN = "^[a-z][a-z0-9._-]{2,31}$"
+/**
+ * The same rule for an input's `pattern` attribute. Browsers compile it with
+ * the `v` flag, which rejects an unescaped `-` in a class (and ignores the
+ * whole pattern), so the hyphen is escaped. The attribute anchors it itself.
+ */
+export const USERNAME_PATTERN_CLIENT = "[a-z][a-z0-9._\\-]{2,31}"
 /**
  * A conservative ASCII addr-spec, checked after trim and lowercase: no quotes,
  * comments, brackets, `,` or `;`, so mailers cannot read another recipient

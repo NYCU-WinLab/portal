@@ -8,6 +8,7 @@ import { onChange } from "@/lib/actions/changes"
 import { db, type Db } from "@/lib/db"
 import { mailOutbox } from "@/lib/db/schema"
 import { mailConfigured, sendMail, type QueuedMail } from "@/lib/mail"
+import { outboxBodyAfterSend } from "@/lib/mail-outbox"
 import { emitErrorLog, traced } from "@/lib/otel"
 
 const MAX_ATTEMPTS = 5
@@ -79,18 +80,27 @@ async function drain() {
         })
         await tx
           .update(mailOutbox)
-          .set({ sentAt: sql`now()`, attempts: mail.attempts + 1 })
+          .set({
+            sentAt: sql`now()`,
+            attempts: mail.attempts + 1,
+            ...outboxBodyAfterSend(mail.redactAfterSend),
+          })
           .where(eq(mailOutbox.id, mail.id))
       } catch (error) {
         emitErrorLog(error, {
           "mail.id": mail.id,
           "mail.attempt": mail.attempts + 1,
         })
+        const attempts = mail.attempts + 1
         await tx
           .update(mailOutbox)
           .set({
-            attempts: mail.attempts + 1,
+            attempts,
             lastError: error instanceof Error ? error.message : String(error),
+            // Given up: nothing will send it, so the secret can go.
+            ...(attempts >= MAX_ATTEMPTS
+              ? outboxBodyAfterSend(mail.redactAfterSend)
+              : {}),
           })
           .where(eq(mailOutbox.id, mail.id))
         // Leave the rest for the next run rather than hammer a failing server.

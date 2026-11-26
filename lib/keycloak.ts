@@ -13,19 +13,36 @@ const issuer = () => process.env.KEYCLOAK_ISSUER!
 const timeout = () => AbortSignal.timeout(5000)
 let cached: { token: string; expires: number } | null = null
 
+/** A network error or timeout reaching Keycloak is an outage, not a bug. */
+async function reach(path: string, request: () => Promise<Response>) {
+  let response: Response
+  try {
+    response = await request()
+  } catch (error) {
+    throw new KeycloakUnavailable(`Keycloak ${path} unreachable`, {
+      cause: error,
+    })
+  }
+  if (response.status >= 500)
+    throw new KeycloakUnavailable(`Keycloak ${path} ${response.status}`)
+  return response
+}
+
 async function adminToken() {
   if (cached && cached.expires > Date.now() + 10_000) return cached.token
-  const response = await fetch(`${issuer()}/protocol/openid-connect/token`, {
-    method: "POST",
-    headers: { "content-type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      grant_type: "client_credentials",
-      client_id: process.env.KEYCLOAK_CLIENT_ID!,
-      client_secret: process.env.KEYCLOAK_CLIENT_SECRET!,
-    }),
-    cache: "no-store",
-    signal: timeout(),
-  })
+  const response = await reach("token", () =>
+    fetch(`${issuer()}/protocol/openid-connect/token`, {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "client_credentials",
+        client_id: process.env.KEYCLOAK_CLIENT_ID!,
+        client_secret: process.env.KEYCLOAK_CLIENT_SECRET!,
+      }),
+      cache: "no-store",
+      signal: timeout(),
+    })
+  )
   if (!response.ok) throw new Error(`Keycloak token ${response.status}`)
   const body = (await response.json()) as {
     access_token: string
@@ -111,11 +128,14 @@ let directory: { members: Map<string, LabMember>; at: number } | null = null
 
 async function adminGet<T>(path: string): Promise<T> {
   const url = `${issuer().replace("/realms/", "/admin/realms/")}${path}`
-  const response = await fetch(url, {
-    headers: { authorization: `Bearer ${await adminToken()}` },
-    cache: "no-store",
-    signal: timeout(),
-  })
+  const token = await adminToken()
+  const response = await reach(path, () =>
+    fetch(url, {
+      headers: { authorization: `Bearer ${token}` },
+      cache: "no-store",
+      signal: timeout(),
+    })
+  )
   if (!response.ok) throw new Error(`Keycloak ${path} ${response.status}`)
   return (await response.json()) as T
 }
@@ -555,9 +575,10 @@ export class KeycloakAdmin implements KeycloakDirectory {
             cache: "no-store",
             signal: AbortSignal.timeout(this.timeoutMs),
           })
-        } catch {
+        } catch (error) {
           throw new KeycloakUnavailable(
-            `Keycloak ${method} ${path} unreachable`
+            `Keycloak ${method} ${path} unreachable`,
+            { cause: error }
           )
         }
         if (response.status >= 500)

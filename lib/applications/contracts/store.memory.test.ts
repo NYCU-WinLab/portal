@@ -14,5 +14,6 @@ applicationStoreContract(async ({ rate }) => {
         to: m.mail.to,
       })),
     changeRequestNotes: async (id) => s.changeRequestNotes(id),
+    forgetAdmin: async (id) => s.forgetAdmin(id),
   }
 })

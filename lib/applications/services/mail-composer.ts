@@ -6,6 +6,15 @@ import type { ComposedMail } from "../ports"
 
 type Urls = { siteUrl: string }
 
+/** YYYY-MM-DD on the Taipei calendar. */
+const taipeiDate = (at: Date) =>
+  new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Taipei",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(at)
+
 /**
  * The token rides in the query string, never the path, so the apply site can
  * keep it out of access logs and spans by dropping the query. The apply site
@@ -58,6 +67,56 @@ export class MailComposer {
         label: "查看申請狀態",
         url: tokenLink(applySite, "status", accessToken),
       },
+    })
+  }
+
+  changesRequested(
+    app: Application,
+    accessToken: string,
+    note: string,
+    dueAt: Date,
+    applySite: string
+  ): ComposedMail {
+    if (!app.email) throw new Error("application has no email")
+    return this.compose(
+      "changes_requested",
+      app.email.value,
+      "你的帳號申請需要修改",
+      {
+        title: "你的帳號申請需要修改",
+        paragraphs: [
+          "審核的人請你修改申請內容：",
+          note,
+          `請在 ${taipeiDate(dueAt)} 前用下面的連結修改並重新送出。`,
+        ],
+        action: {
+          label: "修改申請",
+          url: tokenLink(applySite, "status", accessToken),
+        },
+      }
+    )
+  }
+
+  rejected(app: Application, note: string | null): ComposedMail {
+    if (!app.email) throw new Error("application has no email")
+    return this.compose("rejected", app.email.value, "你的帳號申請結果", {
+      title: "你的帳號申請結果",
+      paragraphs: [
+        "很抱歉，這次的帳號申請沒有通過。",
+        ...(note ? ["審核的人留了這段話：", note] : []),
+      ],
+    })
+  }
+
+  /** Names no applicant: it only says which group is missing. */
+  cohortMissing(to: string, cohort: number, groupPath: string): ComposedMail {
+    return this.compose("cohort_missing", to, `缺少 ${cohort} 學年度的群組`, {
+      title: `缺少 ${cohort} 學年度的群組`,
+      paragraphs: [
+        `有人核准了 ${cohort} 學年度的申請，但 Keycloak 沒有這個群組：${groupPath}`,
+        "請先建立群組，再回到 Portal 重試。",
+      ],
+      action: { label: "前往審核", url: `${this.urls.siteUrl}/applications` },
     })
   }
 

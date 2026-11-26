@@ -1,4 +1,9 @@
-import type { Application, Changed, EventActor } from "./domain/application"
+import type {
+  Application,
+  Changed,
+  EventActor,
+  RecordedActor,
+} from "./domain/application"
 import type {
   AnonymousMailKind,
   ApplicationStatus,
@@ -39,7 +44,7 @@ export type TokenLookup = {
 export type EventRecord = {
   id: number
   kind: EventKind
-  actor: EventActor
+  actor: RecordedActor
   changes: Record<string, unknown> | null
   at: Date
 }
@@ -203,6 +208,13 @@ export interface ReservedNames {
 /** Keycloak answered 5xx or timed out: the service is broken. */
 export class KeycloakUnavailable extends Error {}
 
+/**
+ * Google Groups cannot be asked: no credentials are set up, or Google failed.
+ * Unlike "not manageable" this is nobody's refusal; it is setup or a broken
+ * service, so it is an Error (alerts), not an ApplicationRefusal.
+ */
+export class MailGroupsUnavailable extends Error {}
+
 /** A user is always created disabled. */
 export type NewKeycloakUser = {
   username: string
@@ -254,6 +266,7 @@ export interface MailGroups {
     email: Email,
     as: { actorId: string | null; isManager(groupId: string): Promise<boolean> }
   ): Promise<"ok" | "already" | "protected" | "denied" | "error">
+  /** Throws MailGroupsUnavailable when Google cannot be asked; callers stay fail-closed. */
   isManageable(groupId: string): Promise<boolean>
   addresses(groupIds: readonly string[]): Promise<Map<string, string>>
 }
@@ -263,6 +276,8 @@ export interface ProcessorAuthority {
   /** Admin of the accounts app (admins.app = 'accounts'). */
   isAccountsAdmin(userId: string): Promise<boolean>
   managesGroup(userId: string, groupId: string): Promise<boolean>
+  /** Ids of the groups the user manages per group_managers (admins not counted). */
+  managedGroups(userId: string): Promise<string[]>
   processorEmails(): Promise<string[]>
   portalAdminEmails(): Promise<string[]>
   notifieeEmails(): Promise<string[]>

@@ -94,6 +94,11 @@ export class Cohort {
     return new Cohort(n)
   }
 
+  /** The Keycloak group of the cohort, e.g. `/lab-member/116`. */
+  get groupPath(): string {
+    return `/lab-member/${this.value}`
+  }
+
   /** The cohort of the academic year that starts each September, Taipei time. */
   static defaultFor(at: Date): Cohort {
     const taipei = new Date(at.getTime() + 8 * 3600_000)
