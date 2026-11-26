@@ -7,7 +7,7 @@ import { and, asc, desc, eq, inArray, isNull, ne, sql } from "drizzle-orm"
 import {
   Application,
   type ApplicationSnapshot,
-  type EventActor,
+  type RecordedActor,
   type OpenChangeRequest,
 } from "@/lib/applications/domain/application"
 import {
@@ -294,16 +294,14 @@ export async function loadByToken(
   }
 }
 
-function actorOf(row: {
-  id: number
-  actorKind: string
-  actorId: string | null
-}) {
+function actorOf(row: { actorKind: string; actorId: string | null }) {
+  // A deleted member leaves actor_id null (ON DELETE SET NULL).
   if (row.actorKind === "admin") {
-    if (row.actorId === null) throw new Error(`event ${row.id} has no admin id`)
-    return { kind: "admin", id: row.actorId } as EventActor
+    return row.actorId === null
+      ? { kind: "admin" as const, id: null }
+      : { kind: "admin" as const, id: row.actorId }
   }
-  return { kind: row.actorKind } as EventActor
+  return { kind: row.actorKind } as RecordedActor
 }
 
 /** Events by application id, in id order. */
@@ -382,7 +380,8 @@ export async function loadHistory(
     .where(
       and(
         eq(labApplications.email, email.value),
-        ne(labApplications.id, exceptId)
+        ne(labApplications.id, exceptId),
+        ne(labApplications.status, "unverified")
       )
     )
     .orderBy(asc(labApplications.createdAt), asc(labApplications.id))

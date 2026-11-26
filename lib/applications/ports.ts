@@ -1,4 +1,9 @@
-import type { Application, Changed, EventActor } from "./domain/application"
+import type {
+  Application,
+  Changed,
+  EventActor,
+  RecordedActor,
+} from "./domain/application"
 import type {
   AnonymousMailKind,
   ApplicationStatus,
@@ -39,7 +44,7 @@ export type TokenLookup = {
 export type EventRecord = {
   id: number
   kind: EventKind
-  actor: EventActor
+  actor: RecordedActor
   changes: Record<string, unknown> | null
   at: Date
 }

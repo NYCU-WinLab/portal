@@ -11,6 +11,10 @@ import type { ApplicantProfile, Cohort, Email, Username } from "./values"
 export type EventActor =
   { kind: "applicant" } | { kind: "admin"; id: string } | { kind: "system" }
 export type AdminActor = Extract<EventActor, { kind: "admin" }>
+/** An actor as read back: an admin whose member row was deleted keeps the
+ * event but loses the id (the FK sets it to null). Commands still take a real
+ * `AdminActor`. */
+export type RecordedActor = EventActor | { kind: "admin"; id: null }
 
 export type SystemActor = Extract<EventActor, { kind: "system" }>
 export const APPLICANT: Extract<EventActor, { kind: "applicant" }> =

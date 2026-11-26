@@ -1,10 +1,10 @@
-import type { EventActor } from "./application"
+import type { RecordedActor } from "./application"
 import type { PASSWORD_MAIL_EVENT_KINDS } from "./constants"
 
 export type PasswordMailEvent = {
   id: number
   kind: (typeof PASSWORD_MAIL_EVENT_KINDS)[number]
-  actor: EventActor
+  actor: RecordedActor
   changes: Record<string, unknown> | null
   at: Date
 }
@@ -13,7 +13,7 @@ export type PasswordMailState = {
   lastSentAt: Date | null
   lastRequestedAt: Date | null
   /** Actor of the latest request that no later send has answered. */
-  pendingRequest: EventActor | null
+  pendingRequest: RecordedActor | null
   /** Any expiry event recorded an automatic resend. */
   autoResendUsed: boolean
   /** An expiry was already recorded after the latest send. */

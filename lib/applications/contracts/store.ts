@@ -585,7 +585,7 @@ export function applicationStoreContract(
         await uow.appendEvent(a.id, "password_mail_requested", null, admin, NOW)
       })
       await s.forgetAdmin(s.adminId)
-      const gone = { kind: "admin", id: null }
+      const gone = { kind: "admin" as const, id: null }
       const state = await s.store.reader.passwordMail(a.id)
       expect(state.pendingRequest).toEqual(gone)
       const inTx = await s.store.transaction((uow) => uow.passwordMail(a.id))
