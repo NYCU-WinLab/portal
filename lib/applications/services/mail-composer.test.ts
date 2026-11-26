@@ -6,10 +6,8 @@ import { MailComposer } from "./mail-composer"
 // The footer link reads this; pin it so snapshots do not depend on the env.
 process.env.BETTER_AUTH_URL = "https://portal.example.test"
 
-const urls = {
-  siteUrl: "https://portal.example.test",
-  applySiteUrl: "https://apply.example.test",
-}
+const urls = { siteUrl: "https://portal.example.test" }
+const applySite = "https://apply.example.test"
 const composer = new MailComposer(urls)
 const to = Email.parse("applicant@example.com")
 const token = "tok_ABC-123_abcdefghijklmnopqrstuvwxyz0123456"
@@ -18,27 +16,27 @@ const applyLinks = (mail: { text: string; html: string }) =>
   mail.text.match(/https:\/\/apply\.example\.test\S*/g) ?? []
 
 test("verify", () => {
-  const mail = composer.verify(to, token)
+  const mail = composer.verify(to, token, applySite)
   expect(mail.kind).toBe("verify")
   expect(mail.to).toBe(to.value)
-  expect(applyLinks(mail)).toEqual([`${urls.applySiteUrl}/confirm/${token}`])
-  expect(mail.html).toContain(`${urls.applySiteUrl}/confirm/${token}`)
+  expect(applyLinks(mail)).toEqual([`${applySite}/confirm/${token}`])
+  expect(mail.html).toContain(`${applySite}/confirm/${token}`)
   expect(mail).toMatchSnapshot()
 })
 
 test("link", () => {
-  const mail = composer.link(to, token)
+  const mail = composer.link(to, token, applySite)
   expect(mail.kind).toBe("link")
-  expect(applyLinks(mail)).toEqual([`${urls.applySiteUrl}/status/${token}`])
+  expect(applyLinks(mail)).toEqual([`${applySite}/status/${token}`])
   expect(mail).toMatchSnapshot()
 })
 
 test("received goes to the applicant with the status link", async () => {
   const app = await pending()
-  const mail = composer.received(app, token)
+  const mail = composer.received(app, token, applySite)
   expect(mail.kind).toBe("received")
   expect(mail.to).toBe(app.email!.value)
-  expect(applyLinks(mail)).toEqual([`${urls.applySiteUrl}/status/${token}`])
+  expect(applyLinks(mail)).toEqual([`${applySite}/status/${token}`])
   expect({ ...mail, to: "<email>" }).toMatchSnapshot()
 })
 

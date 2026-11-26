@@ -24,6 +24,7 @@ import {
   type KeycloakDirectory,
   type ProcessorAuthority,
   type ReservedNames,
+  type SettingsStore,
   type TokenGenerator,
   type TokenLookup,
   type UnitOfWork,
@@ -57,6 +58,7 @@ type Deps = {
   store: ApplicationStore
   directory: KeycloakDirectory
   authority: ProcessorAuthority
+  settings: SettingsStore
   reserved: ReservedNames
   mail: MailComposer
   tokens: TokenGenerator
@@ -204,7 +206,11 @@ export class ApplicantService {
       if (saved !== "ok") throw new Error(`confirm could not save: ${saved}`)
       const access = this.d.tokens.generate()
       await uow.putToken(t.next.id, "access", access.hash, now)
-      await uow.queueMail(t.next.id, this.d.mail.received(t.next, access.token))
+      await uow.queueMail(t.next.id, this.d.mail.received(
+          t.next,
+          access.token,
+          await this.applySite()
+        ))
       await this.notifyProcessors(uow, t.next)
       return { ok: true, already: false }
     })
@@ -347,6 +353,13 @@ export class ApplicantService {
     })
   }
 
+  /** Missing setup is an error, not a refusal: no processor has set it yet. */
+  private async applySite(): Promise<string> {
+    const { url } = await this.d.settings.applySite()
+    if (!url) throw new Error("申請網站網址尚未設定")
+    return url
+  }
+
   /** The lookup, if its access link is still valid. */
   private accessible(found: TokenLookup | null, now: Date): TokenLookup {
     if (
@@ -397,7 +410,11 @@ export class ApplicantService {
     }
     const verify = this.d.tokens.generate()
     await uow.putToken(app.id, "verify", verify.hash, now)
-    await uow.queueMail(app.id, this.d.mail.verify(input.email, verify.token))
+    await uow.queueMail(app.id, this.d.mail.verify(
+        input.email,
+        verify.token,
+        await this.applySite()
+      ))
   }
 
   /**
@@ -427,7 +444,11 @@ export class ApplicantService {
     await uow.putToken(app.id, "access", access.hash, now)
     await uow.queueMail(
       app.id,
-      this.d.mail.link(requireEmail(app), access.token)
+      this.d.mail.link(
+        requireEmail(app),
+        access.token,
+        await this.applySite()
+      )
     )
     await uow.appendEvent(app.id, "link_sent", null, APPLICANT, now)
   }

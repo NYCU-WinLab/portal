@@ -19,7 +19,10 @@ import {
   FixedReservedNames,
 } from "@/lib/applications/testing/fakes"
 import { profileInput } from "@/lib/applications/testing/fixtures"
-import { InMemoryApplicationStore } from "@/lib/applications/testing/memory-store"
+import {
+  InMemoryApplicationStore,
+  InMemorySettingsStore,
+} from "@/lib/applications/testing/memory-store"
 import { SequentialTokens } from "@/lib/applications/testing/tokens"
 import { Refusal } from "@/lib/refusal"
 
@@ -32,15 +35,21 @@ const otherService: Actor = { userId: "key-2", via: "api", service: "avatars" }
 async function setup() {
   const store = await InMemoryApplicationStore.create()
   let ids = 0
+  const settings = new InMemorySettingsStore({
+    [member.userId]: { name: "王小明", email: "xmwang@winlab.tw" },
+  })
+  await settings.setApplySite(
+    "https://apply.example.test",
+    member.userId,
+    new Date()
+  )
   const deps: Deps = {
     store,
     directory: new FakeKeycloak(),
     authority: new FakeAuthority({ processorEmails: [] }),
+    settings,
     reserved: new FixedReservedNames([]),
-    mail: new MailComposer({
-      siteUrl: "https://portal.example.test",
-      applySiteUrl: "https://apply.example.test",
-    }),
+    mail: new MailComposer({ siteUrl: "https://portal.example.test" }),
     tokens: new SequentialTokens(),
     retention: new RetentionPolicy(),
     rate: new MailRatePolicy(),
