@@ -70,7 +70,7 @@ async function setupSettings() {
   const deps: Deps = {
     store,
     directory: new FakeKeycloak(),
-    authority: new FakeAuthority({ processorIds: [processor.userId] }),
+    authority: new FakeAuthority({ accountsAdminIds: [processor.userId] }),
     settings,
     reserved: new FixedReservedNames([]),
     mail: new MailComposer({ siteUrl: "https://portal.example.test" }),

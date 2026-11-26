@@ -260,8 +260,8 @@ export interface MailGroups {
 
 export interface ProcessorAuthority {
   isPortalAdmin(userId: string): Promise<boolean>
-  /** Portal admins and accounts admins: those `processorEmails` lists. */
-  isProcessor(userId: string): Promise<boolean>
+  /** Admin of the accounts app (admins.app = 'accounts'). */
+  isAccountsAdmin(userId: string): Promise<boolean>
   managesGroup(userId: string, groupId: string): Promise<boolean>
   processorEmails(): Promise<string[]>
   portalAdminEmails(): Promise<string[]>

@@ -2563,7 +2563,7 @@
   {
     "name": "get_application_settings",
     "title": "查看帳號申請設定",
-    "description": "Returns the account-application settings: applySiteUrl (the apply site's address that application mails link to, or null while unset), and who changed it last and when. Only people who process applications (portal admins and accounts admins) may read it.",
+    "description": "Returns the account-application settings: applySiteUrl (the apply site's address that application mails link to, or null while unset), and who changed it last and when. Only portal admins and accounts admins may read it.",
     "kind": "query",
     "app": "applications",
     "hash": "2aed03d5c75eff4f",
@@ -12703,7 +12703,7 @@
   {
     "name": "set_apply_site_url",
     "title": "設定申請網站網址",
-    "description": "Sets the address of the apply site, which every account-application mail links to. It must be an https address on winlab.tw or one of its subdomains, with no port, path, query or fragment; it is stored as the bare origin, which is returned. Only people who process applications (portal admins and accounts admins) may change it. Setting the same address again changes nothing else.",
+    "description": "Sets the address of the apply site, which every account-application mail links to. It must be an https address on winlab.tw or one of its subdomains, with no port, path, query or fragment; it is stored as the bare origin, which is returned. Only portal admins and accounts admins may change it. Setting the same address again changes nothing else.",
     "kind": "mutation",
     "app": "applications",
     "hash": "dd2b026198c2d305",

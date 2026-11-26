@@ -23,7 +23,7 @@ function setup() {
     settings,
     authority: new FakeAuthority({
       portalAdmins: [PORTAL_ADMIN],
-      processorIds: [ACCOUNTS_ADMIN],
+      accountsAdminIds: [ACCOUNTS_ADMIN],
     }),
     clock,
   })
@@ -41,7 +41,7 @@ describe("SettingsService", () => {
   })
 
   test.each([PORTAL_ADMIN, ACCOUNTS_ADMIN])(
-    "processor %s sets and reads it",
+    "admin %s sets and reads it",
     async (who) => {
       const { service } = setup()
       expect(await service.setApplySite(who, "https://apply.winlab.tw")).toBe(
@@ -61,7 +61,7 @@ describe("SettingsService", () => {
     expect((await settings.applySite()).url).toBe("https://apply.winlab.tw")
   })
 
-  test("a member who is no processor is refused, read or write", async () => {
+  test("a member who is no admin is refused, read or write", async () => {
     const { service, settings } = setup()
     for (const call of [
       () => service.applySite(MEMBER),

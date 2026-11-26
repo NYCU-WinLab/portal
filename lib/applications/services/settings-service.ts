@@ -15,25 +15,27 @@ export type ApplySiteSetting = {
   updatedBy: string | null
 }
 
-/** The account-application settings; only processors may read or change them. */
+/** The account-application settings; only portal admins and accounts admins may read or change them. */
 export class SettingsService {
   constructor(private readonly d: Deps) {}
 
   async applySite(actorUserId: string): Promise<ApplySiteSetting> {
-    await this.requireProcessor(actorUserId)
+    await this.requireAdmin(actorUserId)
     return this.d.settings.applySite()
   }
 
   /** Returns the stored origin. */
   async setApplySite(actorUserId: string, raw: string): Promise<string> {
-    await this.requireProcessor(actorUserId)
+    await this.requireAdmin(actorUserId)
     const url = ApplySiteUrl.parse(raw)
     await this.d.settings.setApplySite(url, actorUserId, this.d.clock.now())
     return url
   }
 
-  private async requireProcessor(userId: string): Promise<void> {
-    if (!(await this.d.authority.isProcessor(userId)))
-      throw new Refusal("只有審核帳號申請的人可以看或改這個設定")
+  private async requireAdmin(userId: string): Promise<void> {
+    const allowed =
+      (await this.d.authority.isPortalAdmin(userId)) ||
+      (await this.d.authority.isAccountsAdmin(userId))
+    if (!allowed) throw new Refusal("只有審核帳號申請的人可以看或改這個設定")
   }
 }
