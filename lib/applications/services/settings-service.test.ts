@@ -117,6 +117,7 @@ describe("SettingsService notifiees and mail groups", () => {
     expect(await service.list(ACCOUNTS_ADMIN)).toEqual({
       notifiees: [],
       mailGroups: [],
+      offerableGroups: [{ groupId: "g1", address: "lab@winlab.tw" }],
       warnings: { noProcessors: true, noNotifiees: true },
     })
     await service.setNotifiee(ACCOUNTS_ADMIN, MEMBER, true)
@@ -131,6 +132,26 @@ describe("SettingsService notifiees and mail groups", () => {
       { groupId: "gone", address: null },
     ])
     expect(view.warnings.noNotifiees).toBe(false)
+  })
+
+  test("list offers only groups the actor manages, not on yet, that the portal may touch", async () => {
+    const { service, settings, authority } = setup()
+    authority.managers = {
+      g1: [ACCOUNTS_ADMIN],
+      g2: [MEMBER],
+      gp: [ACCOUNTS_ADMIN],
+    }
+    expect((await service.list(ACCOUNTS_ADMIN)).offerableGroups).toEqual([
+      { groupId: "g1", address: "lab@winlab.tw" },
+    ])
+    await settings.setMailGroup("g1", true, MEMBER)
+    expect((await service.list(ACCOUNTS_ADMIN)).offerableGroups).toEqual([])
+  })
+
+  test("a portal admin who manages nothing is offered nothing", async () => {
+    const { service, authority } = setup()
+    authority.portalAdmins = [PORTAL_ADMIN, ACCOUNTS_ADMIN]
+    expect((await service.list(ACCOUNTS_ADMIN)).offerableGroups).toEqual([])
   })
 
   test("noProcessors follows the processors' addresses", async () => {

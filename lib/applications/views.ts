@@ -120,5 +120,7 @@ export type ReviewItem = {
 export type SettingsView = {
   notifiees: { userId: string; name: string; email: string }[]
   mailGroups: { groupId: string; address: string | null }[]
+  /** Groups the actor may turn on as defaults: managed by them, not on yet. */
+  offerableGroups: { groupId: string; address: string }[]
   warnings: { noProcessors: boolean; noNotifiees: boolean }
 }

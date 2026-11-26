@@ -93,6 +93,11 @@ export class FakeAuthority implements ProcessorAuthority {
   async managesGroup(userId: string, groupId: string) {
     return (this.managers[groupId] ?? []).includes(userId)
   }
+  async managedGroups(userId: string) {
+    return Object.entries(this.managers)
+      .filter(([, ids]) => ids.includes(userId))
+      .map(([groupId]) => groupId)
+  }
   async processorEmails() {
     return [...this.processors]
   }

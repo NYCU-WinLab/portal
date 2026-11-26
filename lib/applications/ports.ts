@@ -268,6 +268,8 @@ export interface ProcessorAuthority {
   /** Admin of the accounts app (admins.app = 'accounts'). */
   isAccountsAdmin(userId: string): Promise<boolean>
   managesGroup(userId: string, groupId: string): Promise<boolean>
+  /** Ids of the groups the user manages per group_managers (admins not counted). */
+  managedGroups(userId: string): Promise<string[]>
   processorEmails(): Promise<string[]>
   portalAdminEmails(): Promise<string[]>
   notifieeEmails(): Promise<string[]>
