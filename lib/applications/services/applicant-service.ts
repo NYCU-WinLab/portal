@@ -24,6 +24,7 @@ import {
   type KeycloakDirectory,
   type ProcessorAuthority,
   type ReservedNames,
+  type SettingsStore,
   type TokenGenerator,
   type TokenLookup,
   type UnitOfWork,
@@ -57,6 +58,7 @@ type Deps = {
   store: ApplicationStore
   directory: KeycloakDirectory
   authority: ProcessorAuthority
+  settings: SettingsStore
   reserved: ReservedNames
   mail: MailComposer
   tokens: TokenGenerator
@@ -125,6 +127,10 @@ export class ApplicantService {
       profileInput(form.profile),
       this.d.reserved
     )
+    // Before the transaction and before any branch: the outcome must not
+    // depend on the email, and the read must not take a second connection
+    // while the mail-limit lock is held.
+    const site = await this.applySite()
     const hasAccount = await this.d.directory.emailExists(email)
     const now = this.d.clock.now()
     return this.d.store.transaction(async (uow) => {
@@ -145,12 +151,13 @@ export class ApplicantService {
       if (hasAccount) {
         await uow.queueMail(null, this.d.mail.hasAccount(email))
       } else if (active) {
-        await this.mailLink(uow, active, now)
+        await this.mailLink(uow, active, now, site)
       } else {
         await this.writeUnverified(
           uow,
           { email, requestedStatus, profile },
-          now
+          now,
+          site
         )
       }
       return { ok: true } as const
@@ -184,6 +191,7 @@ export class ApplicantService {
   async confirm(token: string): Promise<ConfirmResult> {
     const hash = this.d.tokens.hash(token)
     const now = this.d.clock.now()
+    const site = await this.applySite()
     return this.d.store.transaction(async (uow) => {
       const found = await uow.lockByToken(hash, "verify")
       if (!found || !this.d.retention.verifyValid(found.tokenCreatedAt, now))
@@ -193,18 +201,21 @@ export class ApplicantService {
       const email = requireEmail(t.next)
       const discard = found.application.id
       const other = await uow.lockByEmail(email, ACTIVE_STATUSES)
-      if (other) return this.alreadyApplied(uow, other, discard, now)
+      if (other) return this.alreadyApplied(uow, other, discard, now, site)
       const saved = await uow.save(t)
       if (saved === "active_email_taken") {
         // A concurrent confirm got there first: handled the same way.
         const winner = await uow.lockByEmail(email, ACTIVE_STATUSES)
         if (!winner) throw new Error("active application vanished")
-        return this.alreadyApplied(uow, winner, discard, now)
+        return this.alreadyApplied(uow, winner, discard, now, site)
       }
       if (saved !== "ok") throw new Error(`confirm could not save: ${saved}`)
       const access = this.d.tokens.generate()
       await uow.putToken(t.next.id, "access", access.hash, now)
-      await uow.queueMail(t.next.id, this.d.mail.received(t.next, access.token))
+      await uow.queueMail(
+        t.next.id,
+        this.d.mail.received(t.next, access.token, site)
+      )
       await this.notifyProcessors(uow, t.next)
       return { ok: true, already: false }
     })
@@ -251,13 +262,15 @@ export class ApplicantService {
   async sendLink(rawEmail: string): Promise<OkResult> {
     const email = Email.parse(rawEmail)
     const now = this.d.clock.now()
+    // Before the transaction and any branch, as in submit.
+    const site = await this.applySite()
     await this.d.store.transaction(async (uow) => {
       // Before any row lock: submit takes the same two locks.
       await uow.lockMailLimit()
       // Neither the limit nor whether the email is known is revealed.
       if ((await uow.reserveMail(email, "link", now)) !== "ok") return
       const target = await this.linkTarget(uow, email, now)
-      if (target) await this.mailLink(uow, target, now)
+      if (target) await this.mailLink(uow, target, now, site)
     })
     return { ok: true }
   }
@@ -347,6 +360,16 @@ export class ApplicantService {
     })
   }
 
+  /**
+   * Read once at the start of each method that may mail an apply-site link,
+   * outside any transaction. Missing setup is an error, not a refusal.
+   */
+  private async applySite(): Promise<string> {
+    const { url } = await this.d.settings.applySite()
+    if (!url) throw new Error("申請網站網址尚未設定")
+    return url
+  }
+
   /** The lookup, if its access link is still valid. */
   private accessible(found: TokenLookup | null, now: Date): TokenLookup {
     if (
@@ -378,7 +401,8 @@ export class ApplicantService {
   private async writeUnverified(
     uow: UnitOfWork,
     input: Omit<Parameters<typeof Application.submit>[0], "id">,
-    now: Date
+    now: Date,
+    site: string
   ): Promise<void> {
     const write = async () => {
       const old = await uow.lockByEmail(input.email, ["unverified"])
@@ -397,7 +421,10 @@ export class ApplicantService {
     }
     const verify = this.d.tokens.generate()
     await uow.putToken(app.id, "verify", verify.hash, now)
-    await uow.queueMail(app.id, this.d.mail.verify(input.email, verify.token))
+    await uow.queueMail(
+      app.id,
+      this.d.mail.verify(input.email, verify.token, site)
+    )
   }
 
   /**
@@ -421,13 +448,14 @@ export class ApplicantService {
   private async mailLink(
     uow: UnitOfWork,
     app: Application,
-    now: Date
+    now: Date,
+    site: string
   ): Promise<void> {
     const access = this.d.tokens.generate()
     await uow.putToken(app.id, "access", access.hash, now)
     await uow.queueMail(
       app.id,
-      this.d.mail.link(requireEmail(app), access.token)
+      this.d.mail.link(requireEmail(app), access.token, site)
     )
     await uow.appendEvent(app.id, "link_sent", null, APPLICANT, now)
   }
@@ -437,9 +465,10 @@ export class ApplicantService {
     uow: UnitOfWork,
     other: Application,
     discard: string,
-    now: Date
+    now: Date,
+    site: string
   ) {
-    await this.mailLink(uow, other, now)
+    await this.mailLink(uow, other, now, site)
     await uow.delete(discard)
     // Returned, not thrown: the mail must commit.
     return { ok: false, code: "already_applied" } as const

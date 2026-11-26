@@ -7,7 +7,8 @@ import { serviceApps } from "@/lib/api-apps"
 // userId. Every action it can reach must work without a person behind it.
 // These lists are pinned so that adding an app to serviceApps, or an action
 // to one of those apps, fails here until someone checks the new action and
-// updates the list.
+// updates the list. get_application_settings and set_apply_site_url are
+// member actions that refuse any service key before they run.
 describe("service keys", () => {
   test("reach only the apps checked for them", () => {
     expect([...serviceApps]).toEqual(["invitations", "avatars", "applications"])
@@ -26,6 +27,7 @@ describe("service keys", () => {
     expect(reachable).toEqual(
       [
         "confirm_lab_application",
+        "get_application_settings",
         "get_lab_application_for_confirm",
         "get_lab_application_for_edit",
         "get_lab_application_status",
@@ -34,6 +36,7 @@ describe("service keys", () => {
         "send_invitation",
         "send_lab_application_link",
         "send_lab_application_password_mail",
+        "set_apply_site_url",
         "submit_lab_application",
         "withdraw_lab_application",
       ].sort()

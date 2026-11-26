@@ -51,6 +51,7 @@ import {
   applicationDefaultMailGroups,
   applicationMailLog,
   applicationNotifiees,
+  applicationSettings,
   labApplicationChangeRequests,
   labApplicationEvents,
   labApplicationMailGroups,
@@ -99,7 +100,10 @@ class DrizzleUnitOfWork implements UnitOfWork {
 
   constructor(
     private readonly tx: Tx,
-    private readonly opts: { rate: MailRatePolicy; hashSecret: () => string }
+    private readonly opts: {
+      rate: MailRatePolicy
+      hashSecret: () => string | Buffer
+    }
   ) {}
 
   /** Called once the transaction has committed or rolled back. */
@@ -485,7 +489,7 @@ class DrizzleUnitOfWork implements UnitOfWork {
   async reserveMail(recipient: Email, kind: AnonymousMailKind, now: Date) {
     this.usable()
     const secret = this.opts.hashSecret()
-    if (!secret) throw new Error("APPLICATION_HASH_SECRET is not set")
+    if (secret.length === 0) throw new Error("the mail rate key is empty")
     // One reservation at a time, so concurrent counts cannot both pass.
     await this.lockMailLimit()
     const hash = createHmac("sha256", secret)
@@ -595,7 +599,7 @@ export class DrizzleApplicationStore implements ApplicationStore {
     private readonly opts: {
       rate: MailRatePolicy
       /** Read lazily: only reserveMail needs it. */
-      hashSecret: () => string
+      hashSecret: () => string | Buffer
     }
   ) {
     this.reader = scrubbedMethods(applicationReader(db))
@@ -669,5 +673,27 @@ export class DrizzleSettingsStore implements SettingsStore {
         .delete(applicationDefaultMailGroups)
         .where(eq(applicationDefaultMailGroups.groupId, groupId))
     }
+  }
+
+  async applySite() {
+    const [row] = await this.db
+      .select({
+        url: applicationSettings.applySiteUrl,
+        updatedAt: applicationSettings.updatedAt,
+        updatedBy: applicationSettings.updatedBy,
+      })
+      .from(applicationSettings)
+      .limit(1)
+    return row ?? { url: null, updatedAt: null, updatedBy: null }
+  }
+
+  async setApplySite(url: string, by: string, now: Date) {
+    await this.db
+      .insert(applicationSettings)
+      .values({ id: true, applySiteUrl: url, updatedBy: by, updatedAt: now })
+      .onConflictDoUpdate({
+        target: applicationSettings.id,
+        set: { applySiteUrl: url, updatedBy: by, updatedAt: now },
+      })
   }
 }

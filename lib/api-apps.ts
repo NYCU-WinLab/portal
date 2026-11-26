@@ -38,7 +38,11 @@ export const memberApiAppKeys = apiAppKeys.filter(
 
 // The apps a service key can be allowed into: their actions never act as a
 // person (no profile, no "mine"), so a key that belongs to nobody can run
-// them. Add an app here only when every action in it is like that.
+// them. Add an app here only when every action in it is like that, or
+// refuses a service key itself: applications holds two member actions
+// (get_application_settings, set_apply_site_url) whose guard in
+// lib/actions/applications.ts refuses any actor with a service, and
+// scripts/service-apps.test.ts pins the list.
 export const serviceApps = [
   "invitations",
   "avatars",

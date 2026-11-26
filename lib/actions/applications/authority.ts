@@ -11,8 +11,8 @@ import {
 
 /**
  * Who may act on applications, from the portal's own tables. Processors are
- * the admins of the accounts app plus portal admins (who also assign more
- * statuses); the notifiees are the members who get a copy of each new one.
+ * the admins of the accounts app; portal admins also assign more statuses
+ * but get no new-application notice. The notifiees are the members who get a copy of each new one.
  */
 export class DbProcessorAuthority implements ProcessorAuthority {
   constructor(private readonly db: Db) {}
@@ -22,6 +22,15 @@ export class DbProcessorAuthority implements ProcessorAuthority {
       .select({ userId: admins.userId })
       .from(admins)
       .where(and(eq(admins.userId, userId), eq(admins.app, "portal")))
+      .limit(1)
+    return row !== undefined
+  }
+
+  async isAccountsAdmin(userId: string): Promise<boolean> {
+    const [row] = await this.db
+      .select({ userId: admins.userId })
+      .from(admins)
+      .where(and(eq(admins.userId, userId), eq(admins.app, "accounts")))
       .limit(1)
     return row !== undefined
   }
@@ -41,7 +50,7 @@ export class DbProcessorAuthority implements ProcessorAuthority {
   }
 
   processorEmails(): Promise<string[]> {
-    return this.adminEmails(["accounts", "portal"])
+    return this.adminEmails(["accounts"])
   }
 
   portalAdminEmails(): Promise<string[]> {

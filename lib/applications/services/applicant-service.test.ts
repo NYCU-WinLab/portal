@@ -16,7 +16,10 @@ import {
   profile,
   profileInput,
 } from "../testing/fixtures"
-import { InMemoryApplicationStore } from "../testing/memory-store"
+import {
+  InMemoryApplicationStore,
+  InMemorySettingsStore,
+} from "../testing/memory-store"
 import { SequentialTokens } from "../testing/tokens"
 import { ApplicantService, type SubmitForm } from "./applicant-service"
 import { MailComposer } from "./mail-composer"
@@ -29,7 +32,12 @@ const DAY = 24 * HOUR
 const EMAIL = "applicant@example.com"
 const PROCESSOR = "processor@example.com"
 
+const APPLY_SITE = "https://apply.example.test"
+const SETTER = "00000000-0000-4000-8000-0000000000a1"
+
 type Setup = {
+  /** Leave the apply site's address unset. */
+  noApplySite?: boolean
   wrap?: (store: InMemoryApplicationStore) => ApplicationStore
   authority?: FakeAuthority
 }
@@ -39,25 +47,64 @@ async function setup(opts: Setup = {}) {
   const keycloak = new FakeKeycloak()
   const authority =
     opts.authority ?? new FakeAuthority({ processorEmails: [PROCESSOR] })
+  const settings = new InMemorySettingsStore({
+    [SETTER]: { name: "王小明", email: "xmwang@winlab.tw" },
+  })
+  await settings.setApplySite(APPLY_SITE, SETTER, new Date())
+  // Lets a test take the address away after the application exists.
+  const site = { set: !opts.noApplySite, inTransaction: false }
+  const visible: InMemorySettingsStore = Object.create(settings, {
+    applySite: {
+      value: async () => {
+        // A read inside a transaction would take a second pooled connection
+        // while the mail-limit lock is held.
+        if (site.inTransaction)
+          throw new Error("settings read inside a transaction")
+        return site.set
+          ? settings.applySite()
+          : { url: null, updatedAt: null, updatedBy: null }
+      },
+    },
+  })
+  const tracked: ApplicationStore = {
+    get reader() {
+      return store.reader
+    },
+    transaction: async (work) => {
+      site.inTransaction = true
+      try {
+        return await store.transaction(work)
+      } finally {
+        site.inTransaction = false
+      }
+    },
+  }
   const clock = new FixedClock()
   const retention = new RetentionPolicy()
   let ids = 0
   const service = new ApplicantService({
-    store: opts.wrap ? opts.wrap(store) : store,
+    store: opts.wrap ? opts.wrap(store) : tracked,
     directory: keycloak,
     authority,
+    settings: visible,
     reserved: new FixedReservedNames(["root"]),
-    mail: new MailComposer({
-      siteUrl: "https://portal.example.test",
-      applySiteUrl: "https://apply.example.test",
-    }),
+    mail: new MailComposer({ siteUrl: "https://portal.example.test" }),
     tokens: new SequentialTokens(),
     retention,
     rate: new MailRatePolicy(),
     clock,
     newId: () => `00000000-0000-4000-8000-${String(++ids).padStart(12, "0")}`,
   })
-  return { store, keycloak, authority, clock, retention, service }
+  return {
+    store,
+    keycloak,
+    authority,
+    settings,
+    site,
+    clock,
+    retention,
+    service,
+  }
 }
 type H = Awaited<ReturnType<typeof setup>>
 
@@ -167,6 +214,91 @@ async function requestChanges(h: H, id: string) {
     await uow.save(t)
   })
 }
+
+describe("the apply site's address", () => {
+  test("mail links use the address as set, and follow a change", async () => {
+    const h = await setup()
+    await h.service.submit(form())
+    expect(mails(h)[0].mail.text).toContain(`${APPLY_SITE}/confirm/`)
+    await h.settings.setApplySite(
+      "https://apply2.winlab.tw",
+      SETTER,
+      h.clock.now()
+    )
+    h.clock.advance(HOUR + 1)
+    await h.service.submit(form())
+    expect(mails(h).at(-1)!.mail.text).toContain(
+      "https://apply2.winlab.tw/confirm/"
+    )
+  })
+
+  test("an unset address fails the same for a new and an applied email", async () => {
+    const outcome = async (p: Promise<unknown>) =>
+      p.then(
+        () => "ok",
+        (e: unknown) =>
+          `${(e as Error).constructor.name}:${(e as Error).message}`
+      )
+    const h = await setup()
+    await confirmed(h, "applied@example.com")
+    h.site.set = false
+    h.clock.advance(HOUR + 1)
+    const results = [
+      await outcome(h.service.submit(form("new@example.com"))),
+      await outcome(h.service.submit(form("applied@example.com"))),
+      await outcome(h.service.sendLink("new2@example.com")),
+      await outcome(h.service.sendLink("applied@example.com")),
+    ]
+    expect(new Set(results).size).toBe(1)
+    expect(results[0]).toBe("Error:申請網站網址尚未設定")
+    // An account holder gets no apply link, but fails the same way.
+    await h.keycloak.createUser({
+      username: "someone",
+      email: "acct@example.com",
+      firstName: "A",
+      lastName: "B",
+      attributes: {},
+      groups: [],
+    })
+    expect(await outcome(h.service.submit(form("acct@example.com")))).toBe(
+      results[0]
+    )
+  })
+
+  test("a missing address is a plain error for each mail that needs it", async () => {
+    const plainError = async (p: Promise<unknown>) => {
+      const error = await p.then(
+        () => {
+          throw new Error("expected an error")
+        },
+        (e: unknown) => e
+      )
+      expect(error).toBeInstanceOf(Error)
+      expect(error).not.toBeInstanceOf(ApplicationRefusal)
+      expect((error as Error).message).toBe("申請網站網址尚未設定")
+    }
+
+    // verify
+    const fresh = await setup({ noApplySite: true })
+    await plainError(fresh.service.submit(form()))
+    expect(mails(fresh)).toEqual([])
+
+    // received, on confirm
+    const h = await setup()
+    const verify = await submitted(h)
+    h.site.set = false
+    await plainError(h.service.confirm(verify))
+
+    // link, on a second submit and on sendLink
+    h.site.set = true
+    await h.service.confirm(verify)
+    h.site.set = false
+    h.clock.advance(HOUR + 1)
+    await plainError(h.service.submit(form()))
+    h.clock.advance(HOUR + 1)
+    await plainError(h.service.sendLink(EMAIL))
+  })
+})
 
 describe("submit", () => {
   test("the three cases return the same and send the right mail", async () => {

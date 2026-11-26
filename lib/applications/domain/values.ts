@@ -246,3 +246,39 @@ export function parseLabStatus(raw: string): LabStatus {
     throw invalid("status")
   return raw as LabStatus
 }
+
+const HOST_LABEL = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/
+
+/**
+ * Where the apply site lives: https on the lab's own domain, origin only.
+ * The default port (https://winlab.tw:443) is accepted on purpose: the URL
+ * parser drops it, so the stored origin has no port.
+ */
+export const ApplySiteUrl = {
+  parse(raw: string): string {
+    const field = "apply_site_url"
+    const text = raw.trim()
+    // An empty "?" or "#" leaves url.search and url.hash empty.
+    if (text.includes("?") || text.includes("#")) throw invalid(field)
+    let url: URL
+    try {
+      url = new URL(text)
+    } catch {
+      throw invalid(field)
+    }
+    const host = url.hostname.toLowerCase()
+    if (
+      url.protocol !== "https:" ||
+      url.username !== "" ||
+      url.password !== "" ||
+      url.port !== "" ||
+      (url.pathname !== "/" && url.pathname !== "") ||
+      url.search !== "" ||
+      url.hash !== "" ||
+      !(host === "winlab.tw" || host.endsWith(".winlab.tw")) ||
+      !host.split(".").every((label) => HOST_LABEL.test(label))
+    )
+      throw invalid(field)
+    return url.origin
+  },
+}

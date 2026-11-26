@@ -3,6 +3,7 @@ import { Refusal } from "@/lib/refusal"
 import { ApplicationRefusal, type RefusalCode } from "./refusal"
 import {
   ApplicantProfile,
+  ApplySiteUrl,
   Cohort,
   Email,
   parseRequestedStatus,
@@ -228,4 +229,48 @@ describe("ApplicationRefusal", () => {
     expect(() => parseRequestedStatus("phd")).toThrow(
       refusal("invalid_input", "requested_status")
     ))
+})
+
+describe("ApplySiteUrl", () => {
+  test.each([
+    ["https://apply.winlab.tw", "https://apply.winlab.tw"],
+    ["  https://apply.winlab.tw/ ", "https://apply.winlab.tw"],
+    ["https://Apply.WinLab.TW", "https://apply.winlab.tw"],
+    ["https://winlab.tw", "https://winlab.tw"],
+    ["https://a.b.winlab.tw/", "https://a.b.winlab.tw"],
+    ["https://apply-1.winlab.tw", "https://apply-1.winlab.tw"],
+    ["https://winlab.tw:443", "https://winlab.tw"],
+  ])("accepts %s as %s", (raw, origin) =>
+    expect(ApplySiteUrl.parse(raw)).toBe(origin)
+  )
+  test.each([
+    "",
+    "not a url",
+    "http://apply.winlab.tw",
+    "https://evilwinlab.tw",
+    "https://winlab.tw.evil.com",
+    "https://apply.winlab.tw.evil.com",
+    "https://example.com",
+    "https://user@apply.winlab.tw",
+    "https://user:pw@apply.winlab.tw",
+    "https://apply.winlab.tw:8443",
+    "https://apply.winlab.tw/apply",
+    "https://apply.winlab.tw/?a=1",
+    "https://apply.winlab.tw/#top",
+    "https://apply.winlab.tw?",
+    "https://apply.winlab.tw#",
+    "javascript:alert(1)",
+    "https://.winlab.tw",
+    "https://a..winlab.tw",
+    "https://*.winlab.tw",
+    "https://apply_x.winlab.tw",
+    "https://-a.winlab.tw",
+    "https://a-.winlab.tw",
+    "https://winlab.tw.",
+    `https://${"a".repeat(64)}.winlab.tw`,
+  ])("refuses %p", (raw) =>
+    expect(() => ApplySiteUrl.parse(raw)).toThrow(
+      refusal("invalid_input", "apply_site_url")
+    )
+  )
 })

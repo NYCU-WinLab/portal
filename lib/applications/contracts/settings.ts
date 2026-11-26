@@ -37,5 +37,40 @@ export function settingsStoreContract(make: () => Promise<SettingsSubject>) {
       await s.store.setMailGroup("lab-all", false, s.userId, NOW)
       expect(await s.store.defaultMailGroups()).toEqual([])
     })
+
+    test("the apply site is unset until a processor sets it", async () => {
+      const s = await make()
+      expect(await s.store.applySite()).toEqual({
+        url: null,
+        updatedAt: null,
+        updatedBy: null,
+      })
+    })
+
+    test("setApplySite is read back with who and when", async () => {
+      const s = await make()
+      await s.store.setApplySite("https://apply.winlab.tw", s.userId, NOW)
+      expect(await s.store.applySite()).toEqual({
+        url: "https://apply.winlab.tw",
+        updatedAt: NOW,
+        updatedBy: s.userId,
+      })
+    })
+
+    test("setApplySite twice keeps the latest", async () => {
+      const s = await make()
+      const later = new Date(NOW.getTime() + 60_000)
+      await s.store.setApplySite("https://apply.winlab.tw", s.userId, NOW)
+      await s.store.setApplySite(
+        "https://apply2.winlab.tw",
+        s.otherUserId,
+        later
+      )
+      expect(await s.store.applySite()).toEqual({
+        url: "https://apply2.winlab.tw",
+        updatedAt: later,
+        updatedBy: s.otherUserId,
+      })
+    })
   })
 }

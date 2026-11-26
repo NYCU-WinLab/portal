@@ -851,6 +851,11 @@ export class InMemorySettingsStore implements SettingsStore {
   private readonly users: Record<string, { name: string; email: string }>
   private notified: string[] = []
   private groups: string[] = []
+  private site: {
+    url: string | null
+    updatedAt: Date | null
+    updatedBy: string | null
+  } = { url: null, updatedAt: null, updatedBy: null }
 
   constructor(users: Record<string, { name: string; email: string }>) {
     this.users = structuredClone(users)
@@ -888,5 +893,14 @@ export class InMemorySettingsStore implements SettingsStore {
     const has = this.groups.includes(groupId)
     if (enabled && !has) this.groups.push(groupId)
     if (!enabled && has) this.groups = this.groups.filter((g) => g !== groupId)
+  }
+
+  async applySite() {
+    return { ...this.site }
+  }
+
+  async setApplySite(url: string, by: string, now: Date) {
+    this.requireUser(by)
+    this.site = { url, updatedAt: now, updatedBy: by }
   }
 }
