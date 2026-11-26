@@ -10,6 +10,7 @@ import {
   type StepName,
 } from "./domain/constants"
 import { ApplicationRefusal, FIELD_NAMES } from "./domain/refusal"
+import { KeycloakUnavailable } from "./ports"
 import type { PasswordMailView, ProfileView, ReviewItem } from "./views"
 
 type BadgeVariant =
@@ -109,9 +110,11 @@ export function actorName(
   return names.get(event.actorId) ?? "處理者"
 }
 
-/** A processor's message for an application refusal; null for any other
- * error, which the page reports as it is. */
+/** A processor's message for an application refusal or a Keycloak outage;
+ * null for any other error, which the page reports as it is. */
 export function refusalText(error: unknown): string | null {
+  if (error instanceof KeycloakUnavailable)
+    return "暫時連不到 Keycloak，請稍後再試"
   if (!(error instanceof ApplicationRefusal)) return null
   if (error.code === "cohort_group_missing")
     return `${error.chinese}，已通知 Portal 管理員`
