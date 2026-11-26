@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 
 import { Refusal } from "@/lib/refusal"
 import { ApplicationRefusal } from "../domain/refusal"
+import { MailGroupsUnavailable } from "../ports"
 import { FixedClock } from "../testing/clock"
 import { FakeAuthority, FakeMailGroups } from "../testing/fakes"
 import { NOW } from "../testing/fixtures"
@@ -34,7 +35,7 @@ function setup() {
     mailGroups,
     clock,
   })
-  return { settings, clock, service, authority }
+  return { settings, clock, service, authority, mailGroups }
 }
 
 describe("SettingsService", () => {
@@ -186,6 +187,23 @@ describe("SettingsService notifiees and mail groups", () => {
       expect((error as ApplicationRefusal).code).toBe("mail_group_not_allowed")
     }
     expect(await settings.defaultMailGroups()).toEqual(["g1"])
+  })
+
+  test("enabling a group while Google is unreachable is not 'not allowed'", async () => {
+    const { service, settings, authority, mailGroups } = setup()
+    authority.managers = { g1: [ACCOUNTS_ADMIN] }
+    mailGroups.unreachable = true
+    await expect(
+      service.setMailGroup(ACCOUNTS_ADMIN, "g1", true)
+    ).rejects.toBeInstanceOf(MailGroupsUnavailable)
+    expect(await settings.defaultMailGroups()).toEqual([])
+  })
+
+  test("list omits offerable groups while Google is unreachable", async () => {
+    const { service, authority, mailGroups } = setup()
+    authority.managers = { g1: [ACCOUNTS_ADMIN] }
+    mailGroups.unreachable = true
+    expect((await service.list(ACCOUNTS_ADMIN)).offerableGroups).toEqual([])
   })
 
   test("disabling never checks the group or the manager", async () => {

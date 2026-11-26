@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 
 import { REFUSAL_CODES, ApplicationRefusal } from "./domain/refusal"
-import { KeycloakUnavailable } from "./ports"
+import { KeycloakUnavailable, MailGroupsUnavailable } from "./ports"
 import {
   actorName,
   awaitsPassword,
@@ -56,6 +56,9 @@ describe("refusalText", () => {
   test("a Keycloak outage is put in Chinese, other errors are not", () => {
     expect(refusalText(new KeycloakUnavailable("fetch failed"))).toBe(
       "暫時連不到 Keycloak，請稍後再試"
+    )
+    expect(refusalText(new MailGroupsUnavailable("no credentials"))).toBe(
+      "暫時連不到 Google 群組，請稍後再試"
     )
     expect(refusalText(new Error("boom"))).toBeNull()
   })

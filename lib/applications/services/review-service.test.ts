@@ -12,6 +12,7 @@ import { ApplicationRefusal } from "../domain/refusal"
 import { Email } from "../domain/values"
 import {
   KeycloakUnavailable,
+  MailGroupsUnavailable,
   type ApplicationStore,
   type ReservedNames,
   type UnitOfWork,
@@ -701,6 +702,21 @@ describe("accept", () => {
       app.version,
       assignment({ mailGroups: ["g-all", "g-lab"] })
     )
+  })
+
+  test("Google being unreachable is not a refusal of the group", async () => {
+    const h = await setup()
+    const app = await seed(h)
+    h.mailGroups.unreachable = true
+    await expect(
+      h.service.accept(
+        ACCOUNTS,
+        app.id,
+        app.version,
+        assignment({ mailGroups: ["g-lab"] })
+      )
+    ).rejects.toBeInstanceOf(MailGroupsUnavailable)
+    expect((await item(h, app.id)).status).toBe("pending")
   })
 
   test("a username that Keycloak has or another application claims is refused", async () => {

@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test"
 import type { GroupsApi } from "@/lib/groups/google"
 import { Email } from "@/lib/applications/domain/values"
+import { MailGroupsUnavailable } from "@/lib/applications/ports"
 import { GoogleMailGroups } from "./mail-groups"
 
 type Group = { id: string; email: string; name?: string }
@@ -187,9 +188,29 @@ test("addresses maps ids to addresses and skips the unknown", async () => {
   ])
 })
 
-test("without Google credentials nothing is manageable and add errors", async () => {
+test("without Google credentials isManageable is unavailable and add errors", async () => {
   const groups = new GoogleMailGroups(() => null)
-  expect(await groups.isManageable("g1")).toBe(false)
+  await expect(groups.isManageable("g1")).rejects.toBeInstanceOf(
+    MailGroupsUnavailable
+  )
   expect(await groups.add("g1", email, manager(true))).toBe("error")
   expect((await groups.addresses(["g1"])).size).toBe(0)
+})
+
+test("a Google error during isManageable is unavailable, not false", async () => {
+  const api: GroupsApi = {
+    domain: "winlab.tw",
+    token: async () => "token",
+    fetch: (async () => json({}, 503)) as typeof fetch,
+  }
+  const groups = new GoogleMailGroups(() => api)
+  const quiet = console.error
+  console.error = () => {}
+  try {
+    await expect(groups.isManageable("g1")).rejects.toBeInstanceOf(
+      MailGroupsUnavailable
+    )
+  } finally {
+    console.error = quiet
+  }
 })
