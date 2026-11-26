@@ -29,6 +29,10 @@ export default async function AdminsPage() {
   const myApps = apps
     .filter((entry) => entry.admins.some((a) => a.userId === actor.userId))
     .map((entry) => entry.label)
+  // Accounts admins review account applications; nobody else may.
+  const noAccountsAdmin = !apps.some(
+    (entry) => entry.app === "accounts" && entry.admins.length > 0
+  )
   const adminCount = new Set(
     apps.flatMap((entry) => entry.admins.map((a) => a.userId))
   ).size
@@ -63,6 +67,11 @@ export default async function AdminsPage() {
             <span>共 {adminCount} 位管理員</span>
           </FocusMeta>
         </Focus>
+        {noAccountsAdmin && (
+          <p className="text-destructive">
+            沒有 Accounts 管理員，帳號申請沒有人審核
+          </p>
+        )}
         {apps.map(({ app, label, admins }) => (
           <section key={app} className="flex flex-col gap-2">
             <SectionHeader title={label} />
