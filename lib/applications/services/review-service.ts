@@ -186,8 +186,13 @@ export class ReviewService {
           throw new ApplicationRefusal("invalid_input")
         ;(input as Record<string, string | null>)[key] = value
       }
+      // The reserved names live in Keycloak: ask only when the username moves.
+      const kept = app.profile.fields.username
+      const reserved: ReservedNames = {
+        has: async (name) => name !== kept && (await this.d.reserved.has(name)),
+      }
       const change = {
-        profile: await ApplicantProfile.parse(input, this.d.reserved),
+        profile: await ApplicantProfile.parse(input, reserved),
         requestedStatus:
           patch.requestedStatus === undefined
             ? app.requestedStatus

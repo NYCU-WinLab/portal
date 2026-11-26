@@ -421,7 +421,7 @@ describe("update", () => {
     const h = await setup({ reserved: down })
     const app = await seed(h)
     const r = await h.service.update(ACCOUNTS, app.id, app.version, {
-      profile: { username: "xmwang", lineId: "newline" },
+      profile: { username: app.profile!.fields.username, lineId: "newline" },
     })
     expect(r).toEqual({ ok: true, version: app.version + 1 })
     await expect(
@@ -481,8 +481,8 @@ describe("requestChanges", () => {
     const mail = mails(h)[0]
     expect(mail.mail.to).toBe(app.email!.value)
     expect(mail.mail.text).toContain("學號打錯了")
-    const token = /\/status\/([A-Za-z0-9_-]+)/.exec(mail.mail.text)![1]
-    expect(mail.mail.text).toContain(`${APPLY_SITE}/status/`)
+    const token = /\/status\?token=([A-Za-z0-9_-]+)/.exec(mail.mail.text)![1]
+    expect(mail.mail.text).toContain(`${APPLY_SITE}/status?token=`)
     const status = await h.applicant.getStatus(token)
     expect(status.status).toBe("changes_requested")
   })
