@@ -21,7 +21,8 @@ export type RefusalCode = (typeof REFUSAL_CODES)[number]
 /** The codes an applicant may see; the rest are for processors. */
 export const APPLICANT_CODES: readonly RefusalCode[] = REFUSAL_CODES.slice(0, 6)
 
-const FIELD_NAMES: Record<string, string> = {
+/** Chinese names of input fields, by their snake_case key. */
+export const FIELD_NAMES: Readonly<Record<string, string>> = {
   email: "Email",
   username: "username",
   chinese_name: "中文名字",
