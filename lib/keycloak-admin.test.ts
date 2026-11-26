@@ -198,8 +198,21 @@ test("the module-level reads turn a network error into KeycloakUnavailable", asy
   try {
     const error = await systemAccountUsernames().catch((e: unknown) => e)
     expect(error).toBeInstanceOf(KeycloakUnavailable)
+    expect((error as Error).cause).toBeInstanceOf(TypeError)
   } finally {
     globalThis.fetch = saved
     process.env = env
   }
+})
+
+test("a network error on the admin client keeps its cause", async () => {
+  const h = harness(() => {
+    throw new TypeError("fetch failed")
+  })
+  const error = await h
+    .make()
+    .usernamesTaken([Username.restore("someone")])
+    .catch((e: unknown) => e)
+  expect(error).toBeInstanceOf(KeycloakUnavailable)
+  expect((error as Error).cause).toBeInstanceOf(TypeError)
 })
