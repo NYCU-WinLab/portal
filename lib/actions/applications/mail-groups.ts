@@ -29,7 +29,7 @@ const brief = (error: unknown) => ({
 /**
  * The mail groups a new member is put in, through the Google Directory API
  * the /groups page already uses. The same rules apply: the actor must manage
- * the group (a portal admin always does), and the group as Google reports it
+ * the group (group_managers only: being a portal admin does not count), and the group as Google reports it
  * must be one the portal may touch (lib/groups/scope.ts) and not nested in
  * one it may not (lib/groups/nesting.ts).
  *
