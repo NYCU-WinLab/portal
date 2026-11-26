@@ -23,6 +23,12 @@ const email = z.string().max(254)
 const requestedStatus = z.string().max(32)
 const profile = z.record(z.string().max(64), z.unknown())
 
+/** The settings are a member's: a service key's id is no member. */
+function processorId(actor: Actor): string {
+  if (actor.service) throw new Refusal("服務金鑰不能看或改這個設定")
+  return actor.userId
+}
+
 export const applicationActions = (get: () => Applications) => ({
   submit: defineAction({
     name: "submit_lab_application",
@@ -126,7 +132,7 @@ export const applicationSettingsActions = (get: () => Applications) => ({
     kind: "query",
     input: z.object({}),
     run: async (actor) => {
-      const site = await get().settings.applySite(actor.userId)
+      const site = await get().settings.applySite(processorId(actor))
       return {
         applySiteUrl: site.url,
         updatedAt: site.updatedAt,
@@ -143,7 +149,7 @@ export const applicationSettingsActions = (get: () => Applications) => ({
     idempotent: true,
     input: z.object({ url: z.string().max(2048) }),
     run: async (actor, { url }) =>
-      get().settings.setApplySite(actor.userId, url),
+      get().settings.setApplySite(processorId(actor), url),
   }),
 })
 
