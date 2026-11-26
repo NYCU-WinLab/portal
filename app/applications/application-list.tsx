@@ -321,7 +321,7 @@ function Details({
             const detail = eventDetail(e)
             return (
               <li key={e.id} className="flex gap-4">
-                <span className="w-36 shrink-0 text-muted-foreground tabular-nums">
+                <span className="w-36 shrink-0 whitespace-nowrap text-muted-foreground tabular-nums">
                   {taipeiTime(e.at)}
                 </span>
                 <span className="min-w-0">
