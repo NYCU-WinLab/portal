@@ -112,7 +112,8 @@ describe("SettingsService", () => {
 
 describe("SettingsService notifiees and mail groups", () => {
   test("list shows notifiees, default groups with addresses and warnings", async () => {
-    const { service, settings } = setup()
+    const { service, settings, authority } = setup()
+    authority.managers = { g1: [ACCOUNTS_ADMIN] }
     expect(await service.list(ACCOUNTS_ADMIN)).toEqual({
       notifiees: [],
       mailGroups: [],
