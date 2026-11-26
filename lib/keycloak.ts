@@ -18,8 +18,10 @@ async function reach(path: string, request: () => Promise<Response>) {
   let response: Response
   try {
     response = await request()
-  } catch {
-    throw new KeycloakUnavailable(`Keycloak ${path} unreachable`)
+  } catch (error) {
+    throw new KeycloakUnavailable(`Keycloak ${path} unreachable`, {
+      cause: error,
+    })
   }
   if (response.status >= 500)
     throw new KeycloakUnavailable(`Keycloak ${path} ${response.status}`)
@@ -573,9 +575,10 @@ export class KeycloakAdmin implements KeycloakDirectory {
             cache: "no-store",
             signal: AbortSignal.timeout(this.timeoutMs),
           })
-        } catch {
+        } catch (error) {
           throw new KeycloakUnavailable(
-            `Keycloak ${method} ${path} unreachable`
+            `Keycloak ${method} ${path} unreachable`,
+            { cause: error }
           )
         }
         if (response.status >= 500)
