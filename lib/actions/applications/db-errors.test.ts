@@ -5,6 +5,8 @@ import { withoutParams } from "@/lib/actions/applications/db-errors"
 import { DbReservedNames } from "@/lib/actions/applications/reserved-names"
 import {
   DrizzleApplicationStore,
+  DrizzleSettingsStore,
+  foreignKeyViolation,
   uniqueViolation,
 } from "@/lib/actions/applications/store"
 import { MailRatePolicy } from "@/lib/applications/domain/policies"
@@ -108,5 +110,55 @@ describe("the Drizzle stores throw without params", () => {
     const e = (await names.has("xmwang").catch((x: unknown) => x)) as Error
     expect(e.message).toContain("57014")
     expect(visible(e)).not.toContain(EMAIL)
+  })
+})
+
+describe("foreign keys", () => {
+  test("foreignKeyViolation names the constraint of a 23503 only", () => {
+    expect(
+      foreignKeyViolation(
+        queryError({
+          code: "23503",
+          constraint: "application_notifiees_user_id_users_id_fk",
+        })
+      )
+    ).toBe("application_notifiees_user_id_users_id_fk")
+    expect(
+      foreignKeyViolation(queryError({ code: "23505", constraint: "x" }))
+    ).toBeNull()
+    expect(foreignKeyViolation(new Error("no cause"))).toBeNull()
+  })
+
+  test("a notifiee who is no member is a refusal, not an error", async () => {
+    const settings = new DrizzleSettingsStore(
+      failingDb(
+        queryError({
+          code: "23503",
+          constraint: "application_notifiees_user_id_users_id_fk",
+        })
+      )
+    )
+    const e = await settings
+      .setNotifiee(
+        "00000000-0000-4000-8000-000000000000",
+        true,
+        "00000000-0000-4000-8000-000000000001",
+        new Date()
+      )
+      .catch((x: unknown) => x)
+    expect(e).toBeInstanceOf(ApplicationRefusal)
+    expect((e as ApplicationRefusal).code).toBe("member_not_found")
+    expect((e as ApplicationRefusal).chinese).toBe("找不到這位成員")
+  })
+
+  test("any other failure of the insert stays an error", async () => {
+    const settings = new DrizzleSettingsStore(
+      failingDb(queryError({ code: "57014" }))
+    )
+    const e = await settings
+      .setNotifiee("u", true, "by", new Date())
+      .catch((x: unknown) => x)
+    expect(e).not.toBeInstanceOf(ApplicationRefusal)
+    expect(e).toBeInstanceOf(Error)
   })
 })
