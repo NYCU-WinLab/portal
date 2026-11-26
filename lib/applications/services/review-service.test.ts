@@ -113,7 +113,11 @@ async function setup(opts: Setup = {}) {
     authority: guarded(authority, tx, "authority"),
     settings: guarded(settings, tx, "settings"),
     mailGroups: guarded(mailGroups, tx, "mailGroups"),
-    reserved: opts.reserved ?? new FixedReservedNames(["root"]),
+    reserved: guarded(
+      opts.reserved ?? new FixedReservedNames(["root"]),
+      tx,
+      "reserved"
+    ),
     mail,
     tokens,
     retention,
@@ -430,6 +434,33 @@ describe("update", () => {
         profile: { username: "other" },
       })
     ).rejects.toBeInstanceOf(KeycloakUnavailable)
+  })
+
+  test("a changed username is checked outside the transaction", async () => {
+    const h = await setup()
+    const app = await seed(h)
+    const r = await h.service.update(ACCOUNTS, app.id, app.version, {
+      profile: { username: "fresh" },
+    })
+    expect(r).toEqual({ ok: true, version: app.version + 1 })
+    expect(
+      await code(
+        h.service.update(ACCOUNTS, app.id, app.version + 1, {
+          profile: { username: "root" },
+        })
+      )
+    ).toBe("invalid_input")
+  })
+
+  test("a field name from the prototype is invalid input", async () => {
+    const h = await setup()
+    const app = await seed(h)
+    const bad = await refusal(
+      h.service.update(ACCOUNTS, app.id, app.version, {
+        profile: { constructor: "x" } as never,
+      })
+    )
+    expect(bad.code).toBe("invalid_input")
   })
 
   test("refusals: stale version, wrong state, bad input", async () => {
