@@ -262,7 +262,7 @@ exports[`changesRequested carries the note, the due date and the status link 1`]
 <p style="margin:0 0 16px">審核的人請你修改申請內容：</p>
 <p style="margin:0 0 16px">請補上指導教授的名字</p>
 <p style="margin:0 0 16px">請在 2026-12-04 前用下面的連結修改並重新送出。</p>
-<p style="margin:24px 0 16px"><a class="action" href="https://apply.example.test/status/tok_ABC-123_abcdefghijklmnopqrstuvwxyz0123456" style="display:inline-block;margin:0 8px 8px 0;padding:10px 20px;border:1px solid #0033a0;border-radius:16px;background:#0033a0;color:#fafafa;font-weight:500;text-decoration:none">修改申請</a></p>
+<p style="margin:24px 0 16px"><a class="action" href="https://apply.example.test/status?token=tok_ABC-123_abcdefghijklmnopqrstuvwxyz0123456" style="display:inline-block;margin:0 8px 8px 0;padding:10px 20px;border:1px solid #0033a0;border-radius:16px;background:#0033a0;color:#fafafa;font-weight:500;text-decoration:none">修改申請</a></p>
 <p class="muted rule" style="margin:40px 0 0;padding-top:16px;border-top:1px solid #e5e5e5;color:#737373"><a class="muted" href="https://portal.example.test" style="color:#737373;text-decoration:none">WinLab Portal</a></p>
 </div>
 </div>
@@ -280,7 +280,7 @@ exports[`changesRequested carries the note, the due date and the status link 1`]
 
 請在 2026-12-04 前用下面的連結修改並重新送出。
 
-修改申請：https://apply.example.test/status/tok_ABC-123_abcdefghijklmnopqrstuvwxyz0123456"
+修改申請：https://apply.example.test/status?token=tok_ABC-123_abcdefghijklmnopqrstuvwxyz0123456"
 ,
   "to": "<email>",
 }

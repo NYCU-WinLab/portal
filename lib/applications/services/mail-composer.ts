@@ -91,7 +91,7 @@ export class MailComposer {
         ],
         action: {
           label: "修改申請",
-          url: `${applySite}/status/${accessToken}`,
+          url: tokenLink(applySite, "status", accessToken),
         },
       }
     )
