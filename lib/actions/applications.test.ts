@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 
 import {
   applicationActions,
+  applicationSettingsActions,
   type ApplicantActions,
 } from "@/lib/actions/applications"
 import { build, type Deps } from "@/lib/actions/applications/container"
@@ -57,6 +58,29 @@ async function setup() {
     newId: () => `00000000-0000-4000-8000-${String(++ids).padStart(12, "0")}`,
   }
   return applicationActions(() => build(deps))
+}
+
+const processor: Actor = { userId: "processor-1", via: "mcp" }
+
+async function setupSettings() {
+  const store = await InMemoryApplicationStore.create()
+  const settings = new InMemorySettingsStore({
+    [processor.userId]: { name: "王小明", email: "xmwang@winlab.tw" },
+  })
+  const deps: Deps = {
+    store,
+    directory: new FakeKeycloak(),
+    authority: new FakeAuthority({ processorIds: [processor.userId] }),
+    settings,
+    reserved: new FixedReservedNames([]),
+    mail: new MailComposer({ siteUrl: "https://portal.example.test" }),
+    tokens: new SequentialTokens(),
+    retention: new RetentionPolicy(),
+    rate: new MailRatePolicy(),
+    clock: new FixedClock(),
+    newId: () => crypto.randomUUID(),
+  }
+  return applicationSettingsActions(() => build(deps))
 }
 
 const token = "t".repeat(43)
@@ -142,5 +166,50 @@ describe("applicant actions", () => {
     expect(a.sendLink.quiet).toBe(true)
     expect(a.confirm.idempotent).toBe(true)
     expect(a.withdraw.idempotent).toBe(true)
+  })
+})
+
+describe("settings actions", () => {
+  test("are a query and an idempotent, non-additive mutation", async () => {
+    const a = await setupSettings()
+    expect(a.get.name).toBe("get_application_settings")
+    expect(a.get.kind).toBe("query")
+    expect(a.setApplySiteUrl.name).toBe("set_apply_site_url")
+    expect(a.setApplySiteUrl.kind).toBe("mutation")
+    expect(a.setApplySiteUrl.idempotent).toBe(true)
+    expect(a.setApplySiteUrl.additive).toBeUndefined()
+    expect(
+      a.setApplySiteUrl.input.safeParse({ url: "x".repeat(2049) }).success
+    ).toBe(false)
+  })
+
+  test("a processor sets the address and reads it back", async () => {
+    const a = await setupSettings()
+    expect(await a.get.run(processor, {})).toEqual({
+      applySiteUrl: null,
+      updatedAt: null,
+      updatedBy: null,
+    })
+    expect(
+      await a.setApplySiteUrl.run(processor, {
+        url: "https://apply.winlab.tw/",
+      })
+    ).toBe("https://apply.winlab.tw")
+    expect(await a.get.run(processor, {})).toMatchObject({
+      applySiteUrl: "https://apply.winlab.tw",
+      updatedBy: processor.userId,
+    })
+  })
+
+  test("a member and the apply service key are refused", async () => {
+    const a = await setupSettings()
+    for (const actor of [member, apply]) {
+      for (const call of [
+        () => a.get.run(actor, {}),
+        () => a.setApplySiteUrl.run(actor, { url: "https://apply.winlab.tw" }),
+      ]) {
+        expect(await call().catch((e: unknown) => e)).toBeInstanceOf(Refusal)
+      }
+    }
   })
 })

@@ -1121,6 +1121,48 @@
     ],
     "type": "object"
   },
+  "get_application_settings": {
+    "additionalProperties": false,
+    "properties": {
+      "applySiteUrl": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string"
+          }
+        ]
+      },
+      "updatedAt": {
+        "anyOf": [
+          {
+            "format": "date-time",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "updatedBy": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string"
+          }
+        ]
+      }
+    },
+    "required": [
+      "applySiteUrl",
+      "updatedAt",
+      "updatedBy"
+    ],
+    "type": "object"
+  },
   "get_approve_document": {
     "additionalProperties": false,
     "properties": {
@@ -10306,6 +10348,9 @@
       "ok"
     ],
     "type": "object"
+  },
+  "set_apply_site_url": {
+    "type": "string"
   },
   "set_appointment_schedule": {
     "anyOf": [

@@ -115,6 +115,38 @@ export const applicationActions = (get: () => Applications) => ({
 
 export type ApplicantActions = ReturnType<typeof applicationActions>
 
+// Settings: signed-in members who process applications (portal admins and
+// accounts admins). The service key is no member, so it is refused there.
+export const applicationSettingsActions = (get: () => Applications) => ({
+  get: defineAction({
+    name: "get_application_settings",
+    title: "查看帳號申請設定",
+    description:
+      "Returns the account-application settings: applySiteUrl (the apply site's address that application mails link to, or null while unset), and who changed it last and when. Only people who process applications (portal admins and accounts admins) may read it.",
+    kind: "query",
+    input: z.object({}),
+    run: async (actor) => {
+      const site = await get().settings.applySite(actor.userId)
+      return {
+        applySiteUrl: site.url,
+        updatedAt: site.updatedAt,
+        updatedBy: site.updatedBy,
+      }
+    },
+  }),
+  setApplySiteUrl: defineAction({
+    name: "set_apply_site_url",
+    title: "設定申請網站網址",
+    description:
+      "Sets the address of the apply site, which every account-application mail links to. It must be an https address on winlab.tw or one of its subdomains, with no port, path, query or fragment; it is stored as the bare origin, which is returned. Only people who process applications (portal admins and accounts admins) may change it. Setting the same address again changes nothing else.",
+    kind: "mutation",
+    idempotent: true,
+    input: z.object({ url: z.string().max(2048) }),
+    run: async (actor, { url }) =>
+      get().settings.setApplySite(actor.userId, url),
+  }),
+})
+
 const live = applicationActions(applications)
 export const {
   submit: submitLabApplication,
@@ -127,3 +159,6 @@ export const {
   resubmit: resubmitLabApplication,
   requestPasswordMail: sendLabApplicationPasswordMail,
 } = live
+
+const settingsLive = applicationSettingsActions(applications)
+export const { get: getApplicationSettings, setApplySiteUrl } = settingsLive

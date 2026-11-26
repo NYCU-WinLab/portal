@@ -206,11 +206,10 @@ export class ApplicantService {
       if (saved !== "ok") throw new Error(`confirm could not save: ${saved}`)
       const access = this.d.tokens.generate()
       await uow.putToken(t.next.id, "access", access.hash, now)
-      await uow.queueMail(t.next.id, this.d.mail.received(
-          t.next,
-          access.token,
-          await this.applySite()
-        ))
+      await uow.queueMail(
+        t.next.id,
+        this.d.mail.received(t.next, access.token, await this.applySite())
+      )
       await this.notifyProcessors(uow, t.next)
       return { ok: true, already: false }
     })
@@ -410,11 +409,10 @@ export class ApplicantService {
     }
     const verify = this.d.tokens.generate()
     await uow.putToken(app.id, "verify", verify.hash, now)
-    await uow.queueMail(app.id, this.d.mail.verify(
-        input.email,
-        verify.token,
-        await this.applySite()
-      ))
+    await uow.queueMail(
+      app.id,
+      this.d.mail.verify(input.email, verify.token, await this.applySite())
+    )
   }
 
   /**
@@ -444,11 +442,7 @@ export class ApplicantService {
     await uow.putToken(app.id, "access", access.hash, now)
     await uow.queueMail(
       app.id,
-      this.d.mail.link(
-        requireEmail(app),
-        access.token,
-        await this.applySite()
-      )
+      this.d.mail.link(requireEmail(app), access.token, await this.applySite())
     )
     await uow.appendEvent(app.id, "link_sent", null, APPLICANT, now)
   }

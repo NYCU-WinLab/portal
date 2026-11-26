@@ -72,12 +72,14 @@ import type { ApiApp } from "@/lib/api-apps"
 import { listHomePins, setHomePin } from "@/lib/actions/home"
 import {
   confirmLabApplication,
+  getApplicationSettings,
   getLabApplicationForConfirm,
   getLabApplicationForEdit,
   getLabApplicationStatus,
   resubmitLabApplication,
   sendLabApplicationLink,
   sendLabApplicationPasswordMail,
+  setApplySiteUrl,
   submitLabApplication,
   withdrawLabApplication,
 } from "@/lib/actions/applications"
@@ -527,7 +529,8 @@ export const actionGroups: { app: ApiApp | null; actions: Action[] }[] = [
     actions: [sendInvitation],
   },
   {
-    // The apply site's service key only: every action refuses anyone else.
+    // The first nine are for the apply site's service key only (they refuse
+    // anyone else); the last two are for signed-in processors.
     app: "applications",
     actions: [
       submitLabApplication,
@@ -539,6 +542,8 @@ export const actionGroups: { app: ApiApp | null; actions: Action[] }[] = [
       getLabApplicationForEdit,
       resubmitLabApplication,
       sendLabApplicationPasswordMail,
+      getApplicationSettings,
+      setApplySiteUrl,
     ],
   },
   {

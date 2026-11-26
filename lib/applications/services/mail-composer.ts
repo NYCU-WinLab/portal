@@ -38,7 +38,10 @@ export class MailComposer {
     return this.compose("received", app.email.value, "我們收到你的帳號申請", {
       title: "我們收到你的帳號申請",
       paragraphs: ["審核後會再通知你。你可以隨時用下面的連結查看進度。"],
-      action: { label: "查看申請狀態", url: `${applySite}/status/${accessToken}` },
+      action: {
+        label: "查看申請狀態",
+        url: `${applySite}/status/${accessToken}`,
+      },
     })
   }
 
