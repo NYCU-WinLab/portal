@@ -238,6 +238,8 @@ describe("ApplySiteUrl", () => {
     ["https://Apply.WinLab.TW", "https://apply.winlab.tw"],
     ["https://winlab.tw", "https://winlab.tw"],
     ["https://a.b.winlab.tw/", "https://a.b.winlab.tw"],
+    ["https://apply-1.winlab.tw", "https://apply-1.winlab.tw"],
+    ["https://winlab.tw:443", "https://winlab.tw"],
   ])("accepts %s as %s", (raw, origin) =>
     expect(ApplySiteUrl.parse(raw)).toBe(origin)
   )
@@ -258,6 +260,14 @@ describe("ApplySiteUrl", () => {
     "https://apply.winlab.tw?",
     "https://apply.winlab.tw#",
     "javascript:alert(1)",
+    "https://.winlab.tw",
+    "https://a..winlab.tw",
+    "https://*.winlab.tw",
+    "https://apply_x.winlab.tw",
+    "https://-a.winlab.tw",
+    "https://a-.winlab.tw",
+    "https://winlab.tw.",
+    `https://${"a".repeat(64)}.winlab.tw`,
   ])("refuses %p", (raw) =>
     expect(() => ApplySiteUrl.parse(raw)).toThrow(
       refusal("invalid_input", "apply_site_url")
