@@ -1,4 +1,21 @@
 {
+  "accept_lab_application": {
+    "additionalProperties": false,
+    "properties": {
+      "ok": {
+        "const": true,
+        "type": "boolean"
+      },
+      "version": {
+        "type": "number"
+      }
+    },
+    "required": [
+      "ok",
+      "version"
+    ],
+    "type": "object"
+  },
   "add_bento_order_item": {
     "additionalProperties": false,
     "properties": {
@@ -4675,6 +4692,82 @@
     ],
     "type": "object"
   },
+  "list_application_settings": {
+    "additionalProperties": false,
+    "properties": {
+      "mailGroups": {
+        "items": {
+          "additionalProperties": false,
+          "properties": {
+            "address": {
+              "anyOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            },
+            "groupId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "groupId",
+            "address"
+          ],
+          "type": "object"
+        },
+        "type": "array"
+      },
+      "notifiees": {
+        "items": {
+          "additionalProperties": false,
+          "properties": {
+            "email": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "userId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "userId",
+            "name",
+            "email"
+          ],
+          "type": "object"
+        },
+        "type": "array"
+      },
+      "warnings": {
+        "additionalProperties": false,
+        "properties": {
+          "noNotifiees": {
+            "type": "boolean"
+          },
+          "noProcessors": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "noProcessors",
+          "noNotifiees"
+        ],
+        "type": "object"
+      }
+    },
+    "required": [
+      "notifiees",
+      "mailGroups",
+      "warnings"
+    ],
+    "type": "object"
+  },
   "list_appointment_slots": {
     "additionalProperties": false,
     "properties": {
@@ -6234,6 +6327,595 @@
       "entries"
     ],
     "type": "object"
+  },
+  "list_lab_applications": {
+    "items": {
+      "additionalProperties": false,
+      "properties": {
+        "assignableStatuses": {
+          "items": {
+            "enum": [
+              "assistant",
+              "doctoral",
+              "master",
+              "teacher",
+              "undergrad"
+            ],
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "assignment": {
+          "anyOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "cohort": {
+                  "type": "number"
+                },
+                "mailGroups": {
+                  "items": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "addedAt": {
+                        "anyOf": [
+                          {
+                            "type": "null"
+                          },
+                          {
+                            "type": "string"
+                          }
+                        ]
+                      },
+                      "address": {
+                        "anyOf": [
+                          {
+                            "type": "null"
+                          },
+                          {
+                            "type": "string"
+                          }
+                        ]
+                      },
+                      "groupId": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "groupId",
+                      "address",
+                      "addedAt"
+                    ],
+                    "type": "object"
+                  },
+                  "type": "array"
+                },
+                "status": {
+                  "enum": [
+                    "assistant",
+                    "doctoral",
+                    "master",
+                    "teacher",
+                    "undergrad"
+                  ],
+                  "type": "string"
+                },
+                "username": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "status",
+                "cohort",
+                "username",
+                "mailGroups"
+              ],
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "changeRequest": {
+          "anyOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "dueAt": {
+                  "type": "string"
+                },
+                "expired": {
+                  "type": "boolean"
+                },
+                "note": {
+                  "anyOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "note",
+                "dueAt",
+                "expired"
+              ],
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "closedAt": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "defaults": {
+          "additionalProperties": false,
+          "properties": {
+            "cohort": {
+              "type": "number"
+            },
+            "labStatus": {
+              "enum": [
+                "assistant",
+                "doctoral",
+                "master",
+                "teacher",
+                "undergrad"
+              ],
+              "type": "string"
+            },
+            "mailGroups": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "labStatus",
+            "cohort",
+            "mailGroups"
+          ],
+          "type": "object"
+        },
+        "email": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "events": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "actorId": {
+                "anyOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              },
+              "actorKind": {
+                "enum": [
+                  "admin",
+                  "applicant",
+                  "system"
+                ],
+                "type": "string"
+              },
+              "at": {
+                "type": "string"
+              },
+              "changes": {
+                "anyOf": [
+                  {
+                    "additionalProperties": {},
+                    "properties": {},
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "id": {
+                "type": "number"
+              },
+              "kind": {
+                "enum": [
+                  "accepted",
+                  "changes_requested",
+                  "edited",
+                  "link_sent",
+                  "password_mail_expired",
+                  "password_mail_requested",
+                  "password_mail_sent",
+                  "password_set",
+                  "provision_blocked",
+                  "provision_failed",
+                  "provision_retried",
+                  "provision_step",
+                  "provisioned",
+                  "purged",
+                  "rejected",
+                  "resubmitted",
+                  "submitted",
+                  "verified",
+                  "withdrawn"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "kind",
+              "actorKind",
+              "actorId",
+              "changes",
+              "at"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "history": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "closedAt": {
+                "anyOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              },
+              "createdAt": {
+                "type": "string"
+              },
+              "id": {
+                "type": "string"
+              },
+              "status": {
+                "enum": [
+                  "accepted",
+                  "changes_requested",
+                  "pending",
+                  "provisioning",
+                  "rejected",
+                  "unverified",
+                  "withdrawn"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "status",
+              "createdAt",
+              "closedAt"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "id": {
+          "type": "string"
+        },
+        "passwordMail": {
+          "anyOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "canResend": {
+                  "type": "boolean"
+                },
+                "expiresAt": {
+                  "anyOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "type": "string"
+                    }
+                  ]
+                },
+                "lastSentAt": {
+                  "anyOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "type": "string"
+                    }
+                  ]
+                },
+                "passwordSet": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "lastSentAt",
+                "expiresAt",
+                "passwordSet",
+                "canResend"
+              ],
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "profile": {
+          "anyOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "birthday": {
+                  "type": "string"
+                },
+                "chineseName": {
+                  "type": "string"
+                },
+                "department": {
+                  "type": "string"
+                },
+                "firstName": {
+                  "type": "string"
+                },
+                "lastName": {
+                  "type": "string"
+                },
+                "lineId": {
+                  "type": "string"
+                },
+                "nycuEmail": {
+                  "anyOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "type": "string"
+                    }
+                  ]
+                },
+                "phone": {
+                  "type": "string"
+                },
+                "studentId": {
+                  "anyOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "type": "string"
+                    }
+                  ]
+                },
+                "username": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "username",
+                "chineseName",
+                "firstName",
+                "lastName",
+                "studentId",
+                "birthday",
+                "phone",
+                "nycuEmail",
+                "department",
+                "lineId"
+              ],
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "provisioning": {
+          "anyOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "attempts": {
+                  "type": "number"
+                },
+                "blockedAt": {
+                  "anyOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "type": "string"
+                    }
+                  ]
+                },
+                "error": {
+                  "anyOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "type": "string"
+                    }
+                  ]
+                },
+                "finishedAt": {
+                  "anyOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "type": "string"
+                    }
+                  ]
+                },
+                "nextAt": {
+                  "type": "string"
+                },
+                "releasedAt": {
+                  "anyOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "type": "string"
+                    }
+                  ]
+                },
+                "startedAt": {
+                  "type": "string"
+                },
+                "steps": {
+                  "items": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "completedAt": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "enum": [
+                          "activate_and_mail",
+                          "create_account",
+                          "finish",
+                          "join_keycloak_groups",
+                          "join_mail_groups"
+                        ],
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "completedAt"
+                    ],
+                    "type": "object"
+                  },
+                  "type": "array"
+                }
+              },
+              "required": [
+                "attempts",
+                "nextAt",
+                "error",
+                "blockedAt",
+                "startedAt",
+                "finishedAt",
+                "releasedAt",
+                "steps"
+              ],
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "requestedStatus": {
+          "enum": [
+            "doctoral",
+            "master"
+          ],
+          "type": "string"
+        },
+        "reviewNote": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "status": {
+          "enum": [
+            "accepted",
+            "changes_requested",
+            "pending",
+            "provisioning",
+            "rejected",
+            "unverified",
+            "withdrawn"
+          ],
+          "type": "string"
+        },
+        "submittedAt": {
+          "type": "string"
+        },
+        "usernameTaken": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "verifiedAt": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "version": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "status",
+        "version",
+        "email",
+        "requestedStatus",
+        "profile",
+        "submittedAt",
+        "verifiedAt",
+        "closedAt",
+        "reviewNote",
+        "defaults",
+        "assignableStatuses",
+        "assignment",
+        "usernameTaken",
+        "changeRequest",
+        "provisioning",
+        "passwordMail",
+        "history",
+        "events"
+      ],
+      "type": "object"
+    },
+    "type": "array"
   },
   "list_lab_meeting_stats": {
     "additionalProperties": false,
@@ -9722,6 +10404,19 @@
     ],
     "type": "object"
   },
+  "reject_lab_application": {
+    "additionalProperties": false,
+    "properties": {
+      "ok": {
+        "const": true,
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "ok"
+    ],
+    "type": "object"
+  },
   "remove_bento_order_item": {
     "additionalProperties": false,
     "properties": {
@@ -10058,6 +10753,36 @@
     ],
     "type": "object"
   },
+  "request_lab_application_changes": {
+    "additionalProperties": false,
+    "properties": {
+      "ok": {
+        "const": true,
+        "type": "boolean"
+      },
+      "version": {
+        "type": "number"
+      }
+    },
+    "required": [
+      "ok",
+      "version"
+    ],
+    "type": "object"
+  },
+  "resend_lab_application_password_mail": {
+    "additionalProperties": false,
+    "properties": {
+      "ok": {
+        "const": true,
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "ok"
+    ],
+    "type": "object"
+  },
   "resubmit_lab_application": {
     "additionalProperties": false,
     "properties": {
@@ -10072,6 +10797,19 @@
     "required": [
       "ok",
       "version"
+    ],
+    "type": "object"
+  },
+  "retry_lab_application_provisioning": {
+    "additionalProperties": false,
+    "properties": {
+      "ok": {
+        "const": true,
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "ok"
     ],
     "type": "object"
   },
@@ -10364,6 +11102,12 @@
       "ok"
     ],
     "type": "object"
+  },
+  "set_application_mail_group": {
+    "type": "null"
+  },
+  "set_application_notifiee": {
+    "type": "null"
   },
   "set_apply_site_url": {
     "type": "string"
@@ -10967,6 +11711,23 @@
     },
     "required": [
       "id"
+    ],
+    "type": "object"
+  },
+  "update_lab_application": {
+    "additionalProperties": false,
+    "properties": {
+      "ok": {
+        "const": true,
+        "type": "boolean"
+      },
+      "version": {
+        "type": "number"
+      }
+    },
+    "required": [
+      "ok",
+      "version"
     ],
     "type": "object"
   },

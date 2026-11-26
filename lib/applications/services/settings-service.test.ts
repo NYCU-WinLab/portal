@@ -121,7 +121,7 @@ describe("SettingsService notifiees and mail groups", () => {
     })
     await service.setNotifiee(ACCOUNTS_ADMIN, MEMBER, true)
     await service.setMailGroup(ACCOUNTS_ADMIN, "g1", true)
-    await settings.setMailGroup("gone", true, MEMBER, NOW)
+    await settings.setMailGroup("gone", true, MEMBER)
     const view = await service.list(ACCOUNTS_ADMIN)
     expect(view.notifiees).toEqual([
       { userId: MEMBER, name: "林小美", email: "c@winlab.tw" },
@@ -169,7 +169,7 @@ describe("SettingsService notifiees and mail groups", () => {
 
   test("disabling never checks the group or the manager", async () => {
     const { service, settings } = setup()
-    await settings.setMailGroup("g2", true, MEMBER, NOW)
+    await settings.setMailGroup("g2", true, MEMBER)
     await service.setMailGroup(ACCOUNTS_ADMIN, "g2", false)
     await service.setMailGroup(ACCOUNTS_ADMIN, "g2", false)
     expect(await settings.defaultMailGroups()).toEqual([])

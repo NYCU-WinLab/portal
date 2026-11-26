@@ -71,16 +71,26 @@ import type { Action } from "@/lib/actions/define"
 import type { ApiApp } from "@/lib/api-apps"
 import { listHomePins, setHomePin } from "@/lib/actions/home"
 import {
+  acceptLabApplication,
   confirmLabApplication,
   getApplicationSettings,
   getLabApplicationForConfirm,
   getLabApplicationForEdit,
   getLabApplicationStatus,
+  listApplicationSettings,
+  listLabApplications,
+  rejectLabApplication,
+  requestLabApplicationChanges,
+  resendLabApplicationPasswordMail,
   resubmitLabApplication,
+  retryLabApplicationProvisioning,
   sendLabApplicationLink,
   sendLabApplicationPasswordMail,
+  setApplicationMailGroup,
+  setApplicationNotifiee,
   setApplySiteUrl,
   submitLabApplication,
+  updateLabApplication,
   withdrawLabApplication,
 } from "@/lib/actions/applications"
 import { sendInvitation } from "@/lib/actions/invitations"
@@ -531,7 +541,7 @@ export const actionGroups: { app: ApiApp | null; actions: Action[] }[] = [
   },
   {
     // The first nine are for the apply site's service key only (they refuse
-    // anyone else); the last two are for signed-in processors.
+    // anyone else); the last two are for signed-in portal and accounts admins.
     app: "applications",
     actions: [
       submitLabApplication,
@@ -623,6 +633,18 @@ export const actionGroups: { app: ApiApp | null; actions: Action[] }[] = [
       importSshKeys,
       deleteSshKey,
       setSshServiceKey,
+      // The account-application review and its settings: accounts admins
+      // only, so no API key or service key may reach them.
+      listLabApplications,
+      updateLabApplication,
+      requestLabApplicationChanges,
+      acceptLabApplication,
+      retryLabApplicationProvisioning,
+      rejectLabApplication,
+      resendLabApplicationPasswordMail,
+      listApplicationSettings,
+      setApplicationNotifiee,
+      setApplicationMailGroup,
     ],
   },
   {

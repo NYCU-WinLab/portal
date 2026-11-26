@@ -152,6 +152,156 @@ export const applicationSettingsActions = (get: () => Applications) => ({
   }),
 })
 
+// Review: accounts admins, signed in. The service key is no member, and the
+// actions are in no API app, so a key never reaches them; the guard is a
+// second wall. Permissions are the admin gate here and, for the mail group
+// switch, the service's own check of who manages the group.
+function processorId(actor: Actor): string {
+  if (actor.service) throw new Refusal("服務金鑰不能審核帳號申請")
+  return actor.userId
+}
+
+const applicationId = z.uuid()
+const version = z.number().int().min(1)
+const note = z.string().max(2000)
+const groupId = z.string().min(1).max(128)
+const patch = z.object({
+  requestedStatus: z.string().max(32).optional(),
+  // ProfileInput.parse is the real check, with the same field names.
+  profile: z
+    .record(z.string().max(64), z.string().max(2000).nullable())
+    .optional(),
+})
+
+export const applicationReviewActions = (get: () => Applications) => ({
+  list: defineAction({
+    name: "list_lab_applications",
+    title: "列出帳號申請",
+    description:
+      "Lists account applications for review, newest first, each with its profile, the defaults a processor would accept (member status, cohort, username, mail groups), whether the username is taken (null when Keycloak could not be asked), history, events and provisioning progress. With closed false (the default) it lists open ones and accepted ones not yet released; with closed true it lists finished ones. Only accounts admins may call it.",
+    admin: "accounts",
+    kind: "query",
+    input: z.object({ closed: z.boolean().optional() }),
+    run: async (actor, { closed }) =>
+      get().review.list(processorId(actor), { closed: closed ?? false }),
+  }),
+  update: defineAction({
+    name: "update_lab_application",
+    title: "修改帳號申請資料",
+    description:
+      "Corrects an application's profile fields or requested status while it is pending. Pass the application's current version; a stale version is refused. patch.profile holds only the fields to change (null clears an optional one). Refused when the application cannot be edited in its state, the version is stale or a value is invalid. Sending the same values again changes nothing.",
+    admin: "accounts",
+    kind: "mutation",
+    idempotent: true,
+    input: z.object({ id: applicationId, version, patch }),
+    run: async (actor, { id, version, patch }) =>
+      get().review.update(processorId(actor), id, version, patch),
+  }),
+  requestChanges: defineAction({
+    name: "request_lab_application_changes",
+    title: "請申請人修改",
+    description:
+      "Asks the applicant to correct their application: mails them a fresh link with the note and a 7-day deadline, and moves the application to changes_requested. Pass the current version; a stale version or a blank note is refused, and an application that is not pending is left as it is. Each call that changes the application mails the applicant.",
+    admin: "accounts",
+    kind: "mutation",
+    input: z.object({ id: applicationId, version, note: note.min(1) }),
+    run: async (actor, { id, version, note }) =>
+      get().review.requestChanges(processorId(actor), id, version, note),
+  }),
+  accept: defineAction({
+    name: "accept_lab_application",
+    title: "核准帳號申請",
+    description:
+      "Accepts a pending application and starts creating the account: assigns member status, cohort (academic year, e.g. 116) and username, and the mail groups to join. Pass the current version. Refused when the status is not one the member may assign (teacher, assistant and undergrad need a portal admin), the username or email already exists, the cohort's Keycloak group is missing (portal admins are mailed), or a mail group is not one the member manages. Accepting the same application with the same values again changes nothing.",
+    admin: "accounts",
+    kind: "mutation",
+    idempotent: true,
+    input: z.object({
+      id: applicationId,
+      version,
+      status: z.string().max(32),
+      cohort: z.number().int().min(1).max(9999),
+      username: z.string().min(1).max(64),
+      mailGroups: z.array(groupId).max(50),
+    }),
+    run: async (actor, { id, version, ...input }) =>
+      get().review.accept(processorId(actor), id, version, input),
+  }),
+  retryProvisioning: defineAction({
+    name: "retry_lab_application_provisioning",
+    title: "重試建立帳號",
+    description:
+      "Retries account creation for an accepted application whose provisioning is waiting or blocked, optionally with a different username or cohort. Refused when the application is not being provisioned or the new values are invalid or taken. Retrying again with the same input leaves the same state.",
+    admin: "accounts",
+    kind: "mutation",
+    idempotent: true,
+    input: z.object({
+      id: applicationId,
+      username: z.string().min(1).max(64).optional(),
+      cohort: z.number().int().min(1).max(9999).optional(),
+    }),
+    run: async (actor, { id, ...change }) =>
+      get().review.retryProvisioning(processorId(actor), id, change),
+  }),
+  reject: defineAction({
+    name: "reject_lab_application",
+    title: "退回帳號申請",
+    description:
+      "Rejects an application and mails the applicant, with the note when one is given. An application whose state does not allow rejection is left as it is. Rejecting an already rejected application changes nothing and sends no second mail.",
+    admin: "accounts",
+    kind: "mutation",
+    idempotent: true,
+    input: z.object({ id: applicationId, note: note.optional() }),
+    run: async (actor, { id, note }) =>
+      get().review.reject(processorId(actor), id, note),
+  }),
+  resendPasswordMail: defineAction({
+    name: "resend_lab_application_password_mail",
+    title: "重寄設定密碼信",
+    description:
+      "Mails an accepted applicant a new set-password link. Shares the applicant's own limit of one mail an hour, so a call inside that hour is refused. Refused when the application has no accepted account to set a password for.",
+    admin: "accounts",
+    kind: "mutation",
+    input: z.object({ id: applicationId }),
+    run: async (actor, { id }) =>
+      get().review.resendPasswordMail(processorId(actor), id),
+  }),
+  listSettings: defineAction({
+    name: "list_application_settings",
+    title: "查看申請通知與群組信設定",
+    description:
+      "Returns who is notified of new applications (notifiees), the mail groups every accepted applicant joins by default with their addresses, and warnings when there are no processors (accounts admins) or no notifiees. The apply site's address is read with get_application_settings. Only accounts admins may call it.",
+    admin: "accounts",
+    kind: "query",
+    input: z.object({}),
+    run: async (actor) => get().settings.list(processorId(actor)),
+  }),
+  setNotifiee: defineAction({
+    name: "set_application_notifiee",
+    title: "設定申請通知對象",
+    description:
+      "Adds a member to, or removes one from, those mailed about new applications. Setting the same state again changes nothing. Only accounts admins may call it.",
+    admin: "accounts",
+    kind: "mutation",
+    idempotent: true,
+    input: z.object({ userId: z.uuid(), notify: z.boolean() }),
+    run: async (actor, { userId, notify }) =>
+      get().settings.setNotifiee(processorId(actor), userId, notify),
+  }),
+  setMailGroup: defineAction({
+    name: "set_application_mail_group",
+    title: "設定預設群組信",
+    description:
+      "Turns a mail group on or off as a default for accepted applicants. Turning one on is refused unless the portal may manage that group and the member manages it; turning one off is always allowed. Setting the same state again changes nothing. Only accounts admins may call it.",
+    admin: "accounts",
+    kind: "mutation",
+    idempotent: true,
+    input: z.object({ groupId, enabled: z.boolean() }),
+    run: async (actor, { groupId, enabled }) =>
+      get().settings.setMailGroup(processorId(actor), groupId, enabled),
+  }),
+})
+
 const live = applicationActions(applications)
 export const {
   submit: submitLabApplication,
@@ -167,3 +317,17 @@ export const {
 
 const settingsLive = applicationSettingsActions(applications)
 export const { get: getApplicationSettings, setApplySiteUrl } = settingsLive
+
+const reviewLive = applicationReviewActions(applications)
+export const {
+  list: listLabApplications,
+  update: updateLabApplication,
+  requestChanges: requestLabApplicationChanges,
+  accept: acceptLabApplication,
+  retryProvisioning: retryLabApplicationProvisioning,
+  reject: rejectLabApplication,
+  resendPasswordMail: resendLabApplicationPasswordMail,
+  listSettings: listApplicationSettings,
+  setNotifiee: setApplicationNotifiee,
+  setMailGroup: setApplicationMailGroup,
+} = reviewLive
