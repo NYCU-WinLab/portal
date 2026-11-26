@@ -3,6 +3,7 @@ import {
   boolean,
   check,
   index,
+  integer,
   pgTable,
   text,
   timestamp,
@@ -34,6 +35,12 @@ export const developerApps = pgTable(
       .notNull(),
     enabled: boolean().default(true).notNull(),
     secretHash: text(),
+    // Set once the application is a Keycloak client (same client id): its
+    // registration access token, sealed (lib/developers/seal.ts). Null for
+    // an application still on portal's own OAuth service.
+    keycloakRat: text(),
+    /** Epoch seconds: Keycloak tokens issued earlier are refused. */
+    keycloakNotBefore: integer(),
     createdAt: timestamp({ withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [

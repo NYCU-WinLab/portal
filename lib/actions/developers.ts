@@ -38,12 +38,100 @@ import type {
   OAuthStore,
   TokenPair,
 } from "@/lib/developers/types"
-import { getKeycloakUser, keycloakUserGroups } from "@/lib/keycloak"
+import { randomUUID } from "node:crypto"
 
-// Applications that sign members in with their lab account (/developers):
-// OAuth 2.0 authorization code with S256 PKCE, at the old portal's paths
-// (/developers/authorize, /api/developers/oauth/token, /api/developers/
-// {profile,name,groups}) so registered applications keep working.
+import { TokenRefused, verifiedAccessClaims } from "@/lib/auth/keycloak-token"
+import { open, seal } from "@/lib/developers/seal"
+import {
+  accountConsoleUrl,
+  getKeycloakUser,
+  keycloakUserGroups,
+} from "@/lib/keycloak"
+import {
+  deleteClient,
+  developerApiAudience,
+  registerClient,
+  registrarConfigured,
+  RegistrationLost,
+  RESTRICTED_SCOPES,
+  updateClient,
+  type ClientSpec,
+} from "@/lib/keycloak-registration"
+
+// Applications that sign members in with their lab account (/developers).
+// New ones are Keycloak clients (lib/keycloak-registration.ts): Keycloak
+// signs members in, asks their consent and issues the tokens, and portal's
+// /api/developers/{profile,name,groups} takes those tokens. Applications
+// registered before keep portal's own OAuth service (S256 PKCE at the old
+// portal's paths) until their owner moves them to Keycloak.
+
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0]
+type AppRow = typeof developerApps.$inferSelect
+
+const restrictedOf = (scopes: string[]) =>
+  scopes.filter((s): s is "name" | "groups" => s === "name" || s === "groups")
+
+const specOf = (row: AppRow): ClientSpec => ({
+  clientId: row.id,
+  name: row.name,
+  description: row.description,
+  public: row.clientType === "public",
+  redirectUris: row.redirectUris,
+  restricted: restrictedOf(row.approvedScopes),
+  on: row.enabled,
+})
+
+/** The application row, locked for this transaction. */
+async function lockApp(tx: Tx, id: string) {
+  const [row] = await tx
+    .select()
+    .from(developerApps)
+    .where(eq(developerApps.id, id))
+    .for("update")
+  if (!row) throw new Refusal("找不到應用程式")
+  return row
+}
+
+/**
+ * Writes an application's Keycloak client from its row as changed in this
+ * transaction. Keycloak hands out a new registration token on every update,
+ * so it is stored in the same transaction: a failure here rolls back the
+ * row change too. Applications not in Keycloak are left alone.
+ */
+async function syncClient(
+  tx: Tx,
+  row: AppRow,
+  change: { secret?: string; revoke?: boolean; offline?: boolean } = {}
+) {
+  if (!row.keycloakRat) return
+  const notBefore = change.revoke ? Math.floor(Date.now() / 1000) : undefined
+  let rat: string | undefined
+  try {
+    rat = await updateClient(specOf(row), open(row.keycloakRat), {
+      secret: change.secret,
+      notBefore,
+    })
+  } catch (error) {
+    if (!(error instanceof RegistrationLost)) throw error
+    // Turning an application off must work even then: portal's API checks
+    // enabled and notBefore itself, so the row alone cuts the data off.
+    if (!change.offline) throw lost(row.id)
+    console.error(lost(row.id).message)
+  }
+  await tx
+    .update(developerApps)
+    .set({
+      ...(rat ? { keycloakRat: seal(rat) } : {}),
+      ...(notBefore ? { keycloakNotBefore: notBefore } : {}),
+    })
+    .where(eq(developerApps.id, row.id))
+}
+
+/** Portal no longer holds a working registration token for this client. */
+const lost = (id: string) =>
+  new Error(
+    `developer app ${id}: Keycloak registration token no longer works; an admin must issue a new one`
+  )
 
 const appRow = (row: typeof developerApps.$inferSelect): Application => ({
   id: row.id,
@@ -193,24 +281,60 @@ export async function memberData(userId: string, scope: Scope) {
     .from(account)
     .where(and(eq(account.userId, userId), eq(account.providerId, "keycloak")))
   if (!link) throw new Refusal("Member unavailable")
-  const member = await getKeycloakUser(link.sub)
+  return dataFor(link.sub, scope)
+}
+
+async function dataFor(sub: string, scope: Scope) {
+  const member = await getKeycloakUser(sub)
   if (!member.enabled) throw new Refusal("Member unavailable")
-  if (scope === "profile") return { sub: link.sub, ...profileResponse(member) }
+  if (scope === "profile") return { sub, ...profileResponse(member) }
   if (scope === "name")
     return {
-      sub: link.sub,
+      sub,
       username: member.username,
       name:
         member.attributes?.chinese_name?.[0] ||
         [member.firstName, member.lastName].filter(Boolean).join(" ") ||
         null,
     }
-  const groups = await keycloakUserGroups(link.sub)
+  const groups = await keycloakUserGroups(sub)
   return {
-    sub: link.sub,
+    sub,
     username: member.username,
     groups: memberGroups(groups),
     projects: memberProjects(groups),
+  }
+}
+
+/**
+ * A member's data for a Keycloak access token of a /developers application:
+ * issued for portal's developer API, to an application that is on and is a
+ * Keycloak client, carrying the scope the member consented to, which a portal
+ * admin approved for that application. TokenRefused otherwise.
+ */
+export async function keycloakMemberData(token: string, scope: Scope) {
+  const claims = await verifiedAccessClaims(token, developerApiAudience())
+  const clientId = String(claims.azp ?? "")
+  const [app] = uuid.test(clientId)
+    ? await db
+        .select()
+        .from(developerApps)
+        .where(eq(developerApps.id, clientId))
+    : []
+  if (!app?.enabled || !app.keycloakRat)
+    throw new TokenRefused(401, "token not issued to an active application")
+  // Keycloak's notBefore stops refreshes; a token issued earlier still
+  // verifies here until it expires, so compare it with the last revocation.
+  if ((claims.iat ?? 0) < (app.keycloakNotBefore ?? 0))
+    throw new TokenRefused(401, "token revoked")
+  const granted = String(claims.scope ?? "").split(" ")
+  const needed =
+    scope === "profile" ? "portal-profile" : RESTRICTED_SCOPES[scope]
+  if (!granted.includes(needed) || !app.approvedScopes.includes(scope))
+    throw new TokenRefused(403, "insufficient_scope")
+  return {
+    data: await dataFor(claims.sub, scope),
+    redirectUris: app.redirectUris,
   }
 }
 
@@ -315,6 +439,7 @@ const appFields = {
   enabled: developerApps.enabled,
   ownerId: developerApps.ownerId,
   createdAt: developerApps.createdAt,
+  keycloak: sql<boolean>`${developerApps.keycloakRat} is not null`,
 }
 
 /** An application the member owns, or any for a portal admin. */
@@ -368,7 +493,12 @@ export const getDeveloperApp = defineAction({
           gt(developerGrants.expiresAt, sql`now()`)
         )
       )
-    return { app, requests, activeGrants: grants.n }
+    return {
+      app,
+      requests,
+      activeGrants: grants.n,
+      movable: !app.keycloak && registrarConfigured(),
+    }
   },
 })
 
@@ -387,20 +517,32 @@ export const registerDeveloperApp = defineAction({
     if (owned.n >= 20) throw new Refusal("每位成員最多可註冊 20 個應用程式")
     const secret =
       input.client_type === "confidential" ? randomSecret() : undefined
-    const [created] = await db
-      .insert(developerApps)
-      .values({
-        ownerId: actor.userId,
-        name: input.name,
-        description: input.description,
-        contactEmail: input.contact_email,
-        privacyUrl: input.privacy_url,
-        clientType: input.client_type,
-        redirectUris: input.redirect_uris,
-        secretHash: secret ? hashSecret(secret) : null,
-      })
-      .returning({ id: developerApps.id })
-    return { id: created.id, secret: secret ?? null }
+    // The Keycloak client is made inside the transaction: if Keycloak
+    // refuses, no application is left behind in portal.
+    return db.transaction(async (tx) => {
+      const [created] = await tx
+        .insert(developerApps)
+        .values({
+          id: randomUUID(),
+          ownerId: actor.userId,
+          name: input.name,
+          description: input.description,
+          contactEmail: input.contact_email,
+          privacyUrl: input.privacy_url,
+          clientType: input.client_type,
+          redirectUris: input.redirect_uris,
+          secretHash: secret ? hashSecret(secret) : null,
+        })
+        .returning()
+      if (registrarConfigured()) {
+        const rat = await registerClient(specOf(created), secret)
+        await tx
+          .update(developerApps)
+          .set({ keycloakRat: seal(rat) })
+          .where(eq(developerApps.id, created.id))
+      }
+      return { id: created.id, secret: secret ?? null }
+    })
   },
 })
 
@@ -412,21 +554,27 @@ export const updateDeveloperApp = defineAction({
   kind: "mutation",
   input: applicationInput.omit({ client_type: true }).extend({ id: z.uuid() }),
   run: async (actor, { id, ...input }) => {
-    const app = await manageable(actor, id)
-    await db
-      .update(developerApps)
-      .set({
-        name: input.name,
-        description: input.description,
-        contactEmail: input.contact_email,
-        privacyUrl: input.privacy_url,
-        redirectUris: input.redirect_uris,
-      })
-      .where(eq(developerApps.id, id))
-    if (
-      JSON.stringify(app.redirectUris) !== JSON.stringify(input.redirect_uris)
-    )
-      await invalidateGrants(id)
+    await manageable(actor, id)
+    const moved = await db.transaction(async (tx) => {
+      const before = await lockApp(tx, id)
+      const [row] = await tx
+        .update(developerApps)
+        .set({
+          name: input.name,
+          description: input.description,
+          contactEmail: input.contact_email,
+          privacyUrl: input.privacy_url,
+          redirectUris: input.redirect_uris,
+        })
+        .where(eq(developerApps.id, id))
+        .returning()
+      const moved =
+        JSON.stringify(before.redirectUris) !==
+        JSON.stringify(input.redirect_uris)
+      await syncClient(tx, row, { revoke: moved })
+      return moved
+    })
+    if (moved) await invalidateGrants(id)
     return { id }
   },
 })
@@ -445,10 +593,15 @@ export const rotateDeveloperSecret = defineAction({
     if (app.clientType !== "confidential")
       throw new Refusal("Public client 不使用 secret")
     const secret = randomSecret()
-    await db
-      .update(developerApps)
-      .set({ secretHash: hashSecret(secret) })
-      .where(eq(developerApps.id, id))
+    await db.transaction(async (tx) => {
+      await lockApp(tx, id)
+      const [row] = await tx
+        .update(developerApps)
+        .set({ secretHash: hashSecret(secret) })
+        .where(eq(developerApps.id, id))
+        .returning()
+      await syncClient(tx, row, { secret, revoke: true })
+    })
     await invalidateGrants(id)
     return { secret }
   },
@@ -464,10 +617,16 @@ export const setDeveloperAppEnabled = defineAction({
   run: async (actor, { id, enabled }) => {
     await manageable(actor, id)
     if (enabled) await requireAdmin(actor, "portal")
-    await db
-      .update(developerApps)
-      .set({ enabled })
-      .where(eq(developerApps.id, id))
+    await db.transaction(async (tx) => {
+      await lockApp(tx, id)
+      const [row] = await tx
+        .update(developerApps)
+        .set({ enabled })
+        .where(eq(developerApps.id, id))
+        .returning()
+      // Off closes sign-in at Keycloak and ends the tokens already issued.
+      await syncClient(tx, row, { revoke: true, offline: !enabled })
+    })
     await invalidateGrants(id)
     return { id, enabled }
   },
@@ -483,9 +642,50 @@ export const deleteDeveloperApp = defineAction({
   input: z.object({ id: z.uuid() }),
   run: async (actor, { id }) => {
     await manageable(actor, id)
-    // Scope requests, grants, codes and tokens cascade from the application.
-    await db.delete(developerApps).where(eq(developerApps.id, id))
+    await db.transaction(async (tx) => {
+      const row = await lockApp(tx, id)
+      if (row.keycloakRat) {
+        try {
+          await deleteClient(row.id, open(row.keycloakRat))
+        } catch (error) {
+          // Without the row the client reads nothing from portal; an admin
+          // removes the leftover Keycloak client.
+          if (!(error instanceof RegistrationLost)) throw error
+          console.error(lost(row.id).message)
+        }
+      }
+      // Scope requests, grants, codes and tokens cascade from the application.
+      await tx.delete(developerApps).where(eq(developerApps.id, id))
+    })
     return { id }
+  },
+})
+
+export const moveDeveloperAppToKeycloak = defineAction({
+  name: "move_developer_app_to_keycloak",
+  title: "改用 Keycloak",
+  description:
+    "Makes an application registered before Keycloak sign-in a Keycloak client with the same client id (its owner or a portal admin). A confidential application gets a new secret for Keycloak, returned once; its old secret keeps working on portal's old OAuth paths until they close.",
+  kind: "mutation",
+  mcpExcludedBecause:
+    "the new secret is shown once and belongs in the owner's server, not an agent's context",
+  input: z.object({ id: z.uuid() }),
+  run: async (actor, { id }) => {
+    await manageable(actor, id)
+    if (!registrarConfigured())
+      throw new Error("Keycloak registrar is not set up")
+    return db.transaction(async (tx) => {
+      const row = await lockApp(tx, id)
+      if (row.keycloakRat) throw new Refusal("這個應用程式已經改用 Keycloak")
+      const secret =
+        row.clientType === "confidential" ? randomSecret() : undefined
+      const rat = await registerClient(specOf(row), secret)
+      await tx
+        .update(developerApps)
+        .set({ keycloakRat: seal(rat) })
+        .where(eq(developerApps.id, id))
+      return { id, secret: secret ?? null }
+    })
   },
 })
 
@@ -583,7 +783,8 @@ export const reviewDeveloperScopes = defineAction({
         .for("update")
       if (request?.status !== "pending") throw new Refusal("這筆申請不是待審")
       if (input.approve) {
-        await tx
+        await lockApp(tx, request.appId)
+        const [app] = await tx
           .update(developerApps)
           .set({
             approvedScopes: sql`array(select distinct unnest(${developerApps.approvedScopes} || array[${sql.join(
@@ -592,6 +793,10 @@ export const reviewDeveloperScopes = defineAction({
             )}]::text[]))`,
           })
           .where(eq(developerApps.id, request.appId))
+          .returning()
+        // A Keycloak client may now ask for the scope; each member still
+        // consents to it at their next sign-in.
+        await syncClient(tx, app)
         await tx
           .delete(developerGrants)
           .where(eq(developerGrants.appId, request.appId))
@@ -619,6 +824,7 @@ export const getDeveloperIntegration = defineAction({
   input: z.object({ id: z.uuid().optional() }),
   run: async (actor, { id }) => {
     const app = id ? await manageable(actor, id) : null
+    if (app ? app.keycloak : registrarConfigured()) return keycloakSteps(app)
     const base = process.env.BETTER_AUTH_URL
     const client = app?.id ?? "<client id>"
     const scopes = (app?.approvedScopes ?? Object.keys(SCOPES)).filter(
@@ -692,14 +898,95 @@ export const getDeveloperIntegration = defineAction({
   },
 })
 
+/** How a Keycloak client application signs members in and reads their data. */
+function keycloakSteps(
+  app: { id: string; clientType: string; approvedScopes: string[] } | null
+) {
+  const base = process.env.BETTER_AUTH_URL
+  const oidc = `${process.env.KEYCLOAK_ISSUER}/protocol/openid-connect`
+  const client = app?.id ?? "<client id>"
+  const scopes = (app?.approvedScopes ?? Object.keys(SCOPES)).filter(
+    (scope): scope is Scope => Object.hasOwn(SCOPES, scope)
+  )
+  const asked = [
+    "openid",
+    ...restrictedOf(scopes).map((s) => RESTRICTED_SCOPES[s]),
+  ]
+  const credentials =
+    app?.clientType === "public"
+      ? `-d client_id=${client}`
+      : `-u ${client}:<secret>`
+  const post = (path: string, ...fields: string[]) =>
+    [`curl ${oidc}/${path}`, credentials, ...fields]
+      .map((line, index) => (index ? `  ${line}` : line))
+      .join(" \\\n")
+  return {
+    steps: [
+      {
+        title: "1. 把成員導到 Keycloak 登入",
+        code: [
+          `${oidc}/auth`,
+          "  ?response_type=code",
+          `  &client_id=${client}`,
+          "  &redirect_uri=<uri>",
+          `  &scope=${asked.join("+")}`,
+          "  &state=<state>",
+          "  &code_challenge=<S256>",
+          "  &code_challenge_method=S256",
+        ].join("\n"),
+      },
+      {
+        title: "2. 用 code 換 token",
+        code: post(
+          "token",
+          "-d grant_type=authorization_code",
+          "-d code=<code>",
+          "-d redirect_uri=<uri>",
+          "-d code_verifier=<verifier>"
+        ),
+      },
+      {
+        title: "3. 讀資料",
+        code: scopes
+          .map(
+            (scope) =>
+              `# ${SCOPES[scope].label}\ncurl ${base}/api/developers/${scope} \\\n  -H "Authorization: Bearer <access token>"`
+          )
+          .join("\n\n"),
+      },
+      {
+        title: "4. 換新的 token",
+        code: post(
+          "token",
+          "-d grant_type=refresh_token",
+          "-d refresh_token=<refresh token>"
+        ),
+      },
+      {
+        title: "5. 登出",
+        code: post("revoke", "-d token=<refresh token>"),
+      },
+    ],
+    rules: [
+      `OpenID Connect 設定：${process.env.KEYCLOAK_ISSUER}/.well-known/openid-configuration`,
+      "必須用 S256 PKCE，並帶 state",
+      "redirect_uri 要與註冊的完全相同",
+      "成員在 Keycloak 同意授權，可在帳號主控台的應用程式頁撤銷",
+      "sub 是成員的 Keycloak 帳號 ID，與舊的 Portal 授權相同",
+      "姓名與群組要先經 Portal 管理員核准",
+    ],
+  }
+}
+
 export const listMyAuthorizations = defineAction({
   name: "list_my_authorizations",
   title: "我的授權",
   description:
-    "The applications the signed-in member currently lets read their data, with the scopes and when each consent expires.",
+    "The applications the signed-in member currently lets read their data through portal's own OAuth service, with the scopes and when each consent expires. Applications that sign in with Keycloak are listed, and revoked, in the Keycloak account console (keycloakConsole).",
   kind: "query",
   input: z.object({}),
   run: async (actor) => ({
+    keycloakConsole: `${accountConsoleUrl()}/applications`,
     grants: await db
       .select({
         id: developerGrants.id,

@@ -22,6 +22,7 @@ import { SCOPES, type Scope } from "@/lib/developers/policy"
 
 import { developersNav, developersPage } from "../nav"
 import { AppActions } from "./app-actions"
+import { MoveToKeycloak } from "./move-to-keycloak"
 
 export const dynamic = "force-dynamic"
 
@@ -42,7 +43,7 @@ export default async function DeveloperAppPage({
     () => null
   )
   if (!found) notFound()
-  const { app, requests, activeGrants } = found
+  const { app, requests, activeGrants, movable } = found
   const [integration, admin] = await Promise.all([
     runAction(getDeveloperIntegration, actor, { id }),
     isAdmin(actor, "portal"),
@@ -78,7 +79,13 @@ export default async function DeveloperAppPage({
         <Focus>
           <FocusLabel>{app.enabled ? "啟用中" : "已停用"}</FocusLabel>
           <FocusTitle>
-            <FocusHighlight>{activeGrants}</FocusHighlight> 人授權
+            {app.keycloak ? (
+              <FocusHighlight>Keycloak 登入</FocusHighlight>
+            ) : (
+              <>
+                <FocusHighlight>{activeGrants}</FocusHighlight> 人授權
+              </>
+            )}
           </FocusTitle>
           {pending && (
             <FocusMeta>
@@ -86,9 +93,19 @@ export default async function DeveloperAppPage({
             </FocusMeta>
           )}
         </Focus>
+        {movable && (
+          <MoveToKeycloak
+            id={app.id}
+            name={app.name}
+            confidential={app.clientType === "confidential"}
+          />
+        )}
         <FieldList>
           <FieldRow label="Client ID">
             <span className="font-mono break-all select-all">{app.id}</span>
+          </FieldRow>
+          <FieldRow label="登入">
+            {app.keycloak ? "Keycloak" : "Portal（舊）"}
           </FieldRow>
           <FieldRow label="類型">
             {app.clientType === "confidential" ? "confidential" : "public"}
@@ -99,7 +116,9 @@ export default async function DeveloperAppPage({
               .map((s) => SCOPES[s as Scope]?.label ?? s)
               .join("、")}
           </FieldRow>
-          <FieldRow label="目前授權">{activeGrants} 人</FieldRow>
+          {!app.keycloak && (
+            <FieldRow label="目前授權">{activeGrants} 人</FieldRow>
+          )}
           <FieldRow label="回呼網址">
             <span className="break-all">{app.redirectUris.join("、")}</span>
           </FieldRow>

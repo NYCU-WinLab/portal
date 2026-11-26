@@ -36,11 +36,8 @@ export class TokenRefused extends Error {
   }
 }
 
-/** The member a Keycloak access token acts for, or TokenRefused. */
-export async function verifyKeycloakToken(
-  token: string,
-  audience: string
-): Promise<McpCaller> {
+/** A Keycloak access token's claims, checked: signature, issuer, audience, typ Bearer and a subject. */
+export async function verifiedAccessClaims(token: string, audience: string) {
   let claims
   try {
     ;({ payload: claims } = await jwtVerify(token, jwks(), {
@@ -63,6 +60,15 @@ export async function verifyKeycloakToken(
   // An ID token can carry the same issuer; only access tokens are Bearer.
   if (claims.typ !== "Bearer" || typeof claims.sub !== "string")
     throw new TokenRefused(401, "not an access token")
+  return claims as typeof claims & { sub: string }
+}
+
+/** The member a Keycloak access token acts for, or TokenRefused. */
+export async function verifyKeycloakToken(
+  token: string,
+  audience: string
+): Promise<McpCaller> {
+  const claims = await verifiedAccessClaims(token, audience)
   if (claims.azp !== mcpClient())
     throw new TokenRefused(401, "token not issued for this MCP server")
   // The member is whoever signed in here with this Keycloak account. A
