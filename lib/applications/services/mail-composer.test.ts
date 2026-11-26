@@ -19,15 +19,15 @@ test("verify", () => {
   const mail = composer.verify(to, token, applySite)
   expect(mail.kind).toBe("verify")
   expect(mail.to).toBe(to.value)
-  expect(applyLinks(mail)).toEqual([`${applySite}/confirm/${token}`])
-  expect(mail.html).toContain(`${applySite}/confirm/${token}`)
+  expect(applyLinks(mail)).toEqual([`${applySite}/confirm?token=${token}`])
+  expect(mail.html).toContain(`${applySite}/confirm?token=${token}`)
   expect(mail).toMatchSnapshot()
 })
 
 test("link", () => {
   const mail = composer.link(to, token, applySite)
   expect(mail.kind).toBe("link")
-  expect(applyLinks(mail)).toEqual([`${applySite}/status/${token}`])
+  expect(applyLinks(mail)).toEqual([`${applySite}/status?token=${token}`])
   expect(mail).toMatchSnapshot()
 })
 
@@ -36,7 +36,7 @@ test("received goes to the applicant with the status link", async () => {
   const mail = composer.received(app, token, applySite)
   expect(mail.kind).toBe("received")
   expect(mail.to).toBe(app.email!.value)
-  expect(applyLinks(mail)).toEqual([`${applySite}/status/${token}`])
+  expect(applyLinks(mail)).toEqual([`${applySite}/status?token=${token}`])
   expect({ ...mail, to: "<email>" }).toMatchSnapshot()
 })
 

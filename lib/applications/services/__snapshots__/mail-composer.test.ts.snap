@@ -27,7 +27,7 @@ exports[`verify 1`] = `
 <h1 style="margin:0 0 24px;font-size:24px;line-height:1.3;font-weight:600">確認你的 Email</h1>
 
 <p style="margin:0 0 16px">請按下按鈕確認這個 Email，確認後才會送出你的帳號申請。</p>
-<p style="margin:24px 0 16px"><a class="action" href="https://apply.example.test/confirm/tok_ABC-123_abcdefghijklmnopqrstuvwxyz0123456" style="display:inline-block;margin:0 8px 8px 0;padding:10px 20px;border:1px solid #0033a0;border-radius:16px;background:#0033a0;color:#fafafa;font-weight:500;text-decoration:none">確認 Email</a></p>
+<p style="margin:24px 0 16px"><a class="action" href="https://apply.example.test/confirm?token=tok_ABC-123_abcdefghijklmnopqrstuvwxyz0123456" style="display:inline-block;margin:0 8px 8px 0;padding:10px 20px;border:1px solid #0033a0;border-radius:16px;background:#0033a0;color:#fafafa;font-weight:500;text-decoration:none">確認 Email</a></p>
 <p class="muted rule" style="margin:40px 0 0;padding-top:16px;border-top:1px solid #e5e5e5;color:#737373"><a class="muted" href="https://portal.example.test" style="color:#737373;text-decoration:none">WinLab Portal</a></p>
 </div>
 </div>
@@ -41,7 +41,7 @@ exports[`verify 1`] = `
 
 請按下按鈕確認這個 Email，確認後才會送出你的帳號申請。
 
-確認 Email：https://apply.example.test/confirm/tok_ABC-123_abcdefghijklmnopqrstuvwxyz0123456"
+確認 Email：https://apply.example.test/confirm?token=tok_ABC-123_abcdefghijklmnopqrstuvwxyz0123456"
 ,
   "to": "applicant@example.com",
 }
@@ -74,7 +74,7 @@ exports[`link 1`] = `
 <h1 style="margin:0 0 24px;font-size:24px;line-height:1.3;font-weight:600">你的申請狀態連結</h1>
 
 <p style="margin:0 0 16px">用這個連結查看申請進度。請不要轉給別人。</p>
-<p style="margin:24px 0 16px"><a class="action" href="https://apply.example.test/status/tok_ABC-123_abcdefghijklmnopqrstuvwxyz0123456" style="display:inline-block;margin:0 8px 8px 0;padding:10px 20px;border:1px solid #0033a0;border-radius:16px;background:#0033a0;color:#fafafa;font-weight:500;text-decoration:none">查看申請狀態</a></p>
+<p style="margin:24px 0 16px"><a class="action" href="https://apply.example.test/status?token=tok_ABC-123_abcdefghijklmnopqrstuvwxyz0123456" style="display:inline-block;margin:0 8px 8px 0;padding:10px 20px;border:1px solid #0033a0;border-radius:16px;background:#0033a0;color:#fafafa;font-weight:500;text-decoration:none">查看申請狀態</a></p>
 <p class="muted rule" style="margin:40px 0 0;padding-top:16px;border-top:1px solid #e5e5e5;color:#737373"><a class="muted" href="https://portal.example.test" style="color:#737373;text-decoration:none">WinLab Portal</a></p>
 </div>
 </div>
@@ -88,7 +88,7 @@ exports[`link 1`] = `
 
 用這個連結查看申請進度。請不要轉給別人。
 
-查看申請狀態：https://apply.example.test/status/tok_ABC-123_abcdefghijklmnopqrstuvwxyz0123456"
+查看申請狀態：https://apply.example.test/status?token=tok_ABC-123_abcdefghijklmnopqrstuvwxyz0123456"
 ,
   "to": "applicant@example.com",
 }
@@ -121,7 +121,7 @@ exports[`received goes to the applicant with the status link 1`] = `
 <h1 style="margin:0 0 24px;font-size:24px;line-height:1.3;font-weight:600">我們收到你的帳號申請</h1>
 
 <p style="margin:0 0 16px">審核後會再通知你。你可以隨時用下面的連結查看進度。</p>
-<p style="margin:24px 0 16px"><a class="action" href="https://apply.example.test/status/tok_ABC-123_abcdefghijklmnopqrstuvwxyz0123456" style="display:inline-block;margin:0 8px 8px 0;padding:10px 20px;border:1px solid #0033a0;border-radius:16px;background:#0033a0;color:#fafafa;font-weight:500;text-decoration:none">查看申請狀態</a></p>
+<p style="margin:24px 0 16px"><a class="action" href="https://apply.example.test/status?token=tok_ABC-123_abcdefghijklmnopqrstuvwxyz0123456" style="display:inline-block;margin:0 8px 8px 0;padding:10px 20px;border:1px solid #0033a0;border-radius:16px;background:#0033a0;color:#fafafa;font-weight:500;text-decoration:none">查看申請狀態</a></p>
 <p class="muted rule" style="margin:40px 0 0;padding-top:16px;border-top:1px solid #e5e5e5;color:#737373"><a class="muted" href="https://portal.example.test" style="color:#737373;text-decoration:none">WinLab Portal</a></p>
 </div>
 </div>
@@ -135,7 +135,7 @@ exports[`received goes to the applicant with the status link 1`] = `
 
 審核後會再通知你。你可以隨時用下面的連結查看進度。
 
-查看申請狀態：https://apply.example.test/status/tok_ABC-123_abcdefghijklmnopqrstuvwxyz0123456"
+查看申請狀態：https://apply.example.test/status?token=tok_ABC-123_abcdefghijklmnopqrstuvwxyz0123456"
 ,
   "to": "<email>",
 }

@@ -121,7 +121,7 @@ const mails = (h: H) => h.store.outbox()
 const kinds = (h: H) => mails(h).map((m) => m.mail.kind)
 
 function tokenIn(text: string, path: "confirm" | "status"): string {
-  const m = new RegExp(`/${path}/([A-Za-z0-9_-]+)`).exec(text)
+  const m = new RegExp(`/${path}\\?token=([A-Za-z0-9_-]+)`).exec(text)
   if (!m) throw new Error(`no ${path} link in mail`)
   return m[1]
 }
@@ -219,7 +219,7 @@ describe("the apply site's address", () => {
   test("mail links use the address as set, and follow a change", async () => {
     const h = await setup()
     await h.service.submit(form())
-    expect(mails(h)[0].mail.text).toContain(`${APPLY_SITE}/confirm/`)
+    expect(mails(h)[0].mail.text).toContain(`${APPLY_SITE}/confirm?token=`)
     await h.settings.setApplySite(
       "https://apply2.winlab.tw",
       SETTER,
@@ -228,7 +228,7 @@ describe("the apply site's address", () => {
     h.clock.advance(HOUR + 1)
     await h.service.submit(form())
     expect(mails(h).at(-1)!.mail.text).toContain(
-      "https://apply2.winlab.tw/confirm/"
+      "https://apply2.winlab.tw/confirm?token="
     )
   })
 
