@@ -10,7 +10,12 @@ import {
 import { ProvisioningRun } from "../domain/provisioning-run"
 import { ApplicationRefusal } from "../domain/refusal"
 import { Email } from "../domain/values"
-import type { ApplicationStore, UnitOfWork } from "../ports"
+import {
+  KeycloakUnavailable,
+  type ApplicationStore,
+  type ReservedNames,
+  type UnitOfWork,
+} from "../ports"
 import { FixedClock } from "../testing/clock"
 import { FakeKeycloak } from "../testing/fake-keycloak"
 import {
@@ -41,6 +46,7 @@ const ADMIN_EMAILS = ["root1@winlab.tw", "root2@winlab.tw"]
 
 type Setup = {
   wrap?: (store: InMemoryApplicationStore) => ApplicationStore
+  reserved?: ReservedNames
 }
 
 /** Any pool or HTTP read made while a transaction is open fails the test. */
@@ -106,7 +112,7 @@ async function setup(opts: Setup = {}) {
     authority: guarded(authority, tx, "authority"),
     settings: guarded(settings, tx, "settings"),
     mailGroups: guarded(mailGroups, tx, "mailGroups"),
-    reserved: new FixedReservedNames(["root"]),
+    reserved: opts.reserved ?? new FixedReservedNames(["root"]),
     mail,
     tokens,
     retention,
@@ -404,6 +410,25 @@ describe("update", () => {
     })
     expect(r).toEqual({ ok: true, version: app.version })
     expect((await item(h, app.id)).events).toEqual([])
+  })
+
+  test("an edit that keeps the username does not ask for reserved names", async () => {
+    const down: ReservedNames = {
+      has: async () => {
+        throw new KeycloakUnavailable("reserved names unavailable")
+      },
+    }
+    const h = await setup({ reserved: down })
+    const app = await seed(h)
+    const r = await h.service.update(ACCOUNTS, app.id, app.version, {
+      profile: { username: "xmwang", lineId: "newline" },
+    })
+    expect(r).toEqual({ ok: true, version: app.version + 1 })
+    await expect(
+      h.service.update(ACCOUNTS, app.id, app.version + 1, {
+        profile: { username: "other" },
+      })
+    ).rejects.toBeInstanceOf(KeycloakUnavailable)
   })
 
   test("refusals: stale version, wrong state, bad input", async () => {
