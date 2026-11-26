@@ -6,8 +6,7 @@ import {
   listApplicationSettings,
 } from "@/lib/actions/applications"
 import { requireAdminPage } from "@/lib/actions/authz"
-import { errorMessage, runAction } from "@/lib/actions/define"
-import { listMailGroups } from "@/lib/actions/groups"
+import { runAction } from "@/lib/actions/define"
 import { taipeiTime } from "@/lib/applications/review-display"
 import { requireActor } from "@/lib/auth/session"
 
@@ -19,28 +18,20 @@ export const dynamic = "force-dynamic"
 export default async function ApplicationSettingsPage() {
   const actor = await requireActor("/applications/settings")
   await requireAdminPage(actor, "accounts")
-  const [settings, site, members, managed] = await Promise.all([
+  const [settings, site, members] = await Promise.all([
     runAction(listApplicationSettings, actor, {}),
     runAction(getApplicationSettings, actor, {}),
     runAction(listMembers, actor, {}),
-    // Google down still shows the groups already on.
-    runAction(listMailGroups, actor, {}).catch((error: unknown) => ({
-      status: "failed" as const,
-      detail: errorMessage(error),
-    })),
   ])
 
-  // Every group already on, then the ones this member may turn on.
-  const on = new Set(settings.mailGroups.map((g) => g.groupId))
+  // Every group already on, then the ones this member manages and may turn on.
   const groups = [
     ...settings.mailGroups.map((g) => ({
       groupId: g.groupId,
       address: g.address ?? g.groupId,
       enabled: true,
     })),
-    ...(managed.status === "ok" ? managed.data : [])
-      .filter((g) => !on.has(g.id))
-      .map((g) => ({ groupId: g.id, address: g.email, enabled: false })),
+    ...settings.offerableGroups.map((g) => ({ ...g, enabled: false })),
   ]
   const editor = site.updatedBy
     ? (members.find((m) => m.id === site.updatedBy)?.name ?? "已刪除的成員")
@@ -54,10 +45,7 @@ export default async function ApplicationSettingsPage() {
           notifiees={settings.notifiees}
           members={members.map(({ id, name, email }) => ({ id, name, email }))}
         />
-        <MailGroupSection
-          groups={groups}
-          failed={managed.status === "failed" ? managed.detail : null}
-        />
+        <MailGroupSection groups={groups} />
         <ApplySiteSection
           url={site.applySiteUrl}
           changed={

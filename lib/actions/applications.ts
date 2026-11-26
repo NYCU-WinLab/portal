@@ -270,7 +270,7 @@ export const applicationReviewActions = (get: () => Applications) => ({
     name: "list_application_settings",
     title: "查看申請通知與群組信設定",
     description:
-      "Returns who is notified of new applications (notifiees), the mail groups every accepted applicant joins by default with their addresses, and warnings when there are no processors (accounts admins) or no notifiees. The apply site's address is read with get_application_settings. Only accounts admins may call it.",
+      "Returns who is notified of new applications (notifiees), the mail groups every accepted applicant joins by default with their addresses, the groups the caller manages (group managers) that could be turned on as defaults (offerableGroups), and warnings when there are no processors (accounts admins) or no notifiees. The apply site's address is read with get_application_settings. Only accounts admins may call it.",
     admin: "accounts",
     kind: "query",
     input: z.object({}),

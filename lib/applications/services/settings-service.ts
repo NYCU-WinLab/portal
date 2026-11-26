@@ -51,6 +51,20 @@ export class SettingsService {
     const addresses = groupIds.length
       ? await this.d.mailGroups.addresses(groupIds)
       : new Map<string, string>()
+    const on = new Set(groupIds)
+    const managed = (await this.d.authority.managedGroups(actorUserId)).filter(
+      (id) => !on.has(id)
+    )
+    const managedAddresses = managed.length
+      ? await this.d.mailGroups.addresses(managed)
+      : new Map<string, string>()
+    const offerableGroups: SettingsView["offerableGroups"] = []
+    for (const groupId of managed) {
+      const address = managedAddresses.get(groupId)
+      // A group Google does not give, or the portal may not touch, is not offered.
+      if (address && (await this.d.mailGroups.isManageable(groupId)))
+        offerableGroups.push({ groupId, address })
+    }
     const processors = await this.d.authority.processorEmails()
     return {
       notifiees,
@@ -58,6 +72,7 @@ export class SettingsService {
         groupId,
         address: addresses.get(groupId) ?? null,
       })),
+      offerableGroups,
       warnings: {
         noProcessors: processors.length === 0,
         noNotifiees: notifiees.length === 0,

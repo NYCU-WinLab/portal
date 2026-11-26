@@ -106,11 +106,8 @@ export function NotifieeSection({
 /** The mail groups every approval starts with. */
 export function MailGroupSection({
   groups,
-  failed,
 }: {
   groups: { groupId: string; address: string; enabled: boolean }[]
-  /** Why the groups this member manages could not be read. */
-  failed: string | null
 }) {
   const [pending, setPending] = React.useState<string | null>(null)
 
@@ -131,7 +128,6 @@ export function MailGroupSection({
   return (
     <section className="flex flex-col gap-2">
       <SectionHeader title="核准時預設加入的群組信" />
-      {failed && <p className="text-destructive">{failed}</p>}
       <ul className="flex stagger-rise flex-col">
         {groups.length === 0 && (
           <li className={`${row} text-muted-foreground`}>

@@ -4744,6 +4744,25 @@
         },
         "type": "array"
       },
+      "offerableGroups": {
+        "items": {
+          "additionalProperties": false,
+          "properties": {
+            "address": {
+              "type": "string"
+            },
+            "groupId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "groupId",
+            "address"
+          ],
+          "type": "object"
+        },
+        "type": "array"
+      },
       "warnings": {
         "additionalProperties": false,
         "properties": {
@@ -4764,6 +4783,7 @@
     "required": [
       "notifiees",
       "mailGroups",
+      "offerableGroups",
       "warnings"
     ],
     "type": "object"
