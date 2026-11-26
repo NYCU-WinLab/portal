@@ -167,6 +167,14 @@ export const serviceGroups: { title: string; apps: Service[] }[] = [
         href: "/api-keys",
       },
       {
+        key: "applications",
+        label: "Applications",
+        name: "帳號申請",
+        emoji: "📝",
+        href: "/applications",
+        admin: "accounts",
+      },
+      {
         key: "developers",
         label: "Developers",
         name: "開發者應用",
