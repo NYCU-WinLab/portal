@@ -246,3 +246,32 @@ export function parseLabStatus(raw: string): LabStatus {
     throw invalid("status")
   return raw as LabStatus
 }
+
+/** Where the apply site lives: https on the lab's own domain, origin only. */
+export const ApplySiteUrl = {
+  parse(raw: string): string {
+    const field = "apply_site_url"
+    const text = raw.trim()
+    // An empty "?" or "#" leaves url.search and url.hash empty.
+    if (text.includes("?") || text.includes("#")) throw invalid(field)
+    let url: URL
+    try {
+      url = new URL(text)
+    } catch {
+      throw invalid(field)
+    }
+    const host = url.hostname.toLowerCase()
+    if (
+      url.protocol !== "https:" ||
+      url.username !== "" ||
+      url.password !== "" ||
+      url.port !== "" ||
+      (url.pathname !== "/" && url.pathname !== "") ||
+      url.search !== "" ||
+      url.hash !== "" ||
+      !(host === "winlab.tw" || host.endsWith(".winlab.tw"))
+    )
+      throw invalid(field)
+    return url.origin
+  },
+}

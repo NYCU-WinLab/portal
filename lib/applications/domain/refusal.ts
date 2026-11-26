@@ -36,6 +36,7 @@ const FIELD_NAMES: Record<string, string> = {
   status: "身分",
   cohort: "學年度",
   note: "說明",
+  apply_site_url: "申請網站網址",
 }
 
 const MESSAGES: Record<Exclude<RefusalCode, "invalid_input">, string> = {
