@@ -56,23 +56,7 @@ export class GoogleMailGroups implements MailGroups {
       try {
         // Manager first: a non-manager never causes a Google call.
         if (!(await as.isManager(groupId))) return "denied"
-        const group = await getGroup(api, groupId)
-        if (
-          !group ||
-          group.id !== groupId ||
-          !isManageableGroup(group.email, api.domain)
-        )
-          return "protected"
-        const ancestor = await findForbiddenAncestor(
-          (address) => listParentGroups(api, address),
-          group.email,
-          api.domain
-        ).catch((error: unknown) => {
-          // Too deep to vouch for counts as nested in a protected group.
-          if (error instanceof NestingTooDeepError) return "too deep"
-          throw error
-        })
-        if (ancestor !== null) return "protected"
+        if ((await this.touchable(api, groupId)) !== "ok") return "protected"
         return (await addMember(api, groupId, email.value)).outcome
       } catch (error) {
         console.error("[mail-groups] add failed", { groupId, ...brief(error) })
@@ -85,16 +69,39 @@ export class GoogleMailGroups implements MailGroups {
     const api = this.apiFor()
     if (!api) return false
     try {
-      const group = await getGroup(api, groupId)
-      return (
-        !!group &&
-        group.id === groupId &&
-        isManageableGroup(group.email, api.domain)
-      )
+      return (await this.touchable(api, groupId)) === "ok"
     } catch (error) {
       console.error("[mail-groups] lookup failed", { groupId, ...brief(error) })
       return false
     }
+  }
+
+  /**
+   * The checks both add and isManageable make: Google knows the group, the
+   * portal may touch it, and no group above it is one the portal may not.
+   * A group too deeply nested to vouch for counts as protected. Throws when
+   * Google fails; callers decide what that means.
+   */
+  private async touchable(
+    api: GroupsApi,
+    groupId: string
+  ): Promise<"ok" | "protected"> {
+    const group = await getGroup(api, groupId)
+    if (
+      !group ||
+      group.id !== groupId ||
+      !isManageableGroup(group.email, api.domain)
+    )
+      return "protected"
+    const ancestor = await findForbiddenAncestor(
+      (address) => listParentGroups(api, address),
+      group.email,
+      api.domain
+    ).catch((error: unknown) => {
+      if (error instanceof NestingTooDeepError) return "too deep"
+      throw error
+    })
+    return ancestor === null ? "ok" : "protected"
   }
 
   /** Group id to address; a group Google cannot give is left out. */
