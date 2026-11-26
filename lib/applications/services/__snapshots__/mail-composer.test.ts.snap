@@ -232,3 +232,202 @@ exports[`processorNotice holds no personal data 1`] = `
   "to": "processor@example.com",
 }
 `;
+
+exports[`changesRequested carries the note, the due date and the status link 1`] = `
+{
+  "html": 
+"<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="supported-color-schemes" content="light dark">
+<style>
+@media (prefers-color-scheme: dark) {
+  body, .page { background: #0a0a0a !important; color: #fafafa !important; }
+  .muted { color: #a1a1a1 !important; }
+  .rule { border-color: #262626 !important; }
+  .link { color: #fafafa !important; }
+  .action { background: #5e94ff !important; color: #0a0a0a !important; }
+  .secondary { color: #fafafa !important; border-color: #262626 !important; }
+}
+</style>
+</head>
+<body style="margin:0;padding:0;background:#ffffff;color:#0a0a0a">
+<div class="page" style="background:#ffffff;color:#0a0a0a;font-family:Inter, "Noto Sans TC", -apple-system, BlinkMacSystemFont, "PingFang TC", "Microsoft JhengHei", sans-serif;font-size:16px;line-height:1.6">
+<div style="max-width:560px;margin:0 auto;padding:40px 24px">
+<h1 style="margin:0 0 24px;font-size:24px;line-height:1.3;font-weight:600">你的帳號申請需要修改</h1>
+
+<p style="margin:0 0 16px">審核的人請你修改申請內容：</p>
+<p style="margin:0 0 16px">請補上指導教授的名字</p>
+<p style="margin:0 0 16px">請在 2026-12-04 前用下面的連結修改並重新送出。</p>
+<p style="margin:24px 0 16px"><a class="action" href="https://apply.example.test/status/tok_ABC-123_abcdefghijklmnopqrstuvwxyz0123456" style="display:inline-block;margin:0 8px 8px 0;padding:10px 20px;border:1px solid #0033a0;border-radius:16px;background:#0033a0;color:#fafafa;font-weight:500;text-decoration:none">修改申請</a></p>
+<p class="muted rule" style="margin:40px 0 0;padding-top:16px;border-top:1px solid #e5e5e5;color:#737373"><a class="muted" href="https://portal.example.test" style="color:#737373;text-decoration:none">WinLab Portal</a></p>
+</div>
+</div>
+</body>
+</html>"
+,
+  "kind": "changes_requested",
+  "subject": "你的帳號申請需要修改",
+  "text": 
+"你的帳號申請需要修改
+
+審核的人請你修改申請內容：
+
+請補上指導教授的名字
+
+請在 2026-12-04 前用下面的連結修改並重新送出。
+
+修改申請：https://apply.example.test/status/tok_ABC-123_abcdefghijklmnopqrstuvwxyz0123456"
+,
+  "to": "<email>",
+}
+`;
+
+exports[`rejected includes the note only when there is one 1`] = `
+{
+  "html": 
+"<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="supported-color-schemes" content="light dark">
+<style>
+@media (prefers-color-scheme: dark) {
+  body, .page { background: #0a0a0a !important; color: #fafafa !important; }
+  .muted { color: #a1a1a1 !important; }
+  .rule { border-color: #262626 !important; }
+  .link { color: #fafafa !important; }
+  .action { background: #5e94ff !important; color: #0a0a0a !important; }
+  .secondary { color: #fafafa !important; border-color: #262626 !important; }
+}
+</style>
+</head>
+<body style="margin:0;padding:0;background:#ffffff;color:#0a0a0a">
+<div class="page" style="background:#ffffff;color:#0a0a0a;font-family:Inter, "Noto Sans TC", -apple-system, BlinkMacSystemFont, "PingFang TC", "Microsoft JhengHei", sans-serif;font-size:16px;line-height:1.6">
+<div style="max-width:560px;margin:0 auto;padding:40px 24px">
+<h1 style="margin:0 0 24px;font-size:24px;line-height:1.3;font-weight:600">你的帳號申請結果</h1>
+
+<p style="margin:0 0 16px">很抱歉，這次的帳號申請沒有通過。</p>
+<p style="margin:0 0 16px">審核的人留了這段話：</p>
+<p style="margin:0 0 16px">名額已滿</p>
+
+<p class="muted rule" style="margin:40px 0 0;padding-top:16px;border-top:1px solid #e5e5e5;color:#737373"><a class="muted" href="https://portal.example.test" style="color:#737373;text-decoration:none">WinLab Portal</a></p>
+</div>
+</div>
+</body>
+</html>"
+,
+  "kind": "rejected",
+  "subject": "你的帳號申請結果",
+  "text": 
+"你的帳號申請結果
+
+很抱歉，這次的帳號申請沒有通過。
+
+審核的人留了這段話：
+
+名額已滿"
+,
+  "to": "<email>",
+}
+`;
+
+exports[`rejected includes the note only when there is one 2`] = `
+{
+  "html": 
+"<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="supported-color-schemes" content="light dark">
+<style>
+@media (prefers-color-scheme: dark) {
+  body, .page { background: #0a0a0a !important; color: #fafafa !important; }
+  .muted { color: #a1a1a1 !important; }
+  .rule { border-color: #262626 !important; }
+  .link { color: #fafafa !important; }
+  .action { background: #5e94ff !important; color: #0a0a0a !important; }
+  .secondary { color: #fafafa !important; border-color: #262626 !important; }
+}
+</style>
+</head>
+<body style="margin:0;padding:0;background:#ffffff;color:#0a0a0a">
+<div class="page" style="background:#ffffff;color:#0a0a0a;font-family:Inter, "Noto Sans TC", -apple-system, BlinkMacSystemFont, "PingFang TC", "Microsoft JhengHei", sans-serif;font-size:16px;line-height:1.6">
+<div style="max-width:560px;margin:0 auto;padding:40px 24px">
+<h1 style="margin:0 0 24px;font-size:24px;line-height:1.3;font-weight:600">你的帳號申請結果</h1>
+
+<p style="margin:0 0 16px">很抱歉，這次的帳號申請沒有通過。</p>
+
+<p class="muted rule" style="margin:40px 0 0;padding-top:16px;border-top:1px solid #e5e5e5;color:#737373"><a class="muted" href="https://portal.example.test" style="color:#737373;text-decoration:none">WinLab Portal</a></p>
+</div>
+</div>
+</body>
+</html>"
+,
+  "kind": "rejected",
+  "subject": "你的帳號申請結果",
+  "text": 
+"你的帳號申請結果
+
+很抱歉，這次的帳號申請沒有通過。"
+,
+  "to": "<email>",
+}
+`;
+
+exports[`cohortMissing names the cohort and group path, not the applicant 1`] = `
+{
+  "html": 
+"<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="supported-color-schemes" content="light dark">
+<style>
+@media (prefers-color-scheme: dark) {
+  body, .page { background: #0a0a0a !important; color: #fafafa !important; }
+  .muted { color: #a1a1a1 !important; }
+  .rule { border-color: #262626 !important; }
+  .link { color: #fafafa !important; }
+  .action { background: #5e94ff !important; color: #0a0a0a !important; }
+  .secondary { color: #fafafa !important; border-color: #262626 !important; }
+}
+</style>
+</head>
+<body style="margin:0;padding:0;background:#ffffff;color:#0a0a0a">
+<div class="page" style="background:#ffffff;color:#0a0a0a;font-family:Inter, "Noto Sans TC", -apple-system, BlinkMacSystemFont, "PingFang TC", "Microsoft JhengHei", sans-serif;font-size:16px;line-height:1.6">
+<div style="max-width:560px;margin:0 auto;padding:40px 24px">
+<h1 style="margin:0 0 24px;font-size:24px;line-height:1.3;font-weight:600">缺少 2026 學年度的群組</h1>
+
+<p style="margin:0 0 16px">有人核准了 2026 學年度的申請，但 Keycloak 沒有這個群組：/winlab/students/2026</p>
+<p style="margin:0 0 16px">請先建立群組，再回到 Portal 重試。</p>
+<p style="margin:24px 0 16px"><a class="action" href="https://portal.example.test/applications" style="display:inline-block;margin:0 8px 8px 0;padding:10px 20px;border:1px solid #0033a0;border-radius:16px;background:#0033a0;color:#fafafa;font-weight:500;text-decoration:none">前往審核</a></p>
+<p class="muted rule" style="margin:40px 0 0;padding-top:16px;border-top:1px solid #e5e5e5;color:#737373"><a class="muted" href="https://portal.example.test" style="color:#737373;text-decoration:none">WinLab Portal</a></p>
+</div>
+</div>
+</body>
+</html>"
+,
+  "kind": "cohort_missing",
+  "subject": "缺少 2026 學年度的群組",
+  "text": 
+"缺少 2026 學年度的群組
+
+有人核准了 2026 學年度的申請，但 Keycloak 沒有這個群組：/winlab/students/2026
+
+請先建立群組，再回到 Portal 重試。
+
+前往審核：https://portal.example.test/applications"
+,
+  "to": "admin@example.com",
+}
+`;
