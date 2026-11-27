@@ -4,7 +4,11 @@ import type { MailKind } from "../domain/constants"
 import type { Email } from "../domain/values"
 import type { ComposedMail } from "../ports"
 
-type Urls = { siteUrl: string }
+type Urls = {
+  siteUrl: string
+  /** Keycloak's 忘記密碼 page: public, carries no token. */
+  resetPasswordUrl: string
+}
 
 /** YYYY-MM-DD on the Taipei calendar. */
 const taipeiDate = (at: Date) =>
@@ -134,6 +138,59 @@ export class MailComposer {
       title: "有一筆新的帳號申請",
       paragraphs: ["請到 Portal 審核。"],
       action: { label: "前往審核", url },
+    })
+  }
+
+  /**
+   * Keycloak sends the set-password mail itself; this one only says so. The
+   * reset page is public and has no token, so the outbox keeps the body.
+   */
+  approved(app: Application, to: string): ComposedMail {
+    const username =
+      app.assignment?.username.value ?? app.profile?.fields.username
+    if (!username) throw new Error("application has no username")
+    return this.compose("approved", to, "你的 WinLab 帳號已建立", {
+      title: "你的 WinLab 帳號已建立",
+      paragraphs: [
+        `你的帳號申請通過了，帳號名稱是 ${username}。`,
+        "Keycloak 會另外寄一封設定密碼的信給你，信中的連結 7 天內有效。",
+        "如果連結過期，或是沒有收到信，請到下面的頁面輸入你的 Email，就能重新收到設定密碼的連結。",
+        "設定好密碼後，就可以登入 Portal。",
+      ],
+      action: { label: "忘記密碼", url: this.urls.resetPasswordUrl },
+    })
+  }
+
+  /** For the LINE group's owner, who needs the name and LINE ID to add the member. */
+  notifiee(app: Application, to: string): ComposedMail {
+    if (!app.profile) throw new Error("application has no profile")
+    return this.compose("notifiee", to, "有新成員需要加入 LINE 群組", {
+      title: "有新成員需要加入 LINE 群組",
+      paragraphs: ["有一位新成員的帳號申請通過了，請把他加進 LINE 群組。"],
+      rows: [
+        ["姓名", app.profile.fields.chineseName],
+        ["LINE ID", app.profile.fields.lineId],
+      ],
+    })
+  }
+
+  /** Names no applicant. */
+  closedHasAccount(to: string): ComposedMail {
+    return this.compose("closed_has_account", to, "有一筆申請已由系統結案", {
+      title: "有一筆申請已由系統結案",
+      paragraphs: [
+        "這筆申請的 Email 已經有帳號，所以系統直接結案，不需要審核。",
+      ],
+      action: { label: "前往審核", url: `${this.urls.siteUrl}/applications` },
+    })
+  }
+
+  /** Names no applicant: only how many are waiting. */
+  digest(to: string, count: number): ComposedMail {
+    return this.compose("digest", to, `有 ${count} 筆帳號申請等待審核`, {
+      title: `有 ${count} 筆帳號申請等待審核`,
+      paragraphs: [`目前有 ${count} 筆帳號申請等待審核，請到 Portal 處理。`],
+      action: { label: "前往審核", url: `${this.urls.siteUrl}/applications` },
     })
   }
 

@@ -431,3 +431,204 @@ exports[`cohortMissing names the cohort and group path, not the applicant 1`] = 
   "to": "admin@example.com",
 }
 `;
+
+exports[`approved tells the applicant about Keycloak's mail and the reset page 1`] = `
+{
+  "html": 
+"<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="supported-color-schemes" content="light dark">
+<style>
+@media (prefers-color-scheme: dark) {
+  body, .page { background: #0a0a0a !important; color: #fafafa !important; }
+  .muted { color: #a1a1a1 !important; }
+  .rule { border-color: #262626 !important; }
+  .link { color: #fafafa !important; }
+  .action { background: #5e94ff !important; color: #0a0a0a !important; }
+  .secondary { color: #fafafa !important; border-color: #262626 !important; }
+}
+</style>
+</head>
+<body style="margin:0;padding:0;background:#ffffff;color:#0a0a0a">
+<div class="page" style="background:#ffffff;color:#0a0a0a;font-family:Inter, "Noto Sans TC", -apple-system, BlinkMacSystemFont, "PingFang TC", "Microsoft JhengHei", sans-serif;font-size:16px;line-height:1.6">
+<div style="max-width:560px;margin:0 auto;padding:40px 24px">
+<h1 style="margin:0 0 24px;font-size:24px;line-height:1.3;font-weight:600">你的 WinLab 帳號已建立</h1>
+
+<p style="margin:0 0 16px">你的帳號申請通過了，帳號名稱是 xmwang。</p>
+<p style="margin:0 0 16px">Keycloak 會另外寄一封設定密碼的信給你，信中的連結 7 天內有效。</p>
+<p style="margin:0 0 16px">如果連結過期，或是沒有收到信，請到下面的頁面輸入你的 Email，就能重新收到設定密碼的連結。</p>
+<p style="margin:0 0 16px">設定好密碼後，就可以登入 Portal。</p>
+<p style="margin:24px 0 16px"><a class="action" href="https://id.example.test/realms/winlab/login-actions/reset-credentials?client_id=portal" style="display:inline-block;margin:0 8px 8px 0;padding:10px 20px;border:1px solid #0033a0;border-radius:16px;background:#0033a0;color:#fafafa;font-weight:500;text-decoration:none">忘記密碼</a></p>
+<p class="muted rule" style="margin:40px 0 0;padding-top:16px;border-top:1px solid #e5e5e5;color:#737373"><a class="muted" href="https://portal.example.test" style="color:#737373;text-decoration:none">WinLab Portal</a></p>
+</div>
+</div>
+</body>
+</html>"
+,
+  "kind": "approved",
+  "subject": "你的 WinLab 帳號已建立",
+  "text": 
+"你的 WinLab 帳號已建立
+
+你的帳號申請通過了，帳號名稱是 xmwang。
+
+Keycloak 會另外寄一封設定密碼的信給你，信中的連結 7 天內有效。
+
+如果連結過期，或是沒有收到信，請到下面的頁面輸入你的 Email，就能重新收到設定密碼的連結。
+
+設定好密碼後，就可以登入 Portal。
+
+忘記密碼：https://id.example.test/realms/winlab/login-actions/reset-credentials?client_id=portal"
+,
+  "to": "<email>",
+}
+`;
+
+exports[`notifiee carries the Chinese name and LINE ID 1`] = `
+{
+  "html": 
+"<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="supported-color-schemes" content="light dark">
+<style>
+@media (prefers-color-scheme: dark) {
+  body, .page { background: #0a0a0a !important; color: #fafafa !important; }
+  .muted { color: #a1a1a1 !important; }
+  .rule { border-color: #262626 !important; }
+  .link { color: #fafafa !important; }
+  .action { background: #5e94ff !important; color: #0a0a0a !important; }
+  .secondary { color: #fafafa !important; border-color: #262626 !important; }
+}
+</style>
+</head>
+<body style="margin:0;padding:0;background:#ffffff;color:#0a0a0a">
+<div class="page" style="background:#ffffff;color:#0a0a0a;font-family:Inter, "Noto Sans TC", -apple-system, BlinkMacSystemFont, "PingFang TC", "Microsoft JhengHei", sans-serif;font-size:16px;line-height:1.6">
+<div style="max-width:560px;margin:0 auto;padding:40px 24px">
+<h1 style="margin:0 0 24px;font-size:24px;line-height:1.3;font-weight:600">有新成員需要加入 LINE 群組</h1>
+<table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;margin:0 0 24px">
+<tr><td class="muted rule" style="padding:8px 16px 8px 0;border-top:1px solid #e5e5e5;color:#737373;white-space:nowrap;vertical-align:top;width:1%">姓名</td><td class="rule" style="padding:8px 0;border-top:1px solid #e5e5e5;vertical-align:top">王小明</td></tr>
+<tr><td class="muted rule" style="padding:8px 16px 8px 0;border-top:1px solid #e5e5e5;color:#737373;white-space:nowrap;vertical-align:top;width:1%">LINE ID</td><td class="rule" style="padding:8px 0;border-top:1px solid #e5e5e5;vertical-align:top">xmwang</td></tr>
+</table>
+<p style="margin:0 0 16px">有一位新成員的帳號申請通過了，請把他加進 LINE 群組。</p>
+
+<p class="muted rule" style="margin:40px 0 0;padding-top:16px;border-top:1px solid #e5e5e5;color:#737373"><a class="muted" href="https://portal.example.test" style="color:#737373;text-decoration:none">WinLab Portal</a></p>
+</div>
+</div>
+</body>
+</html>"
+,
+  "kind": "notifiee",
+  "subject": "有新成員需要加入 LINE 群組",
+  "text": 
+"有新成員需要加入 LINE 群組
+
+姓名：王小明
+LINE ID：xmwang
+
+有一位新成員的帳號申請通過了，請把他加進 LINE 群組。"
+,
+  "to": "owner@example.com",
+}
+`;
+
+exports[`closedHasAccount links to the review page 1`] = `
+{
+  "html": 
+"<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="supported-color-schemes" content="light dark">
+<style>
+@media (prefers-color-scheme: dark) {
+  body, .page { background: #0a0a0a !important; color: #fafafa !important; }
+  .muted { color: #a1a1a1 !important; }
+  .rule { border-color: #262626 !important; }
+  .link { color: #fafafa !important; }
+  .action { background: #5e94ff !important; color: #0a0a0a !important; }
+  .secondary { color: #fafafa !important; border-color: #262626 !important; }
+}
+</style>
+</head>
+<body style="margin:0;padding:0;background:#ffffff;color:#0a0a0a">
+<div class="page" style="background:#ffffff;color:#0a0a0a;font-family:Inter, "Noto Sans TC", -apple-system, BlinkMacSystemFont, "PingFang TC", "Microsoft JhengHei", sans-serif;font-size:16px;line-height:1.6">
+<div style="max-width:560px;margin:0 auto;padding:40px 24px">
+<h1 style="margin:0 0 24px;font-size:24px;line-height:1.3;font-weight:600">有一筆申請已由系統結案</h1>
+
+<p style="margin:0 0 16px">這筆申請的 Email 已經有帳號，所以系統直接結案，不需要審核。</p>
+<p style="margin:24px 0 16px"><a class="action" href="https://portal.example.test/applications" style="display:inline-block;margin:0 8px 8px 0;padding:10px 20px;border:1px solid #0033a0;border-radius:16px;background:#0033a0;color:#fafafa;font-weight:500;text-decoration:none">前往審核</a></p>
+<p class="muted rule" style="margin:40px 0 0;padding-top:16px;border-top:1px solid #e5e5e5;color:#737373"><a class="muted" href="https://portal.example.test" style="color:#737373;text-decoration:none">WinLab Portal</a></p>
+</div>
+</div>
+</body>
+</html>"
+,
+  "kind": "closed_has_account",
+  "subject": "有一筆申請已由系統結案",
+  "text": 
+"有一筆申請已由系統結案
+
+這筆申請的 Email 已經有帳號，所以系統直接結案，不需要審核。
+
+前往審核：https://portal.example.test/applications"
+,
+  "to": "processor@example.com",
+}
+`;
+
+exports[`digest carries the count and the review link 1`] = `
+{
+  "html": 
+"<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="supported-color-schemes" content="light dark">
+<style>
+@media (prefers-color-scheme: dark) {
+  body, .page { background: #0a0a0a !important; color: #fafafa !important; }
+  .muted { color: #a1a1a1 !important; }
+  .rule { border-color: #262626 !important; }
+  .link { color: #fafafa !important; }
+  .action { background: #5e94ff !important; color: #0a0a0a !important; }
+  .secondary { color: #fafafa !important; border-color: #262626 !important; }
+}
+</style>
+</head>
+<body style="margin:0;padding:0;background:#ffffff;color:#0a0a0a">
+<div class="page" style="background:#ffffff;color:#0a0a0a;font-family:Inter, "Noto Sans TC", -apple-system, BlinkMacSystemFont, "PingFang TC", "Microsoft JhengHei", sans-serif;font-size:16px;line-height:1.6">
+<div style="max-width:560px;margin:0 auto;padding:40px 24px">
+<h1 style="margin:0 0 24px;font-size:24px;line-height:1.3;font-weight:600">有 3 筆帳號申請等待審核</h1>
+
+<p style="margin:0 0 16px">目前有 3 筆帳號申請等待審核，請到 Portal 處理。</p>
+<p style="margin:24px 0 16px"><a class="action" href="https://portal.example.test/applications" style="display:inline-block;margin:0 8px 8px 0;padding:10px 20px;border:1px solid #0033a0;border-radius:16px;background:#0033a0;color:#fafafa;font-weight:500;text-decoration:none">前往審核</a></p>
+<p class="muted rule" style="margin:40px 0 0;padding-top:16px;border-top:1px solid #e5e5e5;color:#737373"><a class="muted" href="https://portal.example.test" style="color:#737373;text-decoration:none">WinLab Portal</a></p>
+</div>
+</div>
+</body>
+</html>"
+,
+  "kind": "digest",
+  "subject": "有 3 筆帳號申請等待審核",
+  "text": 
+"有 3 筆帳號申請等待審核
+
+目前有 3 筆帳號申請等待審核，請到 Portal 處理。
+
+前往審核：https://portal.example.test/applications"
+,
+  "to": "processor@example.com",
+}
+`;

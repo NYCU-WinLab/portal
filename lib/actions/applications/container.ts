@@ -92,6 +92,9 @@ export function productionDeps(): Deps {
         if (!value) throw new Error("BETTER_AUTH_URL is not set")
         return value.replace(/\/$/, "")
       },
+      get resetPasswordUrl() {
+        return `${process.env.KEYCLOAK_ISSUER}/login-actions/reset-credentials?client_id=${process.env.KEYCLOAK_CLIENT_ID}`
+      },
     }),
     tokens: new CryptoTokens(),
     retention: new RetentionPolicy(),

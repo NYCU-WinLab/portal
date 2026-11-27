@@ -129,7 +129,7 @@ test("approved tells the applicant about Keycloak's mail and the reset page", as
   const mail = composer.approved(app, app.email!.value)
   expect(mail.kind).toBe("approved")
   expect(mail.to).toBe(app.email!.value)
-  expect(mail.text).toContain(app.username.value)
+  expect(mail.text).toContain(profileInput().username)
   expect(mail.text).toContain("7 天")
   expect(mail.text).toContain(resetPasswordUrl)
   expect(mail.html).toContain(resetPasswordUrl)
