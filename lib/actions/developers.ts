@@ -53,6 +53,7 @@ import {
   registerClient,
   registrarConfigured,
   RegistrationLost,
+  reissueRegistrationToken,
   RESTRICTED_SCOPES,
   updateClient,
   type ClientSpec,
@@ -130,7 +131,7 @@ async function syncClient(
 /** Portal no longer holds a working registration token for this client. */
 const lost = (id: string) =>
   new Error(
-    `developer app ${id}: Keycloak registration token no longer works; an admin must issue a new one`
+    `developer app ${id}: Keycloak registration token no longer works; an admin can issue a new one with recover_developer_app_token`
   )
 
 const appRow = (row: typeof developerApps.$inferSelect): Application => ({
@@ -656,6 +657,30 @@ export const deleteDeveloperApp = defineAction({
       }
       // Scope requests, grants, codes and tokens cascade from the application.
       await tx.delete(developerApps).where(eq(developerApps.id, id))
+    })
+    return { id }
+  },
+})
+
+export const recoverDeveloperAppToken = defineAction({
+  name: "recover_developer_app_token",
+  title: "復原應用程式的註冊 token",
+  description:
+    "Issues a new Keycloak registration token for an application whose stored token no longer works (portal admins only). Safe to repeat. Returns the application id; the token stays sealed in portal.",
+  kind: "mutation",
+  idempotent: true,
+  input: z.object({ id: z.uuid() }),
+  run: async (actor, { id }) => {
+    await requireAdmin(actor, "portal")
+    await db.transaction(async (tx) => {
+      const row = await lockApp(tx, id)
+      if (!row.keycloakRat)
+        throw new Refusal("這個應用程式不是 Keycloak client")
+      const token = await reissueRegistrationToken(row.id)
+      await tx
+        .update(developerApps)
+        .set({ keycloakRat: seal(token) })
+        .where(eq(developerApps.id, id))
     })
     return { id }
   },

@@ -10401,6 +10401,18 @@
     ],
     "type": "object"
   },
+  "recover_developer_app_token": {
+    "additionalProperties": false,
+    "properties": {
+      "id": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "id"
+    ],
+    "type": "object"
+  },
   "register_developer_app": {
     "additionalProperties": false,
     "properties": {
