@@ -216,6 +216,15 @@ describe("create_account", () => {
     expect(await exec(h, step)).toEqual({ kind: "restart" })
   })
 
+  test("an account that left /provisioning is blocked, not restarted", async () => {
+    const h = await setup()
+    const step = new CreateAccountStep(h.keycloak)
+    await exec(h, step)
+    h.keycloak.moveOutsideBoundary((await reload(h)).keycloakId!)
+    const reason = await blockedReason(exec(h, step))
+    expect(reason).toContain("/provisioning")
+  })
+
   test("a missing cohort group is blocked and names the path", async () => {
     const h = await setup()
     const keycloak = new FakeKeycloak()
@@ -408,6 +417,16 @@ describe("activate_and_mail", () => {
     expect(
       await exec(h, new ActivateAndMailStep(h.keycloak, retention))
     ).toEqual({ kind: "restart" })
+  })
+
+  test("an account that left /provisioning is blocked and records nothing", async () => {
+    const h = await withAccount()
+    h.keycloak.moveOutsideBoundary(h.keycloakId)
+    const reason = await blockedReason(
+      exec(h, new ActivateAndMailStep(h.keycloak, retention))
+    )
+    expect(reason).toContain("/provisioning")
+    expect(eventsOf(h, "password_mail_sent")).toHaveLength(0)
   })
 })
 

@@ -6,18 +6,26 @@ import { keycloakContract } from "./keycloak"
 keycloakContract(async () => {
   const state = new FakeKeycloak()
   state.addGroup("/provisioning")
-  const admin = new KeycloakAdmin({
+  const config = {
     issuer: "https://sso.example.test/realms/lab",
-    clientId: "portal-provisioner",
     clientSecret: "s",
     fetch: fakeKeycloakFetch(state),
     span: (async (_n: string, _a: unknown, fn: () => Promise<unknown>) =>
       fn()) as never,
+  }
+  // The portal client reads (and is the directory); the provisioner writes
+  // and reads through it, as keycloakProvisioner() wires them.
+  const reader = new KeycloakAdmin({ ...config, clientId: "portal" })
+  const provisioner = new KeycloakAdmin({
+    ...config,
+    clientId: "portal-provisioner",
+    reader,
   })
   return {
-    directory: admin,
-    provisioner: admin,
+    directory: reader,
+    provisioner,
     addGroup: async (path) => state.addGroup(path),
     deleteUser: async (id) => state.deleteUser(id),
+    moveOutsideBoundary: async (id) => state.moveOutsideBoundary(id),
   }
 })

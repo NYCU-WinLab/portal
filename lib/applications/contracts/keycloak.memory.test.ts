@@ -9,5 +9,6 @@ keycloakContract(async () => {
     provisioner: kc,
     addGroup: async (path) => kc.addGroup(path),
     deleteUser: async (id) => kc.deleteUser(id),
+    moveOutsideBoundary: async (id) => kc.moveOutsideBoundary(id),
   }
 })

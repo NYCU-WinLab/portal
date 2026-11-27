@@ -11,6 +11,8 @@ export type KeycloakSubject = {
   provisioner: KeycloakProvisioner
   addGroup(path: string): Promise<void>
   deleteUser(id: string): Promise<void>
+  /** The user still exists, but the provisioner can no longer see or change it. */
+  moveOutsideBoundary(id: string): Promise<void>
 }
 
 const newUser = (o: Partial<NewKeycloakUser> = {}): NewKeycloakUser => ({
@@ -96,6 +98,25 @@ export function keycloakContract(make: () => Promise<KeycloakSubject>) {
         "user_gone"
       )
       expect(await s.provisioner.readUser(id)).toBeNull()
+    })
+
+    test("a user outside the boundary is forbidden for writes but still readable", async () => {
+      const s = await make()
+      const id = await created(s)
+      await s.addGroup("/mail")
+      await s.moveOutsideBoundary(id)
+      const opts = {
+        lifespanSeconds: 60,
+        signal: new AbortController().signal,
+      }
+      expect(await s.provisioner.setEnabled(id, true)).toBe("forbidden")
+      expect(await s.provisioner.joinGroup(id, "/mail")).toBe("forbidden")
+      expect(await s.provisioner.executeActionsEmail(id, opts)).toBe(
+        "forbidden"
+      )
+      expect(await s.provisioner.leaveGroup(id, "/provisioning")).toBe("gone")
+      expect((await s.provisioner.readUser(id))?.username).toBe("xmwang")
+      expect(await s.provisioner.findByApplicationId("app-1")).toBe(id)
     })
 
     test("directory reads what was created", async () => {

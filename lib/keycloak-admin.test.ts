@@ -50,6 +50,7 @@ function harness(handler: Handler) {
       timeoutMs?: number
       clientId?: string
       actionsEmail?: { clientId?: string; redirectUri?: string }
+      reader?: KeycloakAdmin
     } = {}
   ) =>
     new KeycloakAdmin({
@@ -455,4 +456,95 @@ test("keycloakProvisioner() throws when the env is missing", () => {
   expect(() => keycloakProvisioner()).toThrow(
     "KEYCLOAK_PROVISIONER_CLIENT_ID and _SECRET must be set"
   )
+})
+
+// The provisioner is scoped to a group: Keycloak answers 403 where it would
+// have answered 404, and the portal client (the reader) tells the two apart.
+
+const status = (code: number) => new Response("", { status: code })
+const OPTS = { lifespanSeconds: 60, signal: new AbortController().signal }
+
+test("createUser maps 403 to invalid", async () => {
+  const h = harness(() => status(403))
+  expect(await h.make().createUser(USER)).toEqual({
+    ok: false,
+    reason: "invalid",
+  })
+})
+
+test("a write answered 403 is user_gone when the reader gets 404, else forbidden", async () => {
+  const writes = {
+    setEnabled: (a: KeycloakAdmin) => a.setEnabled("u1", true),
+    joinGroup: (a: KeycloakAdmin) => a.joinGroup("u1", "/mail"),
+    executeActionsEmail: (a: KeycloakAdmin) =>
+      a.executeActionsEmail("u1", OPTS),
+  }
+  for (const [name, write] of Object.entries(writes)) {
+    for (const [readerStatus, want] of [
+      [404, "user_gone"],
+      [200, "forbidden"],
+    ] as const) {
+      const asked: string[] = []
+      const reader = harness((url) => {
+        asked.push(url.pathname)
+        return readerStatus === 404
+          ? status(404)
+          : Response.json({
+              username: "x",
+              email: "x@y.co",
+              enabled: true,
+            })
+      })
+      const provisioner = harness((url) =>
+        url.pathname.includes("/group-by-path/")
+          ? Response.json({ id: "g1" })
+          : status(403)
+      )
+      const admin = provisioner.make({ reader: reader.make() })
+      expect([name, await write(admin)]).toEqual([name, want])
+      expect(asked).toEqual(["/admin/realms/lab/users/u1"])
+    }
+  }
+})
+
+test("a write answered 403 stays forbidden without a reader to ask", async () => {
+  const h = harness(() => status(403))
+  expect(await h.make().setEnabled("u1", true)).toBe("forbidden")
+})
+
+test("reads go through the reader and never touch the provisioner's own token", async () => {
+  const reader = harness((url) => {
+    if (url.pathname.endsWith("/users"))
+      return Response.json(
+        url.searchParams.get("q")
+          ? [{ id: "u9" }]
+          : [{ username: "xmwang", email: "xmwang@example.com" }]
+      )
+    return Response.json({
+      username: "x",
+      email: "x@y.co",
+      enabled: true,
+      attributes: { a: ["1"] },
+    })
+  })
+  const provisioner = harness((url, init) =>
+    init.method === "POST" ? status(409) : status(403)
+  )
+  const admin = provisioner.make({ reader: reader.make() })
+  expect(await admin.findByApplicationId("app-1")).toBe("u9")
+  expect((await admin.readUser("u9"))?.username).toBe("x")
+  expect(await admin.createUser(USER)).toEqual({
+    ok: false,
+    reason: "username_taken",
+  })
+  expect(
+    provisioner.calls.filter((c) => c.url.includes("/users?")).length
+  ).toBe(0)
+  expect(reader.calls.length).toBeGreaterThan(3)
+})
+
+test("readUser through the reader is null for a deleted user", async () => {
+  const reader = harness(() => status(404))
+  const admin = harness(() => status(403)).make({ reader: reader.make() })
+  expect(await admin.readUser("u1")).toBeNull()
 })
