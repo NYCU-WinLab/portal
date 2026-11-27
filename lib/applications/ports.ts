@@ -264,13 +264,20 @@ export interface KeycloakProvisioner {
   joinGroup(
     id: string,
     path: string
-  ): Promise<"ok" | "user_gone" | "group_missing">
+  ): Promise<"ok" | "user_gone" | "group_missing" | "forbidden">
   leaveGroup(id: string, path: string): Promise<"ok" | "gone">
-  setEnabled(id: string, enabled: boolean): Promise<"ok" | "user_gone">
+  /**
+   * "forbidden": the account exists but is outside what the provisioner may
+   * change (it left /provisioning); "user_gone": it was deleted.
+   */
+  setEnabled(
+    id: string,
+    enabled: boolean
+  ): Promise<"ok" | "user_gone" | "forbidden">
   executeActionsEmail(
     id: string,
     opts: { lifespanSeconds: number; signal: AbortSignal }
-  ): Promise<"ok" | "user_gone" | "invalid">
+  ): Promise<"ok" | "user_gone" | "invalid" | "forbidden">
 }
 
 export interface MailGroups {

@@ -25,6 +25,7 @@ export class FakeKeycloak implements KeycloakDirectory, KeycloakProvisioner {
   private readonly failures = new Map<Method, number>()
   private readonly errors = new Map<Method, Error>()
   private readonly lateFailures = new Map<Method, number>()
+  private readonly outside = new Set<string>()
   private badMail = false
 
   addGroup(path: string): void {
@@ -32,6 +33,17 @@ export class FakeKeycloak implements KeycloakDirectory, KeycloakProvisioner {
   }
   deleteUser(id: string): void {
     this.users.delete(id)
+  }
+  /**
+   * The user still exists but the provisioner may no longer touch it, as
+   * after it left /provisioning: writes answer "forbidden", reads still work
+   * because the real adapter reads through the portal client.
+   */
+  moveOutsideBoundary(id: string): void {
+    this.outside.add(id)
+  }
+  isOutsideBoundary(id: string): boolean {
+    return this.outside.has(id)
   }
   userCount(): number {
     return this.users.size
@@ -152,6 +164,7 @@ export class FakeKeycloak implements KeycloakDirectory, KeycloakProvisioner {
     this.gate("joinGroup")
     const u = this.users.get(id)
     if (!u) return "user_gone" as const
+    if (this.outside.has(id)) return "forbidden" as const
     if (!this.groups.has(path)) return "group_missing" as const
     u.groups.add(path)
     return "ok" as const
@@ -159,7 +172,7 @@ export class FakeKeycloak implements KeycloakDirectory, KeycloakProvisioner {
   async leaveGroup(id: string, path: string) {
     this.gate("leaveGroup")
     const u = this.users.get(id)
-    if (!u) return "gone" as const
+    if (!u || this.outside.has(id)) return "gone" as const
     u.groups.delete(path)
     this.lateGate("leaveGroup")
     return "ok" as const
@@ -168,6 +181,7 @@ export class FakeKeycloak implements KeycloakDirectory, KeycloakProvisioner {
     this.gate("setEnabled")
     const u = this.users.get(id)
     if (!u) return "user_gone" as const
+    if (this.outside.has(id)) return "forbidden" as const
     u.enabled = enabled
     return "ok" as const
   }
@@ -177,6 +191,7 @@ export class FakeKeycloak implements KeycloakDirectory, KeycloakProvisioner {
   ) {
     this.gate("executeActionsEmail")
     if (!this.users.has(id)) return "user_gone" as const
+    if (this.outside.has(id)) return "forbidden" as const
     if (this.badMail) return "invalid" as const
     this.mailsSent.push({ id, lifespanSeconds: opts.lifespanSeconds })
     this.lateGate("executeActionsEmail")

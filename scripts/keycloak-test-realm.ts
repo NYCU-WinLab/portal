@@ -107,6 +107,8 @@ async function main() {
     realm,
     enabled: true,
     adminPermissionsEnabled: true,
+    // Production has "forgot password" on; the reset-mail checks rely on it.
+    resetPasswordAllowed: true,
     registrationAllowed: false,
     smtpServer: {
       host: smtpHost,

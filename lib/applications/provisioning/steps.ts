@@ -38,6 +38,12 @@ export interface ProvisioningStep {
 const DONE: StepResult = { kind: "done" }
 const RESTART: StepResult = { kind: "restart" }
 
+/** The account exists but the provisioner may no longer touch it. */
+const outsideProvisioning = () =>
+  StepError.blocked(
+    "Keycloak 帳號已不在 /provisioning，portal 無權處理，請到 Keycloak 後台確認"
+  )
+
 const PROVISIONING_GROUP = "/provisioning"
 
 function assignmentOf(app: Application) {
@@ -87,6 +93,7 @@ export class CreateAccountStep implements ProvisioningStep {
     for (const group of groups) {
       const joined = await this.keycloak.joinGroup(id, group.path)
       if (joined === "user_gone") return RESTART
+      if (joined === "forbidden") throw outsideProvisioning()
       if (joined === "group_missing") {
         throw StepError.blocked(`${group.what} ${group.path} 不存在`)
       }
@@ -226,14 +233,15 @@ export class ActivateAndMailStep implements ProvisioningStep {
   async run(ctx: StepContext): Promise<StepResult> {
     const { application: app, uow, now, signal } = ctx
     const id = keycloakIdOf(app)
-    if ((await this.keycloak.setEnabled(id, true)) === "user_gone") {
-      return RESTART
-    }
+    const enabled = await this.keycloak.setEnabled(id, true)
+    if (enabled === "user_gone") return RESTART
+    if (enabled === "forbidden") throw outsideProvisioning()
     const sent = await this.keycloak.executeActionsEmail(id, {
       lifespanSeconds: this.retention.passwordMailLifespanSeconds(),
       signal,
     })
     if (sent === "user_gone") return RESTART
+    if (sent === "forbidden") throw outsideProvisioning()
     if (sent === "invalid") {
       throw StepError.blocked(
         "Keycloak 無法寄設定密碼信，請檢查 redirect_uri 等設定"

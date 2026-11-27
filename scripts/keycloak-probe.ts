@@ -1,7 +1,8 @@
 /**
  * Checks, against a disposable Keycloak test realm, every Keycloak behaviour
  * the provisioning worker relies on, then replays the keycloakContract
- * scenarios through KeycloakAdmin with the provisioner's own credentials.
+ * scenarios through KeycloakAdmin with the provisioner's own credentials and,
+ * as in production, the portal client (KEYCLOAK_PROBE_READER_*) as its reader.
  * Prints one markdown table (item | check | result | actual response).
  *
  * Run it after scripts/keycloak-test-realm.ts; never against winlab. It reads
@@ -148,28 +149,29 @@ async function section(item: string, fn: () => Promise<void>) {
 
 // --- helpers on the realm -------------------------------------------------
 
-const kc = new KeycloakAdmin({
-  issuer,
-  clientId: provisionerId,
-  clientSecret: provisionerSecret,
-  actionsEmail: { clientId: "portal", redirectUri: portalUrl },
-})
-
 const readerId =
   fileVars.KEYCLOAK_PROBE_READER_ID ?? process.env.KEYCLOAK_PROBE_READER_ID
 const readerSecret =
   fileVars.KEYCLOAK_PROBE_READER_SECRET ??
   process.env.KEYCLOAK_PROBE_READER_SECRET
-const reader =
-  readerId && readerSecret
-    ? new KeycloakAdmin({
-        issuer,
-        clientId: readerId,
-        clientSecret: readerSecret,
-      })
-    : null
-const readerCall =
-  readerId && readerSecret ? caller(readerId, readerSecret) : null
+if (!readerId || !readerSecret)
+  throw new Error("KEYCLOAK_PROBE_READER_ID and _SECRET are needed")
+const reader = new KeycloakAdmin({
+  issuer,
+  clientId: readerId,
+  clientSecret: readerSecret,
+})
+const readerCall = caller(readerId, readerSecret)
+
+// As keycloakProvisioner() builds it: reads and "who is this 403 for" go
+// through the portal client, because FGAP hides them from the provisioner.
+const kc = new KeycloakAdmin({
+  issuer,
+  clientId: provisionerId,
+  clientSecret: provisionerSecret,
+  reader,
+  actionsEmail: { clientId: "portal", redirectUri: portalUrl },
+})
 
 const names = {
   user: (tag: string) => `probe-${tag}-${rand}`,
@@ -419,7 +421,7 @@ async function item4() {
   const user = await provisioned("search")
   const app = `app-search-${rand}`
   const q = { q: `portal_application_id:${app}`, exact: "true" }
-  const search = async (who: string, call: Caller) => {
+  const search = async (who: string, call: Caller, want: number) => {
     const r = await call("GET", `/${realm}/users`, undefined, q)
     let found = 0
     try {
@@ -428,27 +430,27 @@ async function item4() {
     record(
       "4",
       `q= on the admin-only attribute as ${who}`,
-      r.status === 200 && found === 1,
-      r.status === 200 ? `200 ${found} user(s)` : brief(r)
+      r.status === want && (want !== 200 || found === 1),
+      r.status === 200 ? `200 ${found} user(s)` : `${brief(r)} (want ${want})`
     )
   }
-  await search("portal-provisioner (findByApplicationId)", provisioner)
-  if (readerCall) await search("portal (view-users)", readerCall)
-  await search("probe-admin", admin)
-  if (reader) {
-    let got: string
-    try {
-      got = String(await reader.findByApplicationId(app))
-    } catch (error) {
-      got = String(error)
-    }
-    record(
-      "4",
-      "KeycloakAdmin.findByApplicationId with the portal client",
-      got === user,
-      got === user ? "found the user" : got
-    )
+  // FGAP hides every user search from the provisioner: 403 is expected, and
+  // the adapter asks the portal client instead.
+  await search("portal-provisioner (403 expected)", provisioner, 403)
+  await search("portal (view-users)", readerCall, 200)
+  await search("probe-admin", admin, 200)
+  let got: string
+  try {
+    got = String(await kc.findByApplicationId(app))
+  } catch (error) {
+    got = String(error)
   }
+  record(
+    "4",
+    "KeycloakAdmin.findByApplicationId (provisioner credentials, reads through the portal client)",
+    got === user,
+    got === user ? "found the user" : got
+  )
 }
 
 async function item5() {
@@ -740,7 +742,12 @@ async function item8Flow() {
   )
 }
 
-/** The reset page only exists when the realm allows "forgot password". */
+/**
+ * The reset page only exists when the realm allows "forgot password", which
+ * the test realm now sets (as production has it). An older realm without it
+ * is switched on for this item and restored after; with it on, nothing is
+ * toggled.
+ */
 async function item8() {
   const realmUrl = `/${realm}`
   const current = json<{ resetPasswordAllowed?: boolean }>(
@@ -749,10 +756,10 @@ async function item8() {
   const allowed = current.resetPasswordAllowed === true
   record(
     "8",
-    "realm setting resetPasswordAllowed",
+    "realm setting resetPasswordAllowed (keycloak-test-realm.ts sets it)",
     allowed,
     String(current.resetPasswordAllowed ?? false) +
-      (allowed ? "" : " (enabled temporarily for the rest of this item)")
+      (allowed ? "" : " (an older realm: enabled temporarily for this item)")
   )
   if (!allowed)
     must(
@@ -772,7 +779,7 @@ async function item8() {
 type ReplayDeps = { mailGroup: () => Promise<void> }
 
 async function replay() {
-  const dir = reader ?? kc
+  const dir = reader
   const cases: [string, () => Promise<void>][] = []
   const eq = (got: unknown, want: unknown) => {
     if (JSON.stringify(got) !== JSON.stringify(want))
@@ -783,9 +790,12 @@ async function replay() {
   const deleteUser = async (id: string) => {
     must(await admin("DELETE", `/${realm}/users/${id}`), [204, 404], "delete")
   }
+  let mailMade = false
   const deps: ReplayDeps = {
     // The contract's "/mail" group; the provisioner needs rights on it.
     mailGroup: async () => {
+      if (mailMade) return
+      mailMade = true
       const id = idOf(
         must(
           await admin("POST", `/${realm}/groups`, { name: "mail" }),
@@ -872,6 +882,28 @@ async function replay() {
       eq(await kc.setEnabled(id, true), "user_gone")
       eq(await kc.executeActionsEmail(id, opts), "user_gone")
       eq(await kc.readUser(id), null)
+    },
+  ])
+  cases.push([
+    "a user outside the boundary is forbidden for writes but still readable",
+    async () => {
+      const id = await made("h")
+      await deps.mailGroup()
+      must(
+        await admin(
+          "DELETE",
+          `/${realm}/users/${id}/groups/${await groupId("/provisioning")}`
+        ),
+        [204],
+        "move outside the boundary"
+      )
+      const opts = { lifespanSeconds: 60, signal: new AbortController().signal }
+      eq(await kc.setEnabled(id, true), "forbidden")
+      eq(await kc.joinGroup(id, "/mail"), "forbidden")
+      eq(await kc.executeActionsEmail(id, opts), "forbidden")
+      eq(await kc.leaveGroup(id, "/provisioning"), "gone")
+      eq((await kc.readUser(id))?.username, names.user("r-h"))
+      eq(await kc.findByApplicationId(`app-r-h-${rand}`), id)
     },
   ])
   cases.push([

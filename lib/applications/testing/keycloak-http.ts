@@ -1,9 +1,18 @@
 import { Email, Username } from "../domain/values"
 import type { FakeKeycloak } from "./fake-keycloak"
 
+/** The client id whose token is the group-scoped provisioner's. */
+export const PROVISIONER_CLIENT = "portal-provisioner"
+
 /**
  * Keycloak's Admin REST routes over a FakeKeycloak, for running the Keycloak
  * contract against the real `KeycloakAdmin`. A group's id is its path.
+ *
+ * The token a client gets is its client id, and the answers follow what the
+ * real realm does for each. The provisioner (scoped by FGAP to
+ * /provisioning) gets 403 for every user search and, on a user path, for a
+ * user it cannot see: deleted or outside the group, never 404. Any other
+ * client reads everything and gets 404 for a deleted user.
  */
 export function fakeKeycloakFetch(state: FakeKeycloak): typeof fetch {
   const json = (body: unknown, status = 200) => Response.json(body, { status })
@@ -16,13 +25,23 @@ export function fakeKeycloakFetch(state: FakeKeycloak): typeof fetch {
     const raw = typeof init.body === "string" ? init.body : null
     const body = raw ? (JSON.parse(raw) as unknown) : null
 
-    if (path.endsWith("/protocol/openid-connect/token"))
-      return json({ access_token: "fake", expires_in: 300 })
+    if (path.endsWith("/protocol/openid-connect/token")) {
+      const clientId = new URLSearchParams(String(init.body)).get("client_id")
+      return json({ access_token: clientId, expires_in: 300 })
+    }
+    const scoped =
+      new Headers(init.headers).get("authorization") ===
+      `Bearer ${PROVISIONER_CLIENT}`
+    const forbidden = () => empty(403)
+    /** Whether this client may see the user at all. */
+    const seen = (id: string) =>
+      state.user(id) !== undefined && !(scoped && state.isOutsideBoundary(id))
 
     const admin = path.match(/\/admin\/realms\/[^/]+(\/.*)$/)?.[1]
     if (!admin) return empty(404)
 
     if (admin === "/users" && method === "GET") {
+      if (scoped) return forbidden()
       const q = url.searchParams.get("q")
       const username = url.searchParams.get("username")
       const email = url.searchParams.get("email")
@@ -52,6 +71,10 @@ export function fakeKeycloakFetch(state: FakeKeycloak): typeof fetch {
         attributes: Record<string, string[]>
         groups: string[]
       }
+      if (scoped) {
+        for (const g of user.groups ?? [])
+          if (!(await state.groupExists(g))) return forbidden()
+      }
       const result = await state.createUser(user)
       if (result.ok)
         return new Response("", {
@@ -73,17 +96,18 @@ export function fakeKeycloakFetch(state: FakeKeycloak): typeof fetch {
     if (member) {
       const [, id, groupId] = member
       const path = decodeURIComponent(groupId)
+      if (!seen(id)) return scoped ? forbidden() : empty(404)
       if (method === "PUT") {
         const r = await state.joinGroup(id, path)
         return empty(r === "ok" ? 204 : 404)
       }
-      // Keycloak answers 403 once the user left what the client may see.
       const r = await state.leaveGroup(id, path)
       return empty(r === "ok" ? 204 : 403)
     }
 
     const mail = admin.match(/^\/users\/([^/]+)\/execute-actions-email$/)
     if (mail) {
+      if (!seen(mail[1])) return scoped ? forbidden() : empty(404)
       const r = await state.executeActionsEmail(mail[1], {
         lifespanSeconds: Number(url.searchParams.get("lifespan")),
         signal: init.signal ?? new AbortController().signal,
@@ -94,6 +118,7 @@ export function fakeKeycloakFetch(state: FakeKeycloak): typeof fetch {
     const user = admin.match(/^\/users\/([^/]+)$/)
     if (user) {
       const id = user[1]
+      if (!seen(id)) return scoped ? forbidden() : empty(404)
       if (method === "GET") {
         const u = await state.readUser(id)
         return u ? json(u) : empty(404)
