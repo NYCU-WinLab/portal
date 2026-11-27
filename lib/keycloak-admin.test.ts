@@ -361,6 +361,29 @@ test("executeActionsEmail sends UPDATE_PASSWORD with lifespan and passes the sig
   expect(init.signal?.aborted).toBe(true)
 })
 
+test("a caller's signal is the deadline of its call, not the default timeout", async () => {
+  const h = harness(
+    (_url, init) =>
+      new Promise<Response>((resolve, reject) => {
+        const timer = setTimeout(
+          () => resolve(new Response("", { status: 204 })),
+          50
+        )
+        init.signal?.addEventListener("abort", () => {
+          clearTimeout(timer)
+          reject(init.signal?.reason)
+        })
+      })
+  )
+  const admin = h.make({ timeoutMs: 20 })
+  expect(
+    await admin.executeActionsEmail("u1", {
+      lifespanSeconds: 60,
+      signal: AbortSignal.timeout(1000),
+    })
+  ).toBe("ok")
+})
+
 test("executeActionsEmail leaves out client_id and redirect_uri when unset", async () => {
   let search = ""
   const h = harness((url) => {
