@@ -6,7 +6,7 @@ import type { ComposedMail } from "../ports"
 
 type Urls = {
   siteUrl: string
-  /** Keycloak's 忘記密碼 page: public, carries no token. */
+  /** Keycloak's forgot-password page: public, carries no token. */
   resetPasswordUrl: string
 }
 
