@@ -1,8 +1,12 @@
-import { expect, test } from "bun:test"
+import { afterEach, expect, test } from "bun:test"
 
 import { Email, Username } from "@/lib/applications/domain/values"
 import { KeycloakUnavailable } from "@/lib/applications/ports"
-import { KeycloakAdmin, systemAccountUsernames } from "@/lib/keycloak"
+import {
+  KeycloakAdmin,
+  keycloakProvisioner,
+  systemAccountUsernames,
+} from "@/lib/keycloak"
 
 const ISSUER = "https://sso.example.test/realms/lab"
 const TOKEN_URL = `${ISSUER}/protocol/openid-connect/token`
@@ -17,6 +21,7 @@ type Handler = (
 function harness(handler: Handler) {
   const calls: { url: string; auth: string | null }[] = []
   let tokens = 0
+  const clientIds: (string | null)[] = []
   const fetch = (async (
     input: string | URL | Request,
     init: RequestInit = {}
@@ -26,6 +31,7 @@ function harness(handler: Handler) {
     calls.push({ url: String(input), auth: headers.get("authorization") })
     if (url.href === TOKEN_URL) {
       tokens += 1
+      clientIds.push(new URLSearchParams(String(init.body)).get("client_id"))
       return Response.json({ access_token: `t${tokens}`, expires_in: 300 })
     }
     return handler(url, init, calls.length)
@@ -39,7 +45,13 @@ function harness(handler: Handler) {
     spans.push({ name, attributes })
     return fn()
   }) as never
-  const make = (extra: { timeoutMs?: number } = {}) =>
+  const make = (
+    extra: {
+      timeoutMs?: number
+      clientId?: string
+      actionsEmail?: { clientId?: string; redirectUri?: string }
+    } = {}
+  ) =>
     new KeycloakAdmin({
       issuer: ISSUER,
       clientId: "c",
@@ -48,7 +60,7 @@ function harness(handler: Handler) {
       span,
       ...extra,
     })
-  return { make, calls, spans, tokens: () => tokens }
+  return { make, calls, spans, clientIds, tokens: () => tokens }
 }
 
 const email = (s: string) => Email.parse(s)
@@ -215,4 +227,232 @@ test("a network error on the admin client keeps its cause", async () => {
     .catch((e: unknown) => e)
   expect(error).toBeInstanceOf(KeycloakUnavailable)
   expect((error as Error).cause).toBeInstanceOf(TypeError)
+})
+
+// Provisioner writes
+
+const USER = {
+  username: "xmwang",
+  email: "xmwang@example.com",
+  firstName: "Xiao-Ming",
+  lastName: "Wang",
+  attributes: { portal_application_id: ["app-1"] },
+  groups: ["/provisioning"],
+}
+
+const created = (id: string) =>
+  new Response("", {
+    status: 201,
+    headers: { location: `${ADMIN}/users/${id}` },
+  })
+
+test("createUser returns the id from Location", async () => {
+  let body: Record<string, unknown> = {}
+  const h = harness(async (url, init) => {
+    expect(url.pathname).toBe("/admin/realms/lab/users")
+    expect(init.method).toBe("POST")
+    body = JSON.parse(String(init.body))
+    return created("abc")
+  })
+  expect(await h.make().createUser(USER)).toEqual({ ok: true, id: "abc" })
+  expect(body.enabled).toBe(false)
+  expect(body.emailVerified).toBe(true)
+  expect(body.groups).toEqual(["/provisioning"])
+  expect(body.attributes).toEqual({ portal_application_id: ["app-1"] })
+})
+
+test("createUser maps 409 to username_taken by an exact username lookup", async () => {
+  const h = harness((url, init) => {
+    if (init.method === "POST")
+      return Response.json(
+        { errorMessage: "User exists with same email" },
+        { status: 409 }
+      )
+    expect(url.searchParams.get("exact")).toBe("true")
+    return Response.json(
+      url.searchParams.get("username") ? [{ username: "xmwang" }] : []
+    )
+  })
+  expect(await h.make().createUser(USER)).toEqual({
+    ok: false,
+    reason: "username_taken",
+  })
+})
+
+test("createUser maps 409 to email_taken when only the email matches", async () => {
+  const h = harness((url, init) => {
+    if (init.method === "POST")
+      return Response.json(
+        { errorMessage: "User exists with same username" },
+        { status: 409 }
+      )
+    return Response.json(
+      url.searchParams.get("email") ? [{ email: "xmwang@example.com" }] : []
+    )
+  })
+  expect(await h.make().createUser(USER)).toEqual({
+    ok: false,
+    reason: "email_taken",
+  })
+})
+
+test("createUser maps 400 to invalid", async () => {
+  const h = harness(() => new Response("{}", { status: 400 }))
+  expect(await h.make().createUser(USER)).toEqual({
+    ok: false,
+    reason: "invalid",
+  })
+})
+
+test("leaveGroup treats 403 and 404 as gone", async () => {
+  for (const status of [403, 404]) {
+    const h = harness((url, init) =>
+      url.pathname.includes("/group-by-path/")
+        ? Response.json({ id: "g1" })
+        : new Response("", { status: init.method === "DELETE" ? status : 500 })
+    )
+    expect(await h.make().leaveGroup("u1", "/provisioning")).toBe("gone")
+  }
+  const ok = harness((url) =>
+    url.pathname.includes("/group-by-path/")
+      ? Response.json({ id: "g1" })
+      : new Response("", { status: 204 })
+  )
+  expect(await ok.make().leaveGroup("u1", "/provisioning")).toBe("ok")
+  expect(ok.calls.at(-1)?.url).toBe(`${ADMIN}/users/u1/groups/g1`)
+})
+
+test("joinGroup maps a missing group and a missing user", async () => {
+  const noGroup = harness(() => new Response("", { status: 404 }))
+  expect(await noGroup.make().joinGroup("u1", "/mail")).toBe("group_missing")
+  const noUser = harness((url) =>
+    url.pathname.includes("/group-by-path/")
+      ? Response.json({ id: "g1" })
+      : new Response("", { status: 404 })
+  )
+  expect(await noUser.make().joinGroup("u1", "/mail")).toBe("user_gone")
+})
+
+test("executeActionsEmail sends UPDATE_PASSWORD with lifespan and passes the signal", async () => {
+  let seen: { url: URL; init: RequestInit } | null = null
+  const h = harness((url, init) => {
+    seen = { url, init }
+    return new Response("", { status: 204 })
+  })
+  const controller = new AbortController()
+  const admin = h.make({
+    actionsEmail: { clientId: "portal", redirectUri: "https://p.example.test" },
+  })
+  expect(
+    await admin.executeActionsEmail("u1", {
+      lifespanSeconds: 3600,
+      signal: controller.signal,
+    })
+  ).toBe("ok")
+  const { url, init } = seen!
+  expect(init.method).toBe("PUT")
+  expect(url.pathname).toBe("/admin/realms/lab/users/u1/execute-actions-email")
+  expect(url.searchParams.get("lifespan")).toBe("3600")
+  expect(url.searchParams.get("client_id")).toBe("portal")
+  expect(url.searchParams.get("redirect_uri")).toBe("https://p.example.test")
+  expect(JSON.parse(String(init.body))).toEqual(["UPDATE_PASSWORD"])
+  controller.abort()
+  expect(init.signal?.aborted).toBe(true)
+})
+
+test("executeActionsEmail leaves out client_id and redirect_uri when unset", async () => {
+  let search = ""
+  const h = harness((url) => {
+    search = url.search
+    return new Response("", { status: 204 })
+  })
+  await h.make().executeActionsEmail("u1", {
+    lifespanSeconds: 60,
+    signal: new AbortController().signal,
+  })
+  expect(search).toBe("?lifespan=60")
+})
+
+test("executeActionsEmail maps 404 and 400", async () => {
+  const opts = { lifespanSeconds: 60, signal: new AbortController().signal }
+  expect(
+    await harness(() => new Response("", { status: 404 }))
+      .make()
+      .executeActionsEmail("u1", opts)
+  ).toBe("user_gone")
+  expect(
+    await harness(() => new Response("", { status: 400 }))
+      .make()
+      .executeActionsEmail("u1", opts)
+  ).toBe("invalid")
+})
+
+test("setEnabled, readUser and findByApplicationId map their answers", async () => {
+  const gone = harness(() => new Response("", { status: 404 }))
+  expect(await gone.make().setEnabled("u1", true)).toBe("user_gone")
+  expect(await gone.make().readUser("u1")).toBeNull()
+  const found = harness((url) =>
+    url.pathname.endsWith("/users")
+      ? Response.json(url.searchParams.get("q") ? [{ id: "u9" }] : [])
+      : Response.json({
+          username: "x",
+          email: "x@y.co",
+          enabled: true,
+          attributes: { a: ["1"] },
+        })
+  )
+  const admin = found.make()
+  expect(await admin.findByApplicationId("app-1")).toBe("u9")
+  expect(found.calls[0].url).toContain("q=portal_application_id%3Aapp-1")
+  expect(await admin.readUser("u9")).toEqual({
+    username: "x",
+    email: "x@y.co",
+    enabled: true,
+    attributes: { a: ["1"] },
+  })
+  const none = harness(() => Response.json([]))
+  expect(await none.make().findByApplicationId("app-1")).toBeNull()
+})
+
+test("span paths carry no query string", async () => {
+  const h = harness(() => Response.json([]))
+  await h.make().findByApplicationId("app-1")
+  expect(h.spans.length).toBeGreaterThan(0)
+  for (const s of h.spans) {
+    expect(JSON.stringify(s)).not.toContain("app-1")
+    expect(s.name).not.toContain("?")
+  }
+})
+
+test("provisioner and reader keep separate tokens", async () => {
+  const h = harness(() => Response.json([]))
+  const reader = h.make({ clientId: "portal" })
+  const provisioner = h.make({ clientId: "portal-provisioner" })
+  await reader.emailExists(email("a@b.co"))
+  await provisioner.findByApplicationId("app-1")
+  expect(h.tokens()).toBe(2)
+  expect(h.clientIds).toEqual(["portal", "portal-provisioner"])
+})
+
+const ENV = [
+  "KEYCLOAK_PROVISIONER_CLIENT_ID",
+  "KEYCLOAK_PROVISIONER_CLIENT_SECRET",
+] as const
+const saved = Object.fromEntries(ENV.map((k) => [k, process.env[k]]))
+afterEach(() => {
+  for (const k of ENV) {
+    if (saved[k] === undefined) delete process.env[k]
+    else process.env[k] = saved[k]
+  }
+})
+
+test("keycloakProvisioner() throws when the env is missing", () => {
+  for (const k of ENV) delete process.env[k]
+  expect(() => keycloakProvisioner()).toThrow(
+    "KEYCLOAK_PROVISIONER_CLIENT_ID and _SECRET must be set"
+  )
+  process.env.KEYCLOAK_PROVISIONER_CLIENT_ID = "portal-provisioner"
+  expect(() => keycloakProvisioner()).toThrow(
+    "KEYCLOAK_PROVISIONER_CLIENT_ID and _SECRET must be set"
+  )
 })
