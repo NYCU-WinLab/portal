@@ -291,3 +291,28 @@ export function deleteClientAsAdmin(clientId: string) {
       throw new Error(`Keycloak admin client DELETE ${response.status}`)
   })
 }
+
+/**
+ * Deletes the client with its registration token; when Keycloak refuses the
+ * token, removes it with the admin credential instead. Returns false when
+ * both fail on the refused token path, so an outage never blocks the caller.
+ */
+export async function deleteClientOrAdmin(
+  clientId: string,
+  rat: string,
+  onAdminError: (error: unknown) => void = console.error
+) {
+  try {
+    await deleteClient(clientId, rat)
+    return true
+  } catch (error) {
+    if (!(error instanceof RegistrationLost)) throw error
+  }
+  try {
+    await deleteClientAsAdmin(clientId)
+    return true
+  } catch (error) {
+    onAdminError(error)
+    return false
+  }
+}

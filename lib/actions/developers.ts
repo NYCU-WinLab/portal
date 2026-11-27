@@ -48,7 +48,7 @@ import {
   keycloakUserGroups,
 } from "@/lib/keycloak"
 import {
-  deleteClient,
+  deleteClientOrAdmin,
   developerApiAudience,
   registerClient,
   registrarConfigured,
@@ -646,14 +646,16 @@ export const deleteDeveloperApp = defineAction({
     await db.transaction(async (tx) => {
       const row = await lockApp(tx, id)
       if (row.keycloakRat) {
-        try {
-          await deleteClient(row.id, open(row.keycloakRat))
-        } catch (error) {
-          // Without the row the client reads nothing from portal; an admin
-          // removes the leftover Keycloak client.
-          if (!(error instanceof RegistrationLost)) throw error
-          console.error(lost(row.id).message)
-        }
+        // A lost registration token falls back to the admin credential, so
+        // no orphaned client stays behind. If that fails too, the row is
+        // still deleted (it reads nothing from portal) and an admin removes
+        // the leftover Keycloak client.
+        const removed = await deleteClientOrAdmin(
+          row.id,
+          open(row.keycloakRat),
+          (error) => console.error(error)
+        )
+        if (!removed) console.error(lost(row.id).message)
       }
       // Scope requests, grants, codes and tokens cascade from the application.
       await tx.delete(developerApps).where(eq(developerApps.id, id))
