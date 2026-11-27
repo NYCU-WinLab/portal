@@ -2,7 +2,9 @@ import { describe, expect, test } from "bun:test"
 
 import { Application, type Assignment } from "../domain/application"
 import { ProvisioningRun } from "../domain/provisioning-run"
+import { RetentionPolicy } from "../domain/policies"
 import { KeycloakUnavailable } from "../ports"
+import { MailComposer } from "../services/mail-composer"
 import { FakeKeycloak } from "../testing/fake-keycloak"
 import { FakeAuthority, FakeMailGroups } from "../testing/fakes"
 import { ADMIN, NOW, assignment, pending } from "../testing/fixtures"
@@ -12,8 +14,11 @@ import {
 } from "../testing/memory-store"
 import { StepError } from "./step-error"
 import {
+  ActivateAndMailStep,
   CreateAccountStep,
+  FinishStep,
   JoinMailGroupsStep,
+  STEP_TIMEOUT_MS,
   type ProvisioningStep,
   type StepResult,
 } from "./steps"
@@ -325,5 +330,154 @@ describe("join_mail_groups", () => {
     })
     const step = new JoinMailGroupsStep(groups, authority, settings)
     expect(await exec(h, step)).toEqual({ kind: "done" })
+  })
+})
+
+/** An application whose account already exists in /provisioning. */
+async function withAccount() {
+  const h = await setup()
+  const created = await h.keycloak.createUser({
+    username: "xmwang",
+    email: h.app.email!.value,
+    firstName: "Xiao-Ming",
+    lastName: "Wang",
+    attributes: { portal_application_id: [h.app.id] },
+    groups: ["/provisioning"],
+  })
+  if (!created.ok) throw new Error("fixture account was refused")
+  for (const g of ["/lab-member/master", "/lab-member/116"]) {
+    await h.keycloak.joinGroup(created.id, g)
+  }
+  await h.store.transaction((uow) => uow.setKeycloakId(h.app.id, created.id))
+  return { ...h, keycloakId: created.id }
+}
+
+const eventsOf = (h: H, kind: string) =>
+  h.store.events(h.app.id).filter((e) => e.kind === kind)
+
+describe("activate_and_mail", () => {
+  const retention = new RetentionPolicy()
+
+  test("enables the account and has Keycloak send the mail, twice over", async () => {
+    const h = await withAccount()
+    const step = new ActivateAndMailStep(h.keycloak, retention)
+    expect(await exec(h, step)).toEqual({ kind: "done" })
+    expect(h.keycloak.user(h.keycloakId)!.enabled).toBe(true)
+    expect(h.keycloak.mailsSent).toEqual([
+      {
+        id: h.keycloakId,
+        lifespanSeconds: retention.passwordMailLifespanSeconds(),
+      },
+    ])
+    expect(await exec(h, step)).toEqual({ kind: "done" })
+    expect(h.keycloak.user(h.keycloakId)!.enabled).toBe(true)
+  })
+
+  test("records password_mail_sent once, after Keycloak said ok", async () => {
+    const h = await withAccount()
+    const step = new ActivateAndMailStep(h.keycloak, retention)
+    await exec(h, step)
+    const sent = eventsOf(h, "password_mail_sent")
+    expect(sent).toHaveLength(1)
+    expect(sent[0]!.changes).toEqual({ trigger: "approval" })
+  })
+
+  test("a lost answer after the mail went out records nothing, then once", async () => {
+    const h = await withAccount()
+    const step = new ActivateAndMailStep(h.keycloak, retention)
+    h.keycloak.failAfterEffect("executeActionsEmail")
+    await expect(exec(h, step)).rejects.toBeInstanceOf(KeycloakUnavailable)
+    expect(eventsOf(h, "password_mail_sent")).toHaveLength(0)
+    expect(await exec(h, step)).toEqual({ kind: "done" })
+    expect(eventsOf(h, "password_mail_sent")).toHaveLength(1)
+  })
+
+  test("a refused mail is blocked and records nothing", async () => {
+    const h = await withAccount()
+    h.keycloak.misconfigureMail()
+    const reason = await blockedReason(
+      exec(h, new ActivateAndMailStep(h.keycloak, retention))
+    )
+    expect(reason).toContain("redirect_uri")
+    expect(eventsOf(h, "password_mail_sent")).toHaveLength(0)
+  })
+
+  test("a deleted account restarts the run", async () => {
+    const h = await withAccount()
+    h.keycloak.deleteUser(h.keycloakId)
+    expect(
+      await exec(h, new ActivateAndMailStep(h.keycloak, retention))
+    ).toEqual({ kind: "restart" })
+  })
+})
+
+describe("finish", () => {
+  async function ready() {
+    const h = await withAccount()
+    const authority = new FakeAuthority({
+      notifieeEmails: ["line1@winlab.tw", "line2@winlab.tw"],
+    })
+    const composer = new MailComposer({
+      siteUrl: "https://portal.example.test",
+      resetPasswordUrl: "https://id.example.test/reset",
+    })
+    const step = new FinishStep(h.keycloak, h.keycloak, composer, authority)
+    return { h, step }
+  }
+  const outbox = (h: H) =>
+    h.store.outbox().map((m) => ({ kind: m.mail.kind, to: m.mail.to }))
+
+  test("leaves /provisioning, accepts, forgets caches and queues the mails", async () => {
+    const { h, step } = await ready()
+    expect(await exec(h, step)).toEqual({ kind: "done" })
+    const user = h.keycloak.user(h.keycloakId)!
+    expect([...user.groups].sort()).toEqual([
+      "/lab-member/116",
+      "/lab-member/master",
+    ])
+    expect((await reload(h)).status).toBe("accepted")
+    expect(h.keycloak.cacheForgets).toBe(1)
+    expect(outbox(h)).toEqual([
+      { kind: "approved", to: h.app.email!.value },
+      { kind: "notifiee", to: "line1@winlab.tw" },
+      { kind: "notifiee", to: "line2@winlab.tw" },
+    ])
+  })
+
+  test("a failure after leaving /provisioning finishes on the rerun with one set of mails", async () => {
+    const { h, step } = await ready()
+    h.keycloak.failAfterEffect("leaveGroup")
+    await expect(exec(h, step)).rejects.toBeInstanceOf(KeycloakUnavailable)
+    expect((await reload(h)).status).toBe("provisioning")
+    expect(await exec(h, step)).toEqual({ kind: "done" })
+    expect((await reload(h)).status).toBe("accepted")
+    expect(outbox(h)).toHaveLength(3)
+    expect(h.keycloak.user(h.keycloakId)!.groups.has("/provisioning")).toBe(
+      false
+    )
+  })
+
+  test("a deleted account counts as having left", async () => {
+    const { h, step } = await ready()
+    h.keycloak.deleteUser(h.keycloakId)
+    expect(await exec(h, step)).toEqual({ kind: "done" })
+    expect((await reload(h)).status).toBe("accepted")
+  })
+
+  test("running it on an accepted application changes nothing more", async () => {
+    const { h, step } = await ready()
+    await exec(h, step)
+    await exec(h, step)
+    expect(outbox(h)).toHaveLength(3)
+    expect(h.keycloak.cacheForgets).toBe(1)
+  })
+})
+
+test("the activate step waits longer than the others", () => {
+  expect(STEP_TIMEOUT_MS).toEqual({
+    create_account: 15_000,
+    join_mail_groups: 15_000,
+    activate_and_mail: 30_000,
+    finish: 15_000,
   })
 })

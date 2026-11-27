@@ -24,6 +24,7 @@ export class FakeKeycloak implements KeycloakDirectory, KeycloakProvisioner {
   private readonly groups = new Set<string>()
   private readonly failures = new Map<Method, number>()
   private readonly errors = new Map<Method, Error>()
+  private readonly lateFailures = new Map<Method, number>()
   private badMail = false
 
   addGroup(path: string): void {
@@ -52,6 +53,13 @@ export class FakeKeycloak implements KeycloakDirectory, KeycloakProvisioner {
     if (error) this.errors.set(method, error)
     else this.errors.delete(method)
   }
+  /**
+   * The next `times` calls of the method do their work, then throw
+   * KeycloakUnavailable: the answer was lost after the effect landed.
+   */
+  failAfterEffect(method: Method, times = 1): void {
+    this.lateFailures.set(method, times)
+  }
   misconfigureMail(on = true): void {
     this.badMail = on
   }
@@ -64,6 +72,14 @@ export class FakeKeycloak implements KeycloakDirectory, KeycloakProvisioner {
         this.errors.get(method) ??
         new KeycloakUnavailable(`fake keycloak: ${method} unavailable`)
       )
+    }
+  }
+
+  private lateGate(method: Method): void {
+    const left = this.lateFailures.get(method) ?? 0
+    if (left > 0) {
+      this.lateFailures.set(method, left - 1)
+      throw new KeycloakUnavailable(`fake keycloak: ${method} answer lost`)
     }
   }
 
@@ -145,6 +161,7 @@ export class FakeKeycloak implements KeycloakDirectory, KeycloakProvisioner {
     const u = this.users.get(id)
     if (!u) return "gone" as const
     u.groups.delete(path)
+    this.lateGate("leaveGroup")
     return "ok" as const
   }
   async setEnabled(id: string, enabled: boolean) {
@@ -162,6 +179,7 @@ export class FakeKeycloak implements KeycloakDirectory, KeycloakProvisioner {
     if (!this.users.has(id)) return "user_gone" as const
     if (this.badMail) return "invalid" as const
     this.mailsSent.push({ id, lifespanSeconds: opts.lifespanSeconds })
+    this.lateGate("executeActionsEmail")
     return "ok" as const
   }
 }
