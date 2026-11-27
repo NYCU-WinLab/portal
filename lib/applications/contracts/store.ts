@@ -102,7 +102,6 @@ async function saveRun(store: ApplicationStore, run: ProvisioningRun) {
 
 const ALL_STEPS = [
   "create_account",
-  "join_keycloak_groups",
   "join_mail_groups",
   "activate_and_mail",
   "finish",
@@ -447,29 +446,6 @@ export function applicationStoreContract(
       expect(kept?.tokenCreatedAt).toEqual(NOW)
     })
 
-    test("byToken reports releasedAt from the run", async () => {
-      const s = await subject()
-      const tokens = new SequentialTokens()
-      const a = await seedProvisioning(s, "released")
-      const token = tokens.generate()
-      await s.store.transaction((uow) =>
-        uow.putToken(a.id, "access", token.hash, NOW)
-      )
-      expect(
-        (await s.store.reader.byToken(token.hash, "access"))?.releasedAt
-      ).toBeNull()
-
-      const run = completeAll(ProvisioningRun.start(a.id, NOW), at(1))
-      await saveRun(s.store, run.finish(at(2), at(3)))
-      expect(
-        (await s.store.reader.byToken(token.hash, "access"))?.releasedAt
-      ).toBeNull()
-      await saveRun(s.store, run.finish(at(2), at(3)).release(at(HOUR)))
-      expect(
-        (await s.store.reader.byToken(token.hash, "access"))?.releasedAt
-      ).toEqual(at(HOUR))
-    })
-
     test("lockByEmail returns the newest application in the given statuses", async () => {
       const s = await subject()
       const email = Email.parse("again@example.com")
@@ -489,7 +465,7 @@ export function applicationStoreContract(
       ).toBeNull()
     })
 
-    test("claimDue returns a due run and skips blocked, released or future ones", async () => {
+    test("claimDue returns a due run and skips blocked, finished or future ones", async () => {
       const s = await subject()
       const now = at(DAY)
       const blocked = await seedProvisioning(s, "blocked")
@@ -501,12 +477,10 @@ export function applicationStoreContract(
           NOW
         )
       )
-      const released = await seedProvisioning(s, "released")
+      const finished = await seedProvisioning(s, "finished")
       await saveRun(
         s.store,
-        completeAll(ProvisioningRun.start(released.id, NOW), NOW)
-          .finish(NOW, NOW)
-          .release(NOW)
+        completeAll(ProvisioningRun.start(finished.id, NOW), NOW).finish(NOW)
       )
       const future = await seedProvisioning(s, "future")
       await saveRun(
@@ -530,12 +504,24 @@ export function applicationStoreContract(
       ).toBeNull()
     })
 
+    test("claimDue skips finished runs", async () => {
+      const s = await subject()
+      const a = await seedProvisioning(s, "finished-only")
+      await saveRun(
+        s.store,
+        completeAll(ProvisioningRun.start(a.id, NOW), NOW).finish(NOW)
+      )
+      expect(
+        await s.store.transaction((uow) => uow.claimDue(at(DAY)))
+      ).toBeNull()
+    })
+
     test("saveRun round-trips completed steps and restart removes them", async () => {
       const s = await subject()
       const a = await seedProvisioning(s, "steps")
       const run = ProvisioningRun.start(a.id, NOW)
         .complete("create_account", at(1))
-        .complete("join_keycloak_groups", at(2))
+        .complete("join_mail_groups", at(2))
         .fail({ blocked: false, reason: "flaky" }, retry, at(3))
       await saveRun(s.store, run)
       const loaded = await s.store.transaction((uow) => uow.lockRun(a.id))
@@ -562,39 +548,20 @@ export function applicationStoreContract(
       expect(fresh?.snapshot.completed).toEqual([])
     })
 
-    test("passwordMail derives from events in id order", async () => {
-      const s = await subject()
-      const a = await seedPending(s.store)
-      const admin = { kind: "admin" as const, id: s.adminId }
-      await s.store.transaction(async (uow) => {
-        await uow.appendEvent(a.id, "password_mail_sent", null, SYSTEM, NOW)
-        await uow.appendEvent(a.id, "password_mail_requested", null, admin, NOW)
-      })
-      const state = await s.store.reader.passwordMail(a.id)
-      expect(state.pendingRequest).toEqual(admin)
-      expect(state.lastSentAt).toEqual(NOW)
-      const inTx = await s.store.transaction((uow) => uow.passwordMail(a.id))
-      expect(inTx).toEqual(state)
-    })
-
     test("an event whose admin was deleted reads back with a null id", async () => {
       const s = await subject()
       const a = await seedPending(s.store)
       const admin = { kind: "admin" as const, id: s.adminId }
       await s.store.transaction(async (uow) => {
-        await uow.appendEvent(a.id, "password_mail_requested", null, admin, NOW)
+        await uow.appendEvent(a.id, "provision_retried", null, admin, NOW)
       })
       await s.forgetAdmin(s.adminId)
       const gone = { kind: "admin" as const, id: null }
-      const state = await s.store.reader.passwordMail(a.id)
-      expect(state.pendingRequest).toEqual(gone)
-      const inTx = await s.store.transaction((uow) => uow.passwordMail(a.id))
-      expect(inTx).toEqual(state)
       const row = (await s.store.reader.list({ closed: false })).find(
         (r) => r.application.id === a.id
       )
       expect(row?.events.at(-1)).toMatchObject({
-        kind: "password_mail_requested",
+        kind: "provision_retried",
         actor: gone,
       })
     })

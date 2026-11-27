@@ -203,7 +203,7 @@ const item = async (h: H, id: string, closed = false) => {
   return found
 }
 
-/** An accepted application whose run is finished (not released). */
+/** An accepted application whose run is finished. */
 async function accepted(h: H) {
   const app = await seed(h)
   await h.service.accept(ACCOUNTS, app.id, app.version, assignment())
@@ -215,7 +215,7 @@ async function accepted(h: H) {
     await uow.save(finished)
     let run = ProvisioningRun.start(app.id, now)
     for (const step of STEP_NAMES) run = run.complete(step, now)
-    await uow.saveRun(run.finish(now, now))
+    await uow.saveRun(run.finish(now))
   })
   return app
 }
@@ -241,7 +241,6 @@ describe("list", () => {
       assignment: null,
       usernameTaken: false,
       provisioning: null,
-      passwordMail: null,
     })
     expect(accountsView.profile?.username).toBe("abcdef")
     expect(accountsView.history.map((x) => [x.id, x.status])).toEqual([
@@ -363,42 +362,22 @@ describe("list", () => {
     expect(items.every((i) => i.usernameTaken === null)).toBe(true)
   })
 
-  test("open lists accepted applications until released; closed has the rest", async () => {
+  test("open lists the active ones; closed has accepted and the rest", async () => {
     const h = await setup()
     const done = await accepted(h)
     const rejected = await seed(h)
     await h.service.reject(ACCOUNTS, rejected.id)
     const waiting = await seed(h)
-    const open = (await h.service.list(ACCOUNTS, { closed: false })).map(
-      (i) => i.id
-    )
-    expect(open).toContain(done.id)
-    expect(open).toContain(waiting.id)
-    expect(open).not.toContain(rejected.id)
-    expect(
-      (await h.service.list(ACCOUNTS, { closed: true })).map((i) => i.id)
-    ).toEqual([rejected.id])
+    const ids = async (closed: boolean) =>
+      (await h.service.list(ACCOUNTS, { closed })).map((i) => i.id)
+    expect(await ids(false)).toEqual([waiting.id])
+    expect((await ids(true)).sort()).toEqual([done.id, rejected.id].sort())
 
-    const view = await item(h, done.id)
-    expect(view.passwordMail).toMatchObject({
-      lastSentAt: null,
-      passwordSet: false,
-      canResend: true,
-    })
+    const view = await item(h, done.id, true)
     expect(view.provisioning?.steps.map((s) => s.name)).toEqual([...STEP_NAMES])
     expect(view.assignment?.mailGroups).toEqual([
       { groupId: "g-all", address: "all@winlab.tw", addedAt: null },
     ])
-
-    await h.store.transaction(async (uow) => {
-      await uow.saveRun((await uow.lockRun(done.id))!.release(h.clock.now()))
-    })
-    expect(
-      (await h.service.list(ACCOUNTS, { closed: false })).map((i) => i.id)
-    ).not.toContain(done.id)
-    expect(
-      (await h.service.list(ACCOUNTS, { closed: true })).map((i) => i.id)
-    ).toContain(done.id)
   })
 
   test("events of a deleted processor keep their kind and lose the id", async () => {
@@ -997,7 +976,6 @@ describe("retryProvisioning", () => {
         )
       ).field
     ).toBe("username")
-    await block(h, app.id, ["join_keycloak_groups"])
     expect(
       (
         await refusal(
@@ -1184,57 +1162,5 @@ describe("reject", () => {
       "outbox down"
     )
     expect((await item(h, app.id)).status).toBe("pending")
-  })
-})
-
-describe("resendPasswordMail", () => {
-  test("asks the worker for a mail as the admin, once an hour", async () => {
-    const h = await setup()
-    const app = await accepted(h)
-    expect(await h.service.resendPasswordMail(ACCOUNTS, app.id)).toEqual({
-      ok: true,
-    })
-    const view = await item(h, app.id)
-    expect(
-      view.events.filter((e) => e.kind === "password_mail_requested")
-    ).toMatchObject([{ actorKind: "admin", actorId: ACCOUNTS }])
-    expect(view.passwordMail?.canResend).toBe(false)
-    expect(await code(h.service.resendPasswordMail(ACCOUNTS, app.id))).toBe(
-      "rate_limited"
-    )
-    h.clock.advance(HOUR)
-    await h.service.resendPasswordMail(ACCOUNTS, app.id)
-  })
-
-  test("shares the hourly limit with the applicant's own request", async () => {
-    const h = await setup()
-    const app = await accepted(h)
-    await h.store.transaction((uow) =>
-      uow.appendEvent(
-        app.id,
-        "password_mail_requested",
-        null,
-        { kind: "applicant" },
-        h.clock.now()
-      )
-    )
-    expect(await code(h.service.resendPasswordMail(ACCOUNTS, app.id))).toBe(
-      "rate_limited"
-    )
-  })
-
-  test("a released account and a not yet accepted application are refused", async () => {
-    const h = await setup()
-    const app = await accepted(h)
-    await h.store.transaction(async (uow) => {
-      await uow.saveRun((await uow.lockRun(app.id))!.release(h.clock.now()))
-    })
-    expect(await code(h.service.resendPasswordMail(ACCOUNTS, app.id))).toBe(
-      "password_already_set"
-    )
-    const waiting = await seed(h)
-    expect(await code(h.service.resendPasswordMail(ACCOUNTS, waiting.id))).toBe(
-      "wrong_state"
-    )
   })
 })

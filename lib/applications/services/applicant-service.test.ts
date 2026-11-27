@@ -186,17 +186,9 @@ async function accept(h: H, id: string) {
         blockedAt: null,
         startedAt: now,
         finishedAt: now,
-        releasedAt: null,
         completed: STEP_NAMES.map((step) => ({ step, at: now })),
       })
     )
-  })
-}
-
-async function release(h: H, id: string) {
-  await h.store.transaction(async (uow) => {
-    const run = (await uow.lockRun(id))!
-    await uow.saveRun(run.release(h.clock.now()))
   })
 }
 
@@ -538,29 +530,16 @@ describe("getStatus", () => {
       closedAt: null,
       changeRequest: null,
       closure: null,
-      passwordMail: null,
     })
     expect(JSON.stringify(view)).not.toContain("王小明")
   })
 
-  test("accepted without a password never expires; released, 30 days", async () => {
+  test("an accepted application's link lasts 30 days after it closed", async () => {
     const h = await setup()
     const { access, id } = await confirmed(h)
     await accept(h, id)
-    h.clock.advance(60 * DAY)
-    const view = await h.service.getStatus(access)
-    expect(view.status).toBe("accepted")
-    expect(view.passwordMail).toEqual({
-      lastSentAt: null,
-      expiresAt: null,
-      passwordSet: false,
-      canResend: true,
-    })
-    await release(h, id)
     h.clock.advance(30 * DAY - 1)
-    expect((await h.service.getStatus(access)).passwordMail?.passwordSet).toBe(
-      true
-    )
+    expect((await h.service.getStatus(access)).status).toBe("accepted")
     h.clock.advance(1)
     expect(await refused(h.service.getStatus(access))).toBe("link_invalid")
   })
@@ -723,74 +702,6 @@ describe("getForEdit and resubmit", () => {
         })
       )
     ).toBe("edit_window_closed")
-  })
-})
-
-describe("requestPasswordMail", () => {
-  test("records the request and wakes the run; twice within an hour is rate_limited", async () => {
-    const h = await setup()
-    const { access, id } = await confirmed(h)
-    await accept(h, id)
-    h.clock.advance(HOUR)
-    expect(await h.service.requestPasswordMail(access)).toEqual({ ok: true })
-    expect(h.store.events(id).at(-1)).toMatchObject({
-      kind: "password_mail_requested",
-      actor: { kind: "applicant" },
-    })
-    const state = await h.store.reader.passwordMail(id)
-    expect(state.pendingRequest).toEqual({ kind: "applicant" })
-    await h.store.transaction(async (uow) => {
-      expect((await uow.lockRun(id))!.nextAt).toEqual(h.clock.now())
-    })
-    h.clock.advance(HOUR - 1)
-    expect(await refused(h.service.requestPasswordMail(access))).toBe(
-      "rate_limited"
-    )
-    h.clock.advance(1)
-    expect(await h.service.requestPasswordMail(access)).toEqual({ ok: true })
-  })
-
-  test("a processor's request counts toward the hour", async () => {
-    const h = await setup()
-    const { access, id } = await confirmed(h)
-    await accept(h, id)
-    await h.store.transaction((uow) =>
-      uow.appendEvent(id, "password_mail_requested", null, ADMIN, h.clock.now())
-    )
-    expect(await refused(h.service.requestPasswordMail(access))).toBe(
-      "rate_limited"
-    )
-  })
-
-  test("a deleted processor's request still reads and counts toward the hour", async () => {
-    const h = await setup()
-    const { access, id } = await confirmed(h)
-    await accept(h, id)
-    await h.store.transaction((uow) =>
-      uow.appendEvent(id, "password_mail_requested", null, ADMIN, h.clock.now())
-    )
-    h.store.forgetAdmin(ADMIN.id)
-    expect((await h.service.getStatus(access)).passwordMail?.canResend).toBe(
-      false
-    )
-    expect(await refused(h.service.requestPasswordMail(access))).toBe(
-      "rate_limited"
-    )
-    h.clock.advance(HOUR)
-    expect(await h.service.requestPasswordMail(access)).toEqual({ ok: true })
-  })
-
-  test("after release it is password_already_set; before acceptance wrong_state", async () => {
-    const h = await setup()
-    const { access, id } = await confirmed(h)
-    expect(await refused(h.service.requestPasswordMail(access))).toBe(
-      "wrong_state"
-    )
-    await accept(h, id)
-    await release(h, id)
-    expect(await refused(h.service.requestPasswordMail(access))).toBe(
-      "password_already_set"
-    )
   })
 })
 

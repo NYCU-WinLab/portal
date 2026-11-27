@@ -35,7 +35,6 @@ describe("service keys", () => {
         "resubmit_lab_application",
         "send_invitation",
         "send_lab_application_link",
-        "send_lab_application_password_mail",
         "set_apply_site_url",
         "submit_lab_application",
         "withdraw_lab_application",

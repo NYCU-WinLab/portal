@@ -10,7 +10,6 @@ export type KeycloakSubject = {
   directory: KeycloakDirectory
   provisioner: KeycloakProvisioner
   addGroup(path: string): Promise<void>
-  setPassword(id: string): Promise<void>
   deleteUser(id: string): Promise<void>
 }
 
@@ -97,16 +96,6 @@ export function keycloakContract(make: () => Promise<KeycloakSubject>) {
         "user_gone"
       )
       expect(await s.provisioner.readUser(id)).toBeNull()
-    })
-
-    test("hasPassword is false until set and user_gone after delete", async () => {
-      const s = await make()
-      const id = await created(s)
-      expect(await s.provisioner.hasPassword(id)).toBe(false)
-      await s.setPassword(id)
-      expect(await s.provisioner.hasPassword(id)).toBe(true)
-      await s.deleteUser(id)
-      expect(await s.provisioner.hasPassword(id)).toBe("user_gone")
     })
 
     test("directory reads what was created", async () => {

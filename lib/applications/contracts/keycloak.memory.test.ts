@@ -8,7 +8,6 @@ keycloakContract(async () => {
     directory: kc,
     provisioner: kc,
     addGroup: async (path) => kc.addGroup(path),
-    setPassword: async (id) => kc.setPassword(id),
     deleteUser: async (id) => kc.deleteUser(id),
   }
 })
