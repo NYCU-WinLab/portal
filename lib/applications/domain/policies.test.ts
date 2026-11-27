@@ -94,6 +94,20 @@ test("other retention values", () => {
   ).toBe(false)
 })
 
+test("retention cutoffs: an item is due when its time is at or before the cutoff", () => {
+  const r = new RetentionPolicy()
+  expect(r.verifyCutoff(T)).toEqual(at(-DAY))
+  expect(r.autoRejectCutoff(T)).toEqual(at(-14 * DAY))
+  expect(r.purgeCutoff(T)).toEqual(at(-90 * DAY))
+  expect(r.digestCutoff(T)).toEqual(at(-3 * DAY))
+  // Each cutoff agrees with the matching due check.
+  expect(r.purgeDue(r.purgeCutoff(T), T)).toBe(true)
+  expect(r.purgeDue(at(-90 * DAY + 1), T)).toBe(false)
+  expect(r.autoRejectDue(r.autoRejectCutoff(T), T)).toBe(true)
+  expect(r.digestOverdue(r.digestCutoff(T), T)).toBe(true)
+  expect(r.verifyValid(r.verifyCutoff(T), T)).toBe(false)
+})
+
 test.each([
   [1, MIN],
   [2, 5 * MIN],
