@@ -4,7 +4,17 @@
 import { AsyncLocalStorage } from "node:async_hooks"
 import { createHmac } from "node:crypto"
 
-import { and, asc, eq, gt, inArray, isNull, lte, sql } from "drizzle-orm"
+import {
+  and,
+  asc,
+  eq,
+  gt,
+  inArray,
+  isNotNull,
+  isNull,
+  lte,
+  sql,
+} from "drizzle-orm"
 
 import { scrubbed, scrubbedMethods } from "@/lib/actions/applications/db-errors"
 import { queueMail } from "@/lib/actions/mail"
@@ -555,6 +565,118 @@ class DrizzleUnitOfWork implements UnitOfWork {
     await this.tx
       .delete(labApplications)
       .where(eq(labApplications.id, applicationId))
+  }
+
+  async staleUnverified(verifyTokenBefore: Date, limit: number) {
+    this.usable()
+    // select ... from lab_applications inner join lab_application_tokens ...
+    // order by token.created_at, id limit $n for update of lab_applications skip locked
+    const rows = await this.tx
+      .select({ id: labApplications.id })
+      .from(labApplications)
+      .innerJoin(
+        labApplicationTokens,
+        and(
+          eq(labApplicationTokens.applicationId, labApplications.id),
+          eq(labApplicationTokens.purpose, "verify")
+        )
+      )
+      .where(
+        and(
+          eq(labApplications.status, "unverified"),
+          lte(labApplicationTokens.createdAt, verifyTokenBefore)
+        )
+      )
+      .orderBy(asc(labApplicationTokens.createdAt), asc(labApplications.id))
+      .limit(limit)
+      .for("update", { of: labApplications, skipLocked: true })
+    return rows.map((r) => r.id)
+  }
+
+  async overdueChangeRequests(dueBefore: Date, limit: number) {
+    this.usable()
+    const rows = await this.tx
+      .select({ id: labApplications.id })
+      .from(labApplications)
+      .innerJoin(
+        labApplicationChangeRequests,
+        and(
+          eq(labApplicationChangeRequests.applicationId, labApplications.id),
+          isNull(labApplicationChangeRequests.closedAt)
+        )
+      )
+      .where(
+        and(
+          eq(labApplications.status, "changes_requested"),
+          lte(labApplicationChangeRequests.dueAt, dueBefore)
+        )
+      )
+      .orderBy(asc(labApplicationChangeRequests.dueAt), asc(labApplications.id))
+      .limit(limit)
+      .for("update", { of: labApplications, skipLocked: true })
+    return rows.map((r) => r.id)
+  }
+
+  async purgeDue(closedBefore: Date, limit: number) {
+    this.usable()
+    const rows = await this.tx
+      .select({ id: labApplications.id })
+      .from(labApplications)
+      .where(
+        and(
+          isNotNull(labApplications.closedAt),
+          isNull(labApplications.purgedAt),
+          lte(labApplications.closedAt, closedBefore)
+        )
+      )
+      .orderBy(asc(labApplications.closedAt), asc(labApplications.id))
+      .limit(limit)
+      .for("update", { skipLocked: true })
+    return rows.map((r) => r.id)
+  }
+
+  async deleteVerifyTokens(createdBefore: Date, limit: number) {
+    this.usable()
+    const deleted = await this.tx
+      .delete(labApplicationTokens)
+      .where(
+        sql`(application_id, purpose) in (
+          select t.application_id, t.purpose
+          from lab_application_tokens t
+          join lab_applications a on a.id = t.application_id
+          where t.purpose = 'verify'
+            and t.created_at <= ${createdBefore}
+            and a.status <> 'unverified'
+          order by t.created_at, t.application_id
+          limit ${limit}
+          for update of t skip locked
+        )`
+      )
+      .returning({ applicationId: labApplicationTokens.applicationId })
+    return deleted.length
+  }
+
+  async deleteMailLog(before: Date) {
+    this.usable()
+    const deleted = await this.tx
+      .delete(applicationMailLog)
+      .where(lte(applicationMailLog.createdAt, before))
+      .returning({ id: applicationMailLog.id })
+    return deleted.length
+  }
+
+  async awaitingReview(verifiedBefore: Date) {
+    this.usable()
+    const [row] = await this.tx
+      .select({ n: sql<number>`count(*)::int` })
+      .from(labApplications)
+      .where(
+        and(
+          eq(labApplications.status, "pending"),
+          lte(labApplications.verifiedAt, verifiedBefore)
+        )
+      )
+    return row.n
   }
 
   // `at` is unused: purging only clears data.

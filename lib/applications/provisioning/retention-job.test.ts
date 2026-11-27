@@ -215,7 +215,7 @@ describe("RetentionJob", () => {
     ).toBe("changes_requested")
     const mails = ctx.store.outbox().filter((m) => m.mail.kind === "rejected")
     expect(mails.map((m) => m.applicationId)).toEqual([old.id])
-    expect(mails[0].mail.to).toBe(old.email?.value)
+    expect(mails[0].mail.to).toBe(old.email!.value)
     await ctx.job.tick()
     expect(
       ctx.store.outbox().filter((m) => m.mail.kind === "rejected")
@@ -244,9 +244,12 @@ describe("RetentionJob", () => {
       await uow.saveRun(run)
       await uow.setKeycloakId(accepted.id, KC)
     })
+    const withAccount = await ctx.store.transaction((uow) =>
+      uow.lock(accepted.id)
+    )
     const done = await save(
       ctx,
-      accepted.finish(new Date(cutoff.getTime() - SEC))
+      withAccount!.finish(new Date(cutoff.getTime() - SEC))
     )
     await ctx.job.tick()
 

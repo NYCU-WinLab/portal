@@ -107,6 +107,26 @@ export class RetentionPolicy {
     return Math.floor(this.settings.passwordMailTtlMs / SECOND)
   }
 
+  /** Unverified applications and verify tokens at or before this are due. */
+  verifyCutoff(now: Date): Date {
+    return shift(now, -this.settings.verifyTtlMs)
+  }
+
+  /** Change requests due at or before this are auto-rejected. */
+  autoRejectCutoff(now: Date): Date {
+    return shift(now, -this.settings.autoRejectAfterDueMs)
+  }
+
+  /** Applications closed at or before this are purged. */
+  purgeCutoff(now: Date): Date {
+    return shift(now, -this.settings.purgeAfterCloseMs)
+  }
+
+  /** Pending applications verified at or before this wait for the digest. */
+  digestCutoff(now: Date): Date {
+    return shift(now, -this.settings.digestAfterMs)
+  }
+
   mailLogCutoff(now: Date): Date {
     return shift(now, -this.settings.mailLogMs)
   }

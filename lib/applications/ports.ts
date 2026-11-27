@@ -166,6 +166,28 @@ export interface UnitOfWork {
    * table and the profile.
    */
   purge(applicationId: string, at: Date): Promise<void>
+  /**
+   * The retention selections lock the rows they return (`for update skip
+   * locked`) and return at most `limit` ids, oldest first. Every time bound
+   * is inclusive: a row whose time equals the bound is selected.
+   *
+   * Unverified applications whose verify token was created at or before the
+   * bound.
+   */
+  staleUnverified(verifyTokenBefore: Date, limit: number): Promise<string[]>
+  /** `changes_requested` applications whose open request is due at or before the bound. */
+  overdueChangeRequests(dueBefore: Date, limit: number): Promise<string[]>
+  /** Applications closed at or before the bound and not yet purged. */
+  purgeDue(closedBefore: Date, limit: number): Promise<string[]>
+  /**
+   * Deletes up to `limit` verify tokens created at or before the bound, of
+   * applications that are no longer unverified. Returns how many.
+   */
+  deleteVerifyTokens(createdBefore: Date, limit: number): Promise<number>
+  /** Deletes the rate log entries at or before the bound. Returns how many. */
+  deleteMailLog(before: Date): Promise<number>
+  /** Counts `pending` applications verified at or before the bound. */
+  awaitingReview(verifiedBefore: Date): Promise<number>
 }
 
 export interface SettingsStore {
