@@ -111,7 +111,12 @@ export function fakeKeycloakFetch(state: FakeKeycloak): typeof fetch {
     if (memberships && method === "GET") {
       if (!seen(memberships[1])) return scoped ? forbidden() : empty(404)
       const u = state.user(memberships[1])!
-      return json([...u.groups].map((path) => ({ id: path, path })))
+      // Outside the boundary means out of /provisioning.
+      const paths = [...u.groups].filter(
+        (p) =>
+          !(p === "/provisioning" && state.isOutsideBoundary(memberships[1]))
+      )
+      return json(paths.map((path) => ({ id: path, path })))
     }
 
     const mail = admin.match(/^\/users\/([^/]+)\/execute-actions-email$/)

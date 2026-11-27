@@ -510,6 +510,9 @@ test("a write answered 403 is user_gone when the reader gets 404, else forbidden
       const asked: string[] = []
       const reader = harness((url) => {
         asked.push(url.pathname)
+        if (url.pathname.includes("/group-by-path/"))
+          return Response.json({ id: "g1" })
+        if (url.pathname.endsWith("/groups")) return Response.json([])
         return readerStatus === 404
           ? status(404)
           : Response.json({
@@ -518,16 +521,48 @@ test("a write answered 403 is user_gone when the reader gets 404, else forbidden
               enabled: true,
             })
       })
-      const provisioner = harness((url) =>
-        url.pathname.includes("/group-by-path/")
-          ? Response.json({ id: "g1" })
-          : status(403)
-      )
+      const provisioner = harness(() => status(403))
       const admin = provisioner.make({ reader: reader.make() })
       expect([name, await write(admin)]).toEqual([name, want])
-      expect(asked).toEqual(["/admin/realms/lab/users/u1"])
+      const user = "/admin/realms/lab/users/u1"
+      expect(asked).toEqual(
+        name === "joinGroup"
+          ? [
+              "/admin/realms/lab/group-by-path/mail",
+              user,
+              ...(readerStatus === 404 ? [] : [`${user}/groups`]),
+            ]
+          : [user]
+      )
     }
   }
+})
+
+test("a join answered 403 names the group only while the user is still in /provisioning", async () => {
+  for (const [groups, want] of [
+    [["/provisioning"], "group_forbidden"],
+    [["/lab-member/master"], "forbidden"],
+  ] as const) {
+    const reader = harness((url) => {
+      if (url.pathname.includes("/group-by-path/"))
+        return Response.json({ id: "g1" })
+      if (url.pathname.endsWith("/groups"))
+        return Response.json(groups.map((path) => ({ path })))
+      return Response.json({ username: "x", email: "x@y.co", enabled: true })
+    })
+    const admin = harness(() => status(403)).make({ reader: reader.make() })
+    expect(await admin.joinGroup("u1", "/lab-member/118")).toBe(want)
+  }
+})
+
+test("a group the provisioner cannot see is found through the reader", async () => {
+  const reader = harness(() => status(404))
+  const provisioner = harness(() => status(403))
+  const admin = provisioner.make({ reader: reader.make() })
+  expect(await admin.joinGroup("u1", "/lab-member/118")).toBe("group_missing")
+  expect(provisioner.calls.some((c) => c.url.includes("group-by-path"))).toBe(
+    false
+  )
 })
 
 test("a write answered 403 stays forbidden without a reader to ask", async () => {

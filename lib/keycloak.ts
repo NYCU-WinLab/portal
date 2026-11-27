@@ -601,7 +601,7 @@ export class KeycloakAdmin implements KeycloakDirectory, KeycloakProvisioner {
       `/users/${encodeURIComponent(id)}/groups/${encodeURIComponent(groupId)}`
     )
     if (response.status === 404) return "user_gone" as const
-    if (response.status === 403) return this.whyForbidden(id)
+    if (response.status === 403) return this.whyJoinForbidden(id)
     if (!response.ok) throw new Error(`Keycloak join group ${response.status}`)
     return "ok" as const
   }
@@ -667,10 +667,38 @@ export class KeycloakAdmin implements KeycloakDirectory, KeycloakProvisioner {
     return seen === null ? "user_gone" : "forbidden"
   }
 
-  /** The group's id, or null when no group has this path. */
+  /**
+   * A join answered 403 although the reader still sees the user: either the
+   * user left /provisioning ("forbidden") or the provisioner has no
+   * permission on the target group ("group_forbidden", e.g. a new cohort
+   * not yet added to it). The reader's view of the user's groups tells them
+   * apart.
+   */
+  private async whyJoinForbidden(
+    id: string
+  ): Promise<"user_gone" | "forbidden" | "group_forbidden"> {
+    const reader = this.config.reader
+    if (!reader) return "forbidden"
+    if ((await reader.readUser(id)) === null) return "user_gone"
+    const memberOf = await reader.get<{ path: string }[]>(
+      `/users/${encodeURIComponent(id)}/groups`,
+      undefined,
+      true
+    )
+    if (memberOf === null) return "user_gone"
+    return memberOf.some((g) => g.path === "/provisioning")
+      ? "group_forbidden"
+      : "forbidden"
+  }
+
+  /**
+   * The group's id, or null when no group has this path. Read through the
+   * reader (the provisioner may lack view on a group it cannot manage, which
+   * must not look like a missing group).
+   */
   private async groupId(path: string): Promise<string | null> {
     const segments = path.split("/").filter(Boolean).map(encodeURIComponent)
-    const group = await this.get<{ id: string }>(
+    const group = await (this.config.reader ?? this).get<{ id: string }>(
       `/group-by-path/${segments.join("/")}`,
       undefined,
       true

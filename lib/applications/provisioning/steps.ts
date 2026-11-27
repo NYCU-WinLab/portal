@@ -94,6 +94,11 @@ export class CreateAccountStep implements ProvisioningStep {
       const joined = await this.keycloak.joinGroup(id, group.path)
       if (joined === "user_gone") return RESTART
       if (joined === "forbidden") throw outsideProvisioning()
+      if (joined === "group_forbidden") {
+        throw StepError.blocked(
+          `portal-provisioner 沒有 ${group.path} 的管理權限，請在 Keycloak 把這個群組加進它的權限`
+        )
+      }
       if (joined === "group_missing") {
         throw StepError.blocked(`${group.what} ${group.path} 不存在`)
       }
