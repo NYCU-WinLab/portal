@@ -762,12 +762,10 @@ export class KeycloakAdmin implements KeycloakDirectory, KeycloakProvisioner {
             ...init,
             method,
             cache: "no-store",
-            signal: init.signal
-              ? AbortSignal.any([
-                  init.signal,
-                  AbortSignal.timeout(this.timeoutMs),
-                ])
-              : AbortSignal.timeout(this.timeoutMs),
+            // A caller's signal is its own deadline (the set-password mail
+            // waits on SMTP for up to the step's 30 s); the default applies
+            // only to calls that bring none.
+            signal: init.signal ?? AbortSignal.timeout(this.timeoutMs),
           })
         } catch (error) {
           throw new KeycloakUnavailable(
