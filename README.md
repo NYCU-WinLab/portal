@@ -73,6 +73,7 @@ Set these in `.env`; [.env.example](.env.example) documents every one.
 | `BETTER_AUTH_SECRET` | Signs sessions and OAuth queries; also the source of the key for the account-application mail rate-limit log (only the hash of the address is stored), so rotating it also resets that rate-limit history | required |
 | `KEYCLOAK_ISSUER` | The realm URL, e.g. `https://auth.example.com/realms/lab` | required |
 | `KEYCLOAK_CLIENT_ID`, `KEYCLOAK_CLIENT_SECRET` | The portal's Keycloak client | required |
+| `KEYCLOAK_PROVISIONER_CLIENT_ID`, `KEYCLOAK_PROVISIONER_CLIENT_SECRET` | The `portal-provisioner` Keycloak client that creates accounts after approval. The provisioning worker starts only when both are set | unset (no provisioning) |
 | `KEYCLOAK_MCP_CLIENT_ID` | The public client MCP tokens must be issued to | `portal-mcp` |
 | _(not env)_ apply-site URL | The address account-application mails link to is a setting, not env: after deploy, a portal or accounts admin sets it with `set_apply_site_url` (MCP); until then applicant mails fail with 「申請網站網址尚未設定」. Old `APPLY_SITE_URL` and `APPLICATION_HASH_SECRET` lines in `.env` can be deleted | set after first deploy |
 | `PORTAL_VERSION` | Image tag | `main` |
@@ -93,6 +94,21 @@ flowchart LR
 ```
 
 Keycloak proves who a member is; the portal keeps its own session and is the authorization server for MCP, so the lab-wide realm never opens client registration. An MCP token carries the member's id and acts with exactly their permissions. Only `lib/actions`, `lib/auth` and `lib/db` may touch the database, and CI checks that every action is in the registry the MCP tools are built from.
+
+### Account provisioning and retention
+
+After a processor approves an application, a background worker in the server process provisions it in four steps, creating the account as the `portal-provisioner` client:
+
+1. `create_account`: creates a disabled user in `/provisioning`, then adds it to `/lab-member/<status>` and `/lab-member/<cohort>`.
+2. `join_mail_groups`: adds the address to the Google groups.
+3. `activate_and_mail`: enables the user; Keycloak sends the set-password mail, valid 7 days.
+4. `finish`: removes the user from `/provisioning`, marks the application accepted, and sends the approved mail (with the 忘記密碼 link) and the notifiee mail.
+
+Each step retries on its own, and the review page shows the progress and a retry. After `finish` the portal never touches the account: a password reset is Keycloak's 忘記密碼, and the portal no longer tracks or resends the set-password mail.
+
+The provisioner has no realm-management roles, only FGAP v2 group permissions: on `/provisioning` view, view-members, manage-members, manage-membership and manage-membership-of-members; on each `/lab-member/*` subgroup view and manage-membership. It cannot search users or touch existing members; reads go through the read-only `portal` client. **Each year, add the new cohort group (e.g. `/lab-member/118`) to the provisioner's manage-membership permission**: it does not inherit to subgroups, and until then provisioning of that cohort fails at `create_account`. `scripts/keycloak-test-realm.ts` and `scripts/keycloak-probe.ts` set up and probe a disposable local Keycloak (manual tools, never run against production).
+
+An hourly retention job (also in the server process) deletes applications left unverified for 24 hours and used verify tokens, auto-rejects applications 14 days past their change deadline, purges personal data 90 days after an application closes, deletes the mail log after 2 days, and at 09:00 Taipei sends a digest (a count only) of applications pending over 3 days. Each item runs in its own transaction with `skip locked`, so it never waits on a processor.
 
 ## Develop
 
