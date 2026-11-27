@@ -403,7 +403,7 @@ test("setEnabled, readUser and findByApplicationId map their answers", async () 
   )
   const admin = found.make()
   expect(await admin.findByApplicationId("app-1")).toBe("u9")
-  expect(found.calls[0].url).toContain("q=portal_application_id%3Aapp-1")
+  expect(found.calls[1].url).toContain("q=portal_application_id%3Aapp-1")
   expect(await admin.readUser("u9")).toEqual({
     username: "x",
     email: "x@y.co",

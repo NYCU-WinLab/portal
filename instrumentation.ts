@@ -44,7 +44,11 @@ export async function register() {
     "/admin/realms/"
   ).concat("/users?")
   const keycloakLookups = keycloakUsers
-    ? [`${keycloakUsers}email=`, `${keycloakUsers}username=`]
+    ? [
+        `${keycloakUsers}email=`,
+        `${keycloakUsers}username=`,
+        `${keycloakUsers}q=`,
+      ]
     : []
 
   registerOTel({

@@ -12,7 +12,9 @@ export function fakeKeycloakFetch(state: FakeKeycloak): typeof fetch {
   async function route(url: URL, init: RequestInit): Promise<Response> {
     const method = init.method ?? "GET"
     const path = url.pathname
-    const body = init.body ? (JSON.parse(String(init.body)) as unknown) : null
+    // Admin bodies are JSON; the token request is a form.
+    const raw = typeof init.body === "string" ? init.body : null
+    const body = raw ? (JSON.parse(raw) as unknown) : null
 
     if (path.endsWith("/protocol/openid-connect/token"))
       return json({ access_token: "fake", expires_in: 300 })
