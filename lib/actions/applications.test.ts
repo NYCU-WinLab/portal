@@ -58,7 +58,10 @@ async function setup() {
     settings,
     mailGroups: new FakeMailGroups({}),
     reserved: new FixedReservedNames([]),
-    mail: new MailComposer({ siteUrl: "https://portal.example.test" }),
+    mail: new MailComposer({
+      siteUrl: "https://portal.example.test",
+      resetPasswordUrl: "https://id.example.test/reset",
+    }),
     tokens: new SequentialTokens(),
     retention: new RetentionPolicy(),
     rate: new MailRatePolicy(),
@@ -82,7 +85,10 @@ async function setupSettings() {
     settings,
     mailGroups: new FakeMailGroups({}),
     reserved: new FixedReservedNames([]),
-    mail: new MailComposer({ siteUrl: "https://portal.example.test" }),
+    mail: new MailComposer({
+      siteUrl: "https://portal.example.test",
+      resetPasswordUrl: "https://id.example.test/reset",
+    }),
     tokens: new SequentialTokens(),
     retention: new RetentionPolicy(),
     rate: new MailRatePolicy(),

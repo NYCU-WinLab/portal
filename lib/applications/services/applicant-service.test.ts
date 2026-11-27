@@ -88,7 +88,10 @@ async function setup(opts: Setup = {}) {
     authority,
     settings: visible,
     reserved: new FixedReservedNames(["root"]),
-    mail: new MailComposer({ siteUrl: "https://portal.example.test" }),
+    mail: new MailComposer({
+      siteUrl: "https://portal.example.test",
+      resetPasswordUrl: "https://id.example.test/reset",
+    }),
     tokens: new SequentialTokens(),
     retention,
     rate: new MailRatePolicy(),

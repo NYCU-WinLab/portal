@@ -107,7 +107,10 @@ async function setup(opts: Setup = {}) {
   const retention = new RetentionPolicy()
   const rate = new MailRatePolicy()
   const tokens = new SequentialTokens()
-  const mail = new MailComposer({ siteUrl: "https://portal.example.test" })
+  const mail = new MailComposer({
+    siteUrl: "https://portal.example.test",
+    resetPasswordUrl: "https://id.example.test/reset",
+  })
   const service = new ReviewService({
     store: tracked,
     directory: guarded(keycloak, tx, "directory"),
