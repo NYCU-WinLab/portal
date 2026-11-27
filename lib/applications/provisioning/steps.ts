@@ -1,7 +1,10 @@
-import type { Application } from "../domain/application"
-import type { StepName } from "../domain/constants"
+import { SYSTEM, type Application } from "../domain/application"
+import { STEP_NAMES, type StepName } from "../domain/constants"
+import type { RetentionPolicy } from "../domain/policies"
 import type { ProvisioningRun } from "../domain/provisioning-run"
+import type { MailComposer } from "../services/mail-composer"
 import type {
+  KeycloakDirectory,
   KeycloakProvisioner,
   MailGroups,
   ProcessorAuthority,
@@ -187,6 +190,99 @@ export class JoinMailGroupsStep implements ProvisioningStep {
             `加入郵件群組 ${group.groupId} 失敗，稍後自動重試`
           )
       }
+    }
+    return DONE
+  }
+}
+
+/** How long the worker lets a step run before it aborts the attempt. */
+export const STEP_TIMEOUT_MS: Record<StepName, number> = Object.fromEntries(
+  STEP_NAMES.map((name) => [
+    name,
+    name === "activate_and_mail" ? 30_000 : 15_000,
+  ])
+) as Record<StepName, number>
+
+function keycloakIdOf(app: Application): string {
+  if (app.keycloakId === null) {
+    throw new Error(`application ${app.id} has no keycloak account yet`)
+  }
+  return app.keycloakId
+}
+
+/**
+ * Enables the account and has Keycloak send the set-password mail. The event
+ * is written only after Keycloak answered ok, so a lost answer sends the mail
+ * again and records it once.
+ */
+export class ActivateAndMailStep implements ProvisioningStep {
+  readonly name = "activate_and_mail" as const
+
+  constructor(
+    private readonly keycloak: KeycloakProvisioner,
+    private readonly retention: RetentionPolicy
+  ) {}
+
+  async run(ctx: StepContext): Promise<StepResult> {
+    const { application: app, uow, now, signal } = ctx
+    const id = keycloakIdOf(app)
+    if ((await this.keycloak.setEnabled(id, true)) === "user_gone") {
+      return RESTART
+    }
+    const sent = await this.keycloak.executeActionsEmail(id, {
+      lifespanSeconds: this.retention.passwordMailLifespanSeconds(),
+      signal,
+    })
+    if (sent === "user_gone") return RESTART
+    if (sent === "invalid") {
+      throw StepError.blocked(
+        "Keycloak 無法寄設定密碼信，請檢查 redirect_uri 等設定"
+      )
+    }
+    await uow.appendEvent(
+      app.id,
+      "password_mail_sent",
+      { trigger: "approval" },
+      SYSTEM,
+      now
+    )
+    return DONE
+  }
+}
+
+/**
+ * Takes the account out of /provisioning, accepts the application and queues
+ * the mails. After this the portal never touches the account again. The run
+ * itself is finished by the worker.
+ */
+export class FinishStep implements ProvisioningStep {
+  readonly name = "finish" as const
+
+  constructor(
+    private readonly keycloak: KeycloakProvisioner,
+    private readonly directory: KeycloakDirectory,
+    private readonly composer: MailComposer,
+    private readonly authority: ProcessorAuthority
+  ) {}
+
+  async run(ctx: StepContext): Promise<StepResult> {
+    const { application: app, uow, now } = ctx
+    const id = keycloakIdOf(app)
+    // "gone" counts as left: a rerun after the first leave finds nothing.
+    await this.keycloak.leaveGroup(id, PROVISIONING_GROUP)
+
+    // Accepted by an earlier attempt whose run was not marked finished.
+    if (app.status === "accepted") return DONE
+    const finished = app.finish(now)
+    if (finished.kind === "unchanged") return DONE
+    await uow.save(finished)
+    this.directory.forgetCaches()
+
+    if (!app.email) throw new Error(`application ${app.id} has no email`)
+    await uow.queueMail(app.id, this.composer.approved(app, app.email.value))
+    const notifiees = new Set(await this.authority.notifieeEmails())
+    for (const to of notifiees) {
+      await uow.queueMail(app.id, this.composer.notifiee(app, to))
     }
     return DONE
   }
