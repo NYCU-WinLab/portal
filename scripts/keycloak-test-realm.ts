@@ -117,6 +117,8 @@ async function main() {
       fromDisplayName: "WinLab test",
     },
     groups: [
+      // Submit checks usernames against /system members, as in production.
+      { name: "system" },
       { name: "provisioning" },
       {
         name: "lab-member",
