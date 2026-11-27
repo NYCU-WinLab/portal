@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import {
   APPLICANT,
-  SYSTEM,
   type Application,
   type Changed,
   type Transition,
@@ -706,10 +705,10 @@ export function applicationStoreContract(
       expect(await s.queuedMails()).toEqual([])
       const run = await s.store.transaction((uow) => uow.lockRun(a.id))
       expect(run?.error).toBeNull()
-      expect(run?.snapshot.completed).toHaveLength(5)
+      expect(run?.snapshot.completed).toHaveLength(4)
       expect(await s.changeRequestNotes(a.id)).toEqual([null])
 
-      const rows = await s.store.reader.list({ closed: false })
+      const rows = await s.store.reader.list({ closed: true })
       const row = rows.find((r) => r.application.id === a.id)
       expect(row).toBeDefined()
       const withChanges = row!.events.filter((e) => e.changes !== null)
@@ -739,7 +738,6 @@ export function applicationStoreContract(
       const accept = async (username: string, when: Date) => {
         const p = await seedProvisioning(s, username, { at: when })
         const run = completeAll(ProvisioningRun.start(p.id, when), when).finish(
-          when,
           when
         )
         await saveRun(s.store, run)
@@ -751,18 +749,18 @@ export function applicationStoreContract(
         return { id: p.id, run }
       }
       const held = await accept("held", at(4))
-      const freed = await accept("freed", at(5))
-      await saveRun(s.store, freed.run.release(at(6)))
+      const accepted = await accept("accepted", at(5))
 
       const ids = async (closed: boolean) =>
         (await s.store.reader.list({ closed })).map((r) => r.application.id)
-      expect(await ids(false)).toEqual([pendingApp.id, held.id])
-      expect(await ids(true)).toEqual([withdrawn.id, freed.id])
+      expect(await ids(false)).toEqual([pendingApp.id])
+      expect(await ids(true)).toEqual([withdrawn.id, held.id, accepted.id])
       const all = [...(await ids(false)), ...(await ids(true))]
       expect(all).not.toContain(unverified.id)
 
       const open = await s.store.reader.list({ closed: false })
-      const heldRow = open.find((r) => r.application.id === held.id)
+      const closedRows = await s.store.reader.list({ closed: true })
+      const heldRow = closedRows.find((r) => r.application.id === held.id)
       expect(heldRow?.run?.applicationId).toBe(held.id)
       const eventIds = heldRow!.events.map((e) => e.id)
       expect(eventIds).toEqual([...eventIds].sort((x, y) => x - y))

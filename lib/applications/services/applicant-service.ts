@@ -37,11 +37,9 @@ import type {
   EditView,
   MutationResult,
   OkResult,
-  PasswordMailView,
   WithdrawResult,
 } from "../views"
 import type { MailComposer } from "./mail-composer"
-import { passwordMailView, requestPasswordMail } from "./password-mail-request"
 
 export type SubmitForm = {
   email: string
@@ -229,17 +227,6 @@ export class ApplicantService {
       "access"
     )
     const app = this.accessible(found, now).application
-    const releasedAt = found?.releasedAt ?? null
-    let passwordMail: PasswordMailView | null = null
-    if (app.status === "accepted") {
-      passwordMail = passwordMailView(
-        await this.d.store.reader.passwordMail(app.id),
-        releasedAt,
-        this.d.retention,
-        this.d.rate,
-        now
-      )
-    }
     const cr = app.changeRequest
     return {
       status: app.status,
@@ -249,7 +236,6 @@ export class ApplicantService {
       closedAt: iso(app.closedAt),
       changeRequest: cr ? changeRequestView(cr, now) : null,
       closure: this.closure(app),
-      passwordMail,
     }
   }
 
@@ -325,20 +311,6 @@ export class ApplicantService {
     })
   }
 
-  async requestPasswordMail(token: string): Promise<OkResult> {
-    const hash = this.d.tokens.hash(token)
-    const now = this.d.clock.now()
-    return this.d.store.transaction(async (uow) => {
-      const app = this.accessible(
-        await uow.lockByToken(hash, "access"),
-        now
-      ).application
-      // Shared with processors: one request an hour, whoever asked.
-      await requestPasswordMail(uow, this.d.rate, app, APPLICANT, now)
-      return { ok: true } as const
-    })
-  }
-
   /**
    * Read once at the start of each method that may mail an apply-site link,
    * outside any transaction. Missing setup is an error, not a refusal.
@@ -351,10 +323,7 @@ export class ApplicantService {
 
   /** The lookup, if its access link is still valid. */
   private accessible(found: TokenLookup | null, now: Date): TokenLookup {
-    if (
-      !found ||
-      !this.d.retention.accessValid(found.application, found.releasedAt, now)
-    )
+    if (!found || !this.d.retention.accessValid(found.application, now))
       throw new ApplicationRefusal("link_invalid")
     return found
   }
@@ -419,9 +388,7 @@ export class ApplicantService {
     if (active) return active
     const closed = await uow.lockByEmail(email, CLOSED_STATUSES)
     if (!closed) return null
-    const run = await uow.lockRun(closed.id)
-    const releasedAt = run?.releasedAt ?? null
-    return this.d.retention.accessValid(closed, releasedAt, now) ? closed : null
+    return this.d.retention.accessValid(closed, now) ? closed : null
   }
 
   private async mailLink(

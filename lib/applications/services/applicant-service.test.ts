@@ -602,11 +602,11 @@ describe("sendLink", () => {
     expect(kinds(h)).toEqual(before)
   })
 
-  test("an accepted application without a password still gets its link", async () => {
+  test("an accepted application gets its link within 30 days of closing", async () => {
     const h = await setup()
     const { id } = await confirmed(h)
     await accept(h, id)
-    h.clock.advance(60 * DAY)
+    h.clock.advance(29 * DAY)
     await h.service.sendLink(EMAIL)
     expect((await h.service.getStatus(lastToken(h, "link"))).status).toBe(
       "accepted"

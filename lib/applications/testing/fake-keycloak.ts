@@ -13,7 +13,6 @@ type FakeUser = {
   enabled: boolean
   groups: Set<string>
   attributes: Record<string, string[]>
-  hasPassword: boolean
 }
 
 type Method = keyof KeycloakDirectory | keyof KeycloakProvisioner
@@ -29,10 +28,6 @@ export class FakeKeycloak implements KeycloakDirectory, KeycloakProvisioner {
 
   addGroup(path: string): void {
     this.groups.add(path)
-  }
-  setPassword(id: string): void {
-    const u = this.users.get(id)
-    if (u) u.hasPassword = true
   }
   deleteUser(id: string): void {
     this.users.delete(id)
@@ -120,7 +115,6 @@ export class FakeKeycloak implements KeycloakDirectory, KeycloakProvisioner {
       enabled: false,
       groups: new Set(user.groups),
       attributes: structuredClone(user.attributes),
-      hasPassword: false,
     })
     return { ok: true, id } as const
   }
@@ -166,10 +160,5 @@ export class FakeKeycloak implements KeycloakDirectory, KeycloakProvisioner {
     if (this.badMail) return "invalid" as const
     this.mailsSent.push({ id, lifespanSeconds: opts.lifespanSeconds })
     return "ok" as const
-  }
-  async hasPassword(id: string) {
-    this.gate("hasPassword")
-    const u = this.users.get(id)
-    return u ? u.hasPassword : ("user_gone" as const)
   }
 }

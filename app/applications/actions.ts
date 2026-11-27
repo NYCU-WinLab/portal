@@ -7,7 +7,6 @@ import {
   acceptLabApplication,
   rejectLabApplication,
   requestLabApplicationChanges,
-  resendLabApplicationPasswordMail,
   retryLabApplicationProvisioning,
   setApplicationMailGroup,
   setApplicationNotifiee,
@@ -49,8 +48,6 @@ export const retryProvisioning = async (input: unknown) =>
   attempt(REVIEW, retryLabApplicationProvisioning, input)
 export const rejectApplication = async (input: unknown) =>
   attempt(REVIEW, rejectLabApplication, input)
-export const resendPasswordMail = async (input: unknown) =>
-  attempt(REVIEW, resendLabApplicationPasswordMail, input)
 export const setNotifiee = async (input: unknown) =>
   attempt(SETTINGS, setApplicationNotifiee, input)
 export const setMailGroup = async (input: unknown) =>

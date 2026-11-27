@@ -33,7 +33,6 @@ export type LabStatus = (typeof LAB_STATUSES)[number]
 
 export const STEP_NAMES = [
   "create_account",
-  "join_keycloak_groups",
   "join_mail_groups",
   "activate_and_mail",
   "finish",
@@ -55,20 +54,10 @@ export const EVENT_KINDS = [
   "rejected",
   "withdrawn",
   "link_sent",
-  "password_mail_requested",
   "password_mail_sent",
-  "password_mail_expired",
-  "password_set",
   "purged",
 ] as const
 export type EventKind = (typeof EVENT_KINDS)[number]
-
-export const PASSWORD_MAIL_EVENT_KINDS = [
-  "password_mail_requested",
-  "password_mail_sent",
-  "password_mail_expired",
-  "password_set",
-] as const
 
 export const ACTOR_KINDS = ["applicant", "admin", "system"] as const
 export type ActorKind = (typeof ACTOR_KINDS)[number]
@@ -89,7 +78,6 @@ export const MAIL_KINDS = [
   "approved",
   "processor_notice",
   "digest",
-  "password_mail_expired",
   "closed_has_account",
   "notifiee",
   "cohort_missing",

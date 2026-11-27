@@ -15,7 +15,6 @@ export type RunSnapshot = {
   blockedAt: Date | null
   startedAt: Date
   finishedAt: Date | null
-  releasedAt: Date | null
   completed: readonly { step: StepName; at: Date }[]
 }
 
@@ -30,7 +29,6 @@ function copy(s: RunSnapshot): RunSnapshot {
     blockedAt: copyDate(s.blockedAt),
     startedAt: new Date(s.startedAt),
     finishedAt: copyDate(s.finishedAt),
-    releasedAt: copyDate(s.releasedAt),
     completed: s.completed.map((c) => ({ step: c.step, at: new Date(c.at) })),
   }
 }
@@ -52,7 +50,6 @@ export class ProvisioningRun {
       blockedAt: null,
       startedAt: now,
       finishedAt: null,
-      releasedAt: null,
       completed: [],
     })
   }
@@ -81,12 +78,6 @@ export class ProvisioningRun {
   }
   get finished(): boolean {
     return this.#s.finishedAt !== null
-  }
-  get released(): boolean {
-    return this.#s.releasedAt !== null
-  }
-  get releasedAt(): Date | null {
-    return copyDate(this.#s.releasedAt)
   }
 
   #with(changes: Partial<RunSnapshot>): ProvisioningRun {
@@ -147,7 +138,7 @@ export class ProvisioningRun {
     if (this.finished) throw new ApplicationRefusal("wrong_state")
     if (change.username !== undefined && this.#done("create_account"))
       throw new ApplicationRefusal("wrong_state", "username")
-    if (change.cohort !== undefined && this.#done("join_keycloak_groups"))
+    if (change.cohort !== undefined && this.#done("create_account"))
       throw new ApplicationRefusal("wrong_state", "cohort")
     return this.#with({
       blockedAt: null,
@@ -157,35 +148,13 @@ export class ProvisioningRun {
     })
   }
 
-  finish(now: Date, firstCheck: Date): ProvisioningRun {
+  finish(now: Date): ProvisioningRun {
     for (const step of STEP_NAMES)
       if (!this.#done(step)) throw new Error(`step ${step} is not completed`)
-    return this.#with({
-      finishedAt: now,
-      attempts: 0,
-      error: null,
-      nextAt: firstCheck,
-    })
-  }
-
-  requestMail(now: Date): ProvisioningRun {
-    if (this.released) throw new ApplicationRefusal("password_already_set")
-    if (!this.finished) throw new ApplicationRefusal("wrong_state")
-    return this.#with({ nextAt: now })
-  }
-
-  scheduleCheck(at: Date): ProvisioningRun {
-    if (!this.finished) throw new Error("run is not finished")
-    return this.#with({ nextAt: at })
-  }
-
-  release(now: Date): ProvisioningRun {
-    if (!this.finished) throw new Error("run is not finished")
-    if (this.released) return this
-    return this.#with({ releasedAt: now })
+    return this.#with({ finishedAt: now, attempts: 0, error: null })
   }
 
   isDue(now: Date): boolean {
-    return !this.blocked && !this.released && this.#s.nextAt <= now
+    return !this.blocked && !this.finished && this.#s.nextAt <= now
   }
 }

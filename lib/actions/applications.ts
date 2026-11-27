@@ -107,16 +107,6 @@ export const applicationActions = (get: () => Applications) => ({
     run: async (actor, { token, ...patch }) =>
       applicant(actor, get).resubmit(token, patch),
   }),
-  requestPasswordMail: defineAction({
-    name: "send_lab_application_password_mail",
-    title: "重寄設定密碼信",
-    description:
-      "Apply site only: asks for the set-password mail again after an application was accepted; one request an hour.",
-    kind: "mutation",
-    input: z.object({ token }),
-    run: async (actor, { token }) =>
-      applicant(actor, get).requestPasswordMail(token),
-  }),
 })
 
 export type ApplicantActions = ReturnType<typeof applicationActions>
@@ -178,7 +168,7 @@ export const applicationReviewActions = (get: () => Applications) => ({
     name: "list_lab_applications",
     title: "列出帳號申請",
     description:
-      "Lists account applications for review, newest first, each with its profile, the defaults a processor would accept (member status, cohort, username, mail groups), whether the username is taken (null when Keycloak could not be asked), history, events and provisioning progress. With closed false (the default) it lists open ones and accepted ones not yet released; with closed true it lists finished ones. Only accounts admins may call it.",
+      "Lists account applications for review, newest first, each with its profile, the defaults a processor would accept (member status, cohort, username, mail groups), whether the username is taken (null when Keycloak could not be asked), history, events and provisioning progress. With closed false (the default) it lists open ones; with closed true it lists finished ones (accepted, rejected, withdrawn). Only accounts admins may call it.",
     admin: "accounts",
     kind: "query",
     input: z.object({ closed: z.boolean().optional() }),
@@ -255,17 +245,6 @@ export const applicationReviewActions = (get: () => Applications) => ({
     run: async (actor, { id, note }) =>
       get().review.reject(processorId(actor), id, note),
   }),
-  resendPasswordMail: defineAction({
-    name: "resend_lab_application_password_mail",
-    title: "重寄設定密碼信",
-    description:
-      "Mails an accepted applicant a new set-password link. Shares the applicant's own limit of one mail an hour, so a call inside that hour is refused. Refused when the application has no accepted account to set a password for.",
-    admin: "accounts",
-    kind: "mutation",
-    input: z.object({ id: applicationId }),
-    run: async (actor, { id }) =>
-      get().review.resendPasswordMail(processorId(actor), id),
-  }),
   listSettings: defineAction({
     name: "list_application_settings",
     title: "查看申請通知與群組信設定",
@@ -312,7 +291,6 @@ export const {
   withdraw: withdrawLabApplication,
   getForEdit: getLabApplicationForEdit,
   resubmit: resubmitLabApplication,
-  requestPasswordMail: sendLabApplicationPasswordMail,
 } = live
 
 const settingsLive = applicationSettingsActions(applications)
@@ -326,7 +304,6 @@ export const {
   accept: acceptLabApplication,
   retryProvisioning: retryLabApplicationProvisioning,
   reject: rejectLabApplication,
-  resendPasswordMail: resendLabApplicationPasswordMail,
   listSettings: listApplicationSettings,
   setNotifiee: setApplicationNotifiee,
   setMailGroup: setApplicationMailGroup,

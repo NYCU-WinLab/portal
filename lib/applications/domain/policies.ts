@@ -34,7 +34,6 @@ export type RetentionSettings = {
   purgeAfterCloseMs: number
   digestAfterMs: number
   passwordMailTtlMs: number
-  passwordCheckMs: number
   mailLogMs: number
   cohortAlertMs: number
 }
@@ -47,7 +46,6 @@ const RETENTION_DEFAULTS: RetentionSettings = {
   purgeAfterCloseMs: 90 * DAY,
   digestAfterMs: 3 * DAY,
   passwordMailTtlMs: 7 * DAY,
-  passwordCheckMs: 15 * MINUTE,
   mailLogMs: 2 * DAY,
   cohortAlertMs: DAY,
 }
@@ -78,7 +76,6 @@ export class RetentionPolicy {
       closedAt: Date | null
       purgedAt: Date | null
     },
-    releasedAt: Date | null,
     now: Date
   ): boolean {
     if (a.purgedAt) return false
@@ -92,7 +89,6 @@ export class RetentionPolicy {
       case "provisioning":
         return true
       case "accepted":
-        return releasedAt ? within(releasedAt) : true
       case "rejected":
       case "withdrawn":
         return a.closedAt ? within(a.closedAt) : false
@@ -107,16 +103,8 @@ export class RetentionPolicy {
     return elapsed(verifiedAt, now) >= this.settings.digestAfterMs
   }
 
-  passwordMailExpiresAt(sentAt: Date): Date {
-    return shift(sentAt, this.settings.passwordMailTtlMs)
-  }
-
   passwordMailLifespanSeconds(): number {
     return Math.floor(this.settings.passwordMailTtlMs / SECOND)
-  }
-
-  nextPasswordCheck(now: Date): Date {
-    return shift(now, this.settings.passwordCheckMs)
   }
 
   mailLogCutoff(now: Date): Date {
@@ -165,14 +153,12 @@ export type MailRateSettings = {
   recipientPerHour: number
   recipientPerDay: number
   keyPerHour: number
-  passwordMailRequestMs: number
 }
 
 const MAIL_RATE_DEFAULTS: MailRateSettings = {
   recipientPerHour: 1,
   recipientPerDay: 3,
   keyPerHour: 30,
-  passwordMailRequestMs: HOUR,
 }
 
 export class MailRatePolicy {
@@ -193,12 +179,5 @@ export class MailRatePolicy {
       return "recipient_limit"
     if (counts.keyLastHour >= this.settings.keyPerHour) return "key_limit"
     return "ok"
-  }
-
-  passwordMailRequestAllowed(lastRequestedAt: Date | null, now: Date): boolean {
-    return (
-      lastRequestedAt === null ||
-      elapsed(lastRequestedAt, now) >= this.settings.passwordMailRequestMs
-    )
   }
 }

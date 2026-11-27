@@ -43,7 +43,6 @@ import type {
   ReviewItem,
 } from "../views"
 import type { MailComposer } from "./mail-composer"
-import { passwordMailView, requestPasswordMail } from "./password-mail-request"
 
 type Deps = {
   store: ApplicationStore
@@ -366,7 +365,7 @@ export class ReviewService {
         if (
           cohort &&
           cohort.value !== was.cohort.value &&
-          !done("join_keycloak_groups")
+          !done("create_account")
         ) {
           if (!(await this.d.directory.groupExists(cohort.groupPath))) {
             await this.alertCohortMissing(cohort, now)
@@ -430,16 +429,6 @@ export class ReviewService {
       // The open change request ends with the status (the domain clears it).
       await this.save(uow, t)
       await uow.queueMail(id, this.d.mail.rejected(t.next, text))
-      return { ok: true }
-    })
-  }
-
-  async resendPasswordMail(actorUserId: string, id: string): Promise<OkResult> {
-    const now = this.d.clock.now()
-    const by = admin(actorUserId)
-    return this.d.store.transaction(async (uow) => {
-      const app = await this.locked(uow, id)
-      await requestPasswordMail(uow, this.d.rate, app, by, now)
       return { ok: true }
     })
   }
@@ -544,16 +533,6 @@ export class ReviewService {
     const fields: ProfileView | null = profile ? { ...profile.fields } : null
     const requested: RequestedStatus = app.requestedStatus
     const snap = run?.snapshot
-    let passwordMail: ReviewItem["passwordMail"] = null
-    if (app.status === "accepted" && run) {
-      passwordMail = passwordMailView(
-        await this.d.store.reader.passwordMail(app.id),
-        run.releasedAt,
-        this.d.retention,
-        this.d.rate,
-        ctx.now
-      )
-    }
     const cr = app.changeRequest
     return {
       id: app.id,
@@ -592,14 +571,12 @@ export class ReviewService {
             blockedAt: iso(snap.blockedAt),
             startedAt: snap.startedAt.toISOString(),
             finishedAt: iso(snap.finishedAt),
-            releasedAt: iso(snap.releasedAt),
             steps: snap.completed.map((c) => ({
               name: c.step,
               completedAt: c.at.toISOString(),
             })),
           }
         : null,
-      passwordMail,
       history: row.history.map((h) => ({
         id: h.id,
         status: h.status,

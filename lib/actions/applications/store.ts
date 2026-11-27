@@ -13,7 +13,6 @@ import {
   loadApplication,
   loadByEmail,
   loadByToken,
-  loadPasswordMail,
   loadRun,
   type Tx,
 } from "@/lib/actions/applications/store-reader"
@@ -179,7 +178,7 @@ class DrizzleUnitOfWork implements UnitOfWork {
 
   async claimDue(now: Date) {
     this.usable()
-    // isDue: not blocked, not released, nextAt <= now.
+    // isDue: not blocked, not finished, nextAt <= now.
     const [due] = await this.tx
       .select({ id: labApplicationProvisioning.applicationId })
       .from(labApplicationProvisioning)
@@ -191,7 +190,7 @@ class DrizzleUnitOfWork implements UnitOfWork {
         and(
           inArray(labApplications.status, ["provisioning", "accepted"]),
           isNull(labApplicationProvisioning.blockedAt),
-          isNull(labApplicationProvisioning.releasedAt),
+          isNull(labApplicationProvisioning.finishedAt),
           lte(labApplicationProvisioning.nextAt, now)
         )
       )
@@ -203,11 +202,6 @@ class DrizzleUnitOfWork implements UnitOfWork {
     const run = await loadRun(this.tx, due.id, false)
     if (!application || !run) throw new Error(`run ${due.id} vanished`)
     return { application, run }
-  }
-
-  async passwordMail(applicationId: string) {
-    this.usable()
-    return loadPasswordMail(this.tx, applicationId)
   }
 
   async save(t: Changed): Promise<SaveResult> {
@@ -376,7 +370,6 @@ class DrizzleUnitOfWork implements UnitOfWork {
       blockedAt: s.blockedAt,
       startedAt: s.startedAt,
       finishedAt: s.finishedAt,
-      releasedAt: s.releasedAt,
     }
     await this.tx
       .insert(labApplicationProvisioning)

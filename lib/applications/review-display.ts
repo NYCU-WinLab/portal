@@ -11,7 +11,7 @@ import {
 } from "./domain/constants"
 import { ApplicationRefusal, FIELD_NAMES } from "./domain/refusal"
 import { KeycloakUnavailable, MailGroupsUnavailable } from "./ports"
-import type { PasswordMailView, ProfileView, ReviewItem } from "./views"
+import type { ProfileView, ReviewItem } from "./views"
 
 type BadgeVariant =
   "default" | "muted" | "outline" | "destructive" | "success" | "warning"
@@ -52,8 +52,7 @@ export const REQUESTED_STATUS_LABELS: Record<RequestedStatus, string> = {
 }
 
 export const STEP_LABELS: Record<StepName, string> = {
-  create_account: "建立帳號",
-  join_keycloak_groups: "加入 Keycloak 群組",
+  create_account: "建立帳號並加入群組",
   join_mail_groups: "加入群組信",
   activate_and_mail: "啟用並寄設定密碼信",
   finish: "完成",
@@ -74,10 +73,7 @@ export const EVENT_LABELS: Record<EventKind, string> = {
   rejected: "退回",
   withdrawn: "撤回",
   link_sent: "寄出進度連結",
-  password_mail_requested: "要求重寄設定密碼信",
   password_mail_sent: "寄出設定密碼信",
-  password_mail_expired: "設定密碼信過期",
-  password_set: "設好密碼",
   purged: "清除資料",
 }
 
@@ -221,18 +217,6 @@ export function retryChange(
   if (cohort && Number(cohort) !== current.cohort)
     change.cohort = Number(cohort)
   return change
-}
-
-/** Accepted, but the applicant has not set a password yet. */
-export function awaitsPassword(item: {
-  status: ApplicationStatus
-  passwordMail: PasswordMailView | null
-}): boolean {
-  return (
-    item.status === "accepted" &&
-    item.passwordMail !== null &&
-    !item.passwordMail.passwordSet
-  )
 }
 
 const taipei = new Intl.DateTimeFormat("sv-SE", {

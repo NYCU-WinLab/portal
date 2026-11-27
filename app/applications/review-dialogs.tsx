@@ -310,7 +310,7 @@ export function RetryDialog({
                 username: done.has("create_account")
                   ? undefined
                   : text(data, "username"),
-                cohort: done.has("join_keycloak_groups")
+                cohort: done.has("create_account")
                   ? undefined
                   : text(data, "cohort"),
               })),
@@ -330,7 +330,7 @@ export function RetryDialog({
           />
         </FormField>
       )}
-      {current && !done.has("join_keycloak_groups") && (
+      {current && !done.has("create_account") && (
         <FormField label="學年度（入學）" required>
           <Input
             name="cohort"

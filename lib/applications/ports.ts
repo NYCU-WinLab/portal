@@ -11,7 +11,6 @@ import type {
   MailKind,
   TokenPurpose,
 } from "./domain/constants"
-import type { PasswordMailState } from "./domain/password-mail"
 import type { ProvisioningRun } from "./domain/provisioning-run"
 import type { Email, TokenHash, Username } from "./domain/values"
 
@@ -39,7 +38,6 @@ export type SaveResult = "ok" | "active_email_taken" | "username_claimed"
 export type TokenLookup = {
   application: Application
   tokenCreatedAt: Date
-  releasedAt: Date | null
 }
 export type EventRecord = {
   id: number
@@ -70,7 +68,6 @@ export interface ApplicationStore {
 export interface ApplicationReader {
   byToken(hash: TokenHash, purpose: TokenPurpose): Promise<TokenLookup | null>
   list(filter: { closed: boolean }): Promise<ReviewRow[]>
-  passwordMail(applicationId: string): Promise<PasswordMailState>
   claimedUsernames(
     names: readonly Username[],
     exceptId?: string
@@ -105,11 +102,6 @@ export interface UnitOfWork {
   claimDue(
     now: Date
   ): Promise<{ application: Application; run: ProvisioningRun } | null>
-  /**
-   * Reads the events of `PASSWORD_MAIL_EVENT_KINDS` and hands them to
-   * `derivePasswordMail`.
-   */
-  passwordMail(applicationId: string): Promise<PasswordMailState>
   /**
    * Writes the application row (version-checked), its profile, ends and
    * inserts change requests, inserts mail-group rows when an assignment
@@ -257,7 +249,6 @@ export interface KeycloakProvisioner {
     id: string,
     opts: { lifespanSeconds: number; signal: AbortSignal }
   ): Promise<"ok" | "user_gone" | "invalid">
-  hasPassword(id: string): Promise<boolean | "user_gone">
 }
 
 export interface MailGroups {

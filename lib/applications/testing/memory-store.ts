@@ -9,7 +9,6 @@ import {
 } from "../domain/application"
 import {
   ACTIVE_STATUSES,
-  PASSWORD_MAIL_EVENT_KINDS,
   type AnonymousMailKind,
   type ApplicationStatus,
   type EventKind,
@@ -18,11 +17,6 @@ import {
   type StepName,
   type TokenPurpose,
 } from "../domain/constants"
-import {
-  derivePasswordMail,
-  type PasswordMailEvent,
-  type PasswordMailState,
-} from "../domain/password-mail"
 import { MailRatePolicy } from "../domain/policies"
 import { ProvisioningRun } from "../domain/provisioning-run"
 import {
@@ -111,7 +105,6 @@ type RunRow = {
   blockedAt: Date | null
   startedAt: Date
   finishedAt: Date | null
-  releasedAt: Date | null
 }
 type StepRow = { applicationId: string; step: StepName; at: Date }
 type MailLogRow = { rateKey: string; kind: AnonymousMailKind; at: Date }
@@ -264,7 +257,6 @@ class Tables {
       blockedAt: copyOptionalDate(row.blockedAt),
       startedAt: copyDate(row.startedAt),
       finishedAt: copyOptionalDate(row.finishedAt),
-      releasedAt: copyOptionalDate(row.releasedAt),
       completed: this.s.steps
         .filter((st) => st.applicationId === applicationId)
         .map((st) => ({ step: st.step, at: copyDate(st.at) })),
@@ -278,12 +270,7 @@ class Tables {
     if (!token) return null
     const application = this.application(token.applicationId)
     if (!application) return null
-    const run = this.s.runs.find((r) => r.applicationId === token.applicationId)
-    return {
-      application,
-      tokenCreatedAt: copyDate(token.createdAt),
-      releasedAt: run ? copyOptionalDate(run.releasedAt) : null,
-    }
+    return { application, tokenCreatedAt: copyDate(token.createdAt) }
   }
 
   events(applicationId: string): EventRecord[] {
@@ -291,14 +278,6 @@ class Tables {
       .filter((e) => e.applicationId === applicationId)
       .sort((a, b) => a.id - b.id)
       .map(eventRecord)
-  }
-
-  passwordMail(applicationId: string): PasswordMailState {
-    const kinds: readonly EventKind[] = PASSWORD_MAIL_EVENT_KINDS
-    const events = this.events(applicationId).filter((e) =>
-      kinds.includes(e.kind)
-    ) as PasswordMailEvent[]
-    return derivePasswordMail(events)
   }
 
   history(email: string, exceptId: string): HistoryRow[] {
@@ -334,10 +313,7 @@ class Tables {
     return this.s.applications
       .filter((a) => {
         if (a.status === "unverified") return false
-        const released =
-          this.s.runs.find((r) => r.applicationId === a.id)?.releasedAt != null
-        const open =
-          isActive(a.status) || (a.status === "accepted" && !released)
+        const open = isActive(a.status)
         return closed ? !open : open
       })
       .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
@@ -510,7 +486,6 @@ class Tables {
       blockedAt: s.blockedAt,
       startedAt: s.startedAt,
       finishedAt: s.finishedAt,
-      releasedAt: s.releasedAt,
     }
     const i = this.s.runs.findIndex((r) => r.applicationId === s.applicationId)
     if (i < 0) this.s.runs.push(row)
@@ -683,7 +658,6 @@ export class InMemoryApplicationStore implements ApplicationStore {
     this.reader = {
       byToken: async (hash, purpose) => committed().byToken(hash, purpose),
       list: async ({ closed }) => committed().list(closed),
-      passwordMail: async (id) => committed().passwordMail(id),
       claimedUsernames: async (names, exceptId) =>
         committed().claimedUsernames(names, exceptId),
       history: async (email, exceptId) =>
@@ -769,7 +743,6 @@ export class InMemoryApplicationStore implements ApplicationStore {
       ),
       lockRun: live((id: string) => t.run(id)),
       claimDue: live((now: Date) => t.claimDue(now)),
-      passwordMail: live((id: string) => t.passwordMail(id)),
       save: live((c: Changed) => t.save(c)),
       saveRun: live((run: ProvisioningRun) => t.saveRun(run)),
       deleteRun: live((id: string) => t.deleteRun(id)),

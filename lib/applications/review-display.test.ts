@@ -123,7 +123,7 @@ describe("eventDetail", () => {
           changes: { step: "create_account", error: "timeout" },
         })
       )
-    ).toBe("建立帳號：timeout")
+    ).toBe("建立帳號並加入群組：timeout")
   })
 
   test("nothing to add", () => {
