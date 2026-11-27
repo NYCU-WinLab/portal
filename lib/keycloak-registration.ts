@@ -209,3 +209,85 @@ export function deleteClient(clientId: string, rat: string) {
       throw new Error(`Keycloak client registration DELETE ${response.status}`)
   })
 }
+
+// Admin calls for a client whose registration access token is lost or
+// unwanted. They use the portal's admin service account (KEYCLOAK_CLIENT_ID,
+// which holds manage-clients), not the registrar.
+
+const adminBase = () =>
+  `${issuer().replace("/realms/winlab", "/admin/realms/winlab")}`
+
+async function adminToken() {
+  const response = await fetch(`${issuer()}/protocol/openid-connect/token`, {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "client_credentials",
+      client_id: process.env.KEYCLOAK_CLIENT_ID!,
+      client_secret: process.env.KEYCLOAK_CLIENT_SECRET!,
+    }),
+    cache: "no-store",
+    signal: timeout(),
+  })
+  if (!response.ok) throw new Error(`Keycloak admin token ${response.status}`)
+  return ((await response.json()) as { access_token: string }).access_token
+}
+
+/** The client's internal UUID, or null when no such client exists. */
+async function clientUuid(clientId: string, token: string) {
+  const response = await fetch(
+    `${adminBase()}/clients?clientId=${encodeURIComponent(clientId)}`,
+    {
+      headers: { authorization: `Bearer ${token}` },
+      cache: "no-store",
+      signal: timeout(),
+    }
+  )
+  if (!response.ok)
+    throw new Error(`Keycloak admin client lookup ${response.status}`)
+  const found = (await response.json()) as { id: string; clientId: string }[]
+  return found.find((c) => c.clientId === clientId)?.id ?? null
+}
+
+/** Issues a new registration access token for the client and returns it. */
+export function reissueRegistrationToken(clientId: string) {
+  return traced("keycloak.reissue_token", {}, async () => {
+    const token = await adminToken()
+    const uuid = await clientUuid(clientId, token)
+    if (!uuid) throw new Error("Keycloak client does not exist")
+    const response = await fetch(
+      `${adminBase()}/clients/${uuid}/registration-access-token`,
+      {
+        method: "POST",
+        headers: { authorization: `Bearer ${token}` },
+        cache: "no-store",
+        signal: timeout(),
+      }
+    )
+    if (!response.ok)
+      throw new Error(`Keycloak admin reissue token ${response.status}`)
+    const issued = (await response.json()) as {
+      registrationAccessToken?: string
+    }
+    if (!issued.registrationAccessToken)
+      throw new Error("Keycloak returned no registration token")
+    return issued.registrationAccessToken
+  })
+}
+
+/** Deletes the client without its registration token; one already gone counts as deleted. */
+export function deleteClientAsAdmin(clientId: string) {
+  return traced("keycloak.admin_delete_client", {}, async () => {
+    const token = await adminToken()
+    const uuid = await clientUuid(clientId, token)
+    if (!uuid) return
+    const response = await fetch(`${adminBase()}/clients/${uuid}`, {
+      method: "DELETE",
+      headers: { authorization: `Bearer ${token}` },
+      cache: "no-store",
+      signal: timeout(),
+    })
+    if (!response.ok && response.status !== 404)
+      throw new Error(`Keycloak admin client DELETE ${response.status}`)
+  })
+}
