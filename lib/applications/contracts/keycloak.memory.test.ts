@@ -10,5 +10,6 @@ keycloakContract(async () => {
     addGroup: async (path) => kc.addGroup(path),
     deleteUser: async (id) => kc.deleteUser(id),
     moveOutsideBoundary: async (id) => kc.moveOutsideBoundary(id),
+    withholdGroupPermission: async (path) => kc.withholdGroupPermission(path),
   }
 })

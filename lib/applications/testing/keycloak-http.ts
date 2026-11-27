@@ -98,11 +98,20 @@ export function fakeKeycloakFetch(state: FakeKeycloak): typeof fetch {
       const path = decodeURIComponent(groupId)
       if (!seen(id)) return scoped ? forbidden() : empty(404)
       if (method === "PUT") {
+        // No permission on the group: 403 although the user is in scope.
+        if (scoped && state.isGroupWithheld(path)) return forbidden()
         const r = await state.joinGroup(id, path)
         return empty(r === "ok" ? 204 : 404)
       }
       const r = await state.leaveGroup(id, path)
       return empty(r === "ok" ? 204 : 403)
+    }
+
+    const memberships = admin.match(/^\/users\/([^/]+)\/groups$/)
+    if (memberships && method === "GET") {
+      if (!seen(memberships[1])) return scoped ? forbidden() : empty(404)
+      const u = state.user(memberships[1])!
+      return json([...u.groups].map((path) => ({ id: path, path })))
     }
 
     const mail = admin.match(/^\/users\/([^/]+)\/execute-actions-email$/)

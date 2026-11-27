@@ -236,6 +236,17 @@ describe("create_account", () => {
     expect(reason).toContain("/lab-member/116")
   })
 
+  test("a cohort group without the provisioner's permission is blocked and names it", async () => {
+    const h = await setup()
+    h.keycloak.withholdGroupPermission("/lab-member/116")
+    const reason = await blockedReason(
+      exec(h, new CreateAccountStep(h.keycloak))
+    )
+    expect(reason).toBe(
+      "portal-provisioner 沒有 /lab-member/116 的管理權限，請在 Keycloak 把這個群組加進它的權限"
+    )
+  })
+
   test("a missing status group is blocked and names the path", async () => {
     const h = await setup()
     const keycloak = new FakeKeycloak()

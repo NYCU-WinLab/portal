@@ -261,10 +261,17 @@ export interface KeycloakProvisioner {
     enabled: boolean
     attributes: Record<string, string[]>
   } | null>
+  /**
+   * "group_forbidden": the user is still in /provisioning but the provisioner
+   * has no permission on this group (a new cohort not yet added to it);
+   * "forbidden": the user is outside what the provisioner may change.
+   */
   joinGroup(
     id: string,
     path: string
-  ): Promise<"ok" | "user_gone" | "group_missing" | "forbidden">
+  ): Promise<
+    "ok" | "user_gone" | "group_missing" | "group_forbidden" | "forbidden"
+  >
   leaveGroup(id: string, path: string): Promise<"ok" | "gone">
   /**
    * "forbidden": the account exists but is outside what the provisioner may

@@ -26,10 +26,18 @@ export class FakeKeycloak implements KeycloakDirectory, KeycloakProvisioner {
   private readonly errors = new Map<Method, Error>()
   private readonly lateFailures = new Map<Method, number>()
   private readonly outside = new Set<string>()
+  private readonly ungranted = new Set<string>()
   private badMail = false
 
   addGroup(path: string): void {
     this.groups.add(path)
+  }
+  /** The group exists but the provisioner has no permission on it. */
+  withholdGroupPermission(path: string): void {
+    this.ungranted.add(path)
+  }
+  isGroupWithheld(path: string): boolean {
+    return this.ungranted.has(path)
   }
   deleteUser(id: string): void {
     this.users.delete(id)
@@ -166,6 +174,7 @@ export class FakeKeycloak implements KeycloakDirectory, KeycloakProvisioner {
     if (!u) return "user_gone" as const
     if (this.outside.has(id)) return "forbidden" as const
     if (!this.groups.has(path)) return "group_missing" as const
+    if (this.ungranted.has(path)) return "group_forbidden" as const
     u.groups.add(path)
     return "ok" as const
   }
