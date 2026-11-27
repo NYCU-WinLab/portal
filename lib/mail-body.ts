@@ -105,7 +105,7 @@ ${
 ${rows
   .map(
     ([k, v]) =>
-      `<tr><td class="muted rule" style="padding:8px 16px 8px 0;border-top:1px solid ${light.border};color:${light.muted};white-space:nowrap;vertical-align:top;width:1%">${escape(k)}</td><td class="rule" style="padding:8px 0;border-top:1px solid ${light.border};vertical-align:top">${inline(v)}</td></tr>`
+      `<tr><td class="muted rule" style="padding:8px 16px 8px 0;border-top:1px solid ${light.border};color:${light.muted};white-space:nowrap;vertical-align:top;width:1%">${escape(k)}</td><td class="rule" style="padding:8px 0;border-top:1px solid ${light.border};vertical-align:top">${escape(v).replace(/\n/g, "<br>")}</td></tr>`
   )
   .join("\n")}
 </table>`
