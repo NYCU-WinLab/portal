@@ -47,11 +47,14 @@ export async function register() {
     "/realms/",
     "/admin/realms/"
   ).concat("/users?")
+  // The set-password mail's query carries the portal URL and client id; the
+  // provisioner's `keycloak PUT …/execute-actions-email` span already covers it.
   const keycloakLookups = keycloakUsers
     ? [
         `${keycloakUsers}email=`,
         `${keycloakUsers}username=`,
         `${keycloakUsers}q=`,
+        /\/admin\/realms\/[^/]+\/users\/[^/?]+\/execute-actions-email\?/,
       ]
     : []
 
