@@ -17,6 +17,7 @@ import { ProvisioningWorker } from "./worker"
 
 const MIN = 60_000
 const DONE: StepResult = { kind: "done" }
+const KC = "11111111-1111-4111-8111-111111111111"
 
 type Script = (ctx: StepContext) => Promise<StepResult>
 
@@ -178,7 +179,7 @@ describe("tick", () => {
     const h = await setup({
       create_account: [
         async ({ uow, application }) => {
-          await uow.setKeycloakId(application.id, "kc-half")
+          await uow.setKeycloakId(application.id, KC)
           throw StepError.retry("寫到一半")
         },
       ],
@@ -197,9 +198,10 @@ describe("tick", () => {
     const h = await setup({
       create_account: [
         ({ signal }) =>
-          new Promise((_, reject) =>
+          new Promise((_, reject) => {
+            if (signal.aborted) reject(signal.reason)
             signal.addEventListener("abort", () => reject(signal.reason))
-          ),
+          }),
       ],
     })
     const orig = AbortSignal.timeout
@@ -218,14 +220,14 @@ describe("tick", () => {
     const h = await setup({
       create_account: [
         async ({ uow, application }) => {
-          await uow.setKeycloakId(application.id, "kc-1")
+          await uow.setKeycloakId(application.id, KC)
           return DONE
         },
       ],
       join_mail_groups: [async () => ({ kind: "restart" })],
     })
     await h.worker.tick()
-    expect((await row(h)).application.keycloakId).toBe("kc-1")
+    expect((await row(h)).application.keycloakId).toBe(KC)
     await h.worker.tick()
     const r = await row(h)
     expect(r.application.keycloakId).toBeNull()
@@ -248,7 +250,7 @@ describe("tick", () => {
     const closed = all.find((r) => r.application.id === h.app.id)!
     expect(closed.application.status).toBe("rejected")
     expect(closed.run).toBeNull()
-    const sent = h.store.outbox().map((m) => [m.kind, m.to])
+    const sent = h.store.outbox().map((m) => [m.mail.kind, m.mail.to])
     expect(sent.sort()).toEqual(
       [
         ["closed_has_account", "p1@winlab.tw"],
