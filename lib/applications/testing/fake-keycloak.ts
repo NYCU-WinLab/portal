@@ -32,6 +32,9 @@ export class FakeKeycloak implements KeycloakDirectory, KeycloakProvisioner {
   deleteUser(id: string): void {
     this.users.delete(id)
   }
+  userCount(): number {
+    return this.users.size
+  }
   user(id: string) {
     const u = this.users.get(id)
     if (!u) return undefined
