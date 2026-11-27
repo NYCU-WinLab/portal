@@ -862,6 +862,24 @@ async function replay() {
     },
   ])
   cases.push([
+    // The yearly case: a new cohort group nobody added to the provisioner.
+    "joinGroup reports group_forbidden for a group the provisioner has no permission on",
+    async () => {
+      const id = await made("i")
+      const gid = idOf(
+        must(
+          await admin("POST", `/${realm}/groups`, {
+            name: `ungranted-${rand}`,
+          }),
+          [201],
+          "ungranted group"
+        )
+      )
+      trackedGroups.push(gid)
+      eq(await kc.joinGroup(id, `/ungranted-${rand}`), "group_forbidden")
+    },
+  ])
+  cases.push([
     "leaveGroup is gone for a deleted user and ok otherwise",
     async () => {
       const id = await made("e")
