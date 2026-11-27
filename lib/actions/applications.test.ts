@@ -54,6 +54,7 @@ async function setup() {
   const deps: Deps = {
     store,
     directory: new FakeKeycloak(),
+    provisioner: () => new FakeKeycloak(),
     authority: new FakeAuthority({ processorEmails: [] }),
     settings,
     mailGroups: new FakeMailGroups({}),
@@ -81,6 +82,7 @@ async function setupSettings() {
   const deps: Deps = {
     store,
     directory: new FakeKeycloak(),
+    provisioner: () => new FakeKeycloak(),
     authority: new FakeAuthority({ accountsAdminIds: [processor.userId] }),
     settings,
     mailGroups: new FakeMailGroups({}),

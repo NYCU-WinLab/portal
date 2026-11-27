@@ -686,6 +686,8 @@ export const appOfAction = new Map(
  * as player_<event>. */
 export const backgroundChanges: Record<string, ApiApp | null> = {
   "player_*": "music",
+  lab_application_provisioning: null,
+  lab_application_retention: null,
   autoplay: "music",
   card_swipe: "door",
   compare_door_cards: null,

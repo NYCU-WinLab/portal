@@ -8,26 +8,43 @@ import {
 import {
   MailRatePolicy,
   RetentionPolicy,
+  RetryPolicy,
 } from "@/lib/applications/domain/policies"
 import {
   systemClock,
   type ApplicationStore,
+  type ChangeNotifier,
   type Clock,
   type KeycloakDirectory,
+  type KeycloakProvisioner,
   type MailGroups,
   type ProcessorAuthority,
   type ReservedNames,
   type SettingsStore,
   type TokenGenerator,
 } from "@/lib/applications/ports"
+import { RetentionJob } from "@/lib/applications/provisioning/retention-job"
+import {
+  ActivateAndMailStep,
+  CreateAccountStep,
+  FinishStep,
+  JoinMailGroupsStep,
+} from "@/lib/applications/provisioning/steps"
+import { ProvisioningWorker } from "@/lib/applications/provisioning/worker"
 import { MailComposer } from "@/lib/applications/services/mail-composer"
 import { ApplicantService } from "@/lib/applications/services/applicant-service"
 import { ReviewService } from "@/lib/applications/services/review-service"
 import { SettingsService } from "@/lib/applications/services/settings-service"
 import { CryptoTokens } from "@/lib/applications/tokens"
 import { GoogleMailGroups } from "@/lib/actions/applications/mail-groups"
+import { announceChange, onChange } from "@/lib/actions/changes"
 import { db } from "@/lib/db"
-import { keycloakReader, systemAccountUsernames } from "@/lib/keycloak"
+import {
+  keycloakProvisioner,
+  keycloakReader,
+  systemAccountUsernames,
+} from "@/lib/keycloak"
+import { emitErrorLog, traced } from "@/lib/otel"
 
 /** What the actions call. */
 export type Applications = {
@@ -39,6 +56,8 @@ export type Applications = {
 export type Deps = {
   store: ApplicationStore
   directory: KeycloakDirectory
+  /** Lazy: making it needs KEYCLOAK_PROVISIONER_*; only the worker asks. */
+  provisioner: () => KeycloakProvisioner
   authority: ProcessorAuthority
   settings: SettingsStore
   mailGroups: MailGroups
@@ -82,6 +101,7 @@ export function productionDeps(): Deps {
   return {
     store: new DrizzleApplicationStore(db, { rate, hashSecret: mailRateKey }),
     directory: lazyDirectory(),
+    provisioner: keycloakProvisioner,
     authority: new DbProcessorAuthority(db),
     settings: new DrizzleSettingsStore(db),
     mailGroups: new GoogleMailGroups(),
@@ -111,3 +131,75 @@ const shared = globalThis as unknown as {
 /** Built on first use and kept across dev reloads. */
 export const applications = (): Applications =>
   ((shared.labApplications ??= {}).built ??= build(productionDeps()))
+
+function notifier(name: string): ChangeNotifier {
+  return { changed: () => announceChange(name) }
+}
+
+/**
+ * Runs the provisioning steps in this server process. Production leaves the
+ * Keycloak provisioner credentials unset until it is switched on, so without
+ * them nothing starts; that is normal, not an error.
+ */
+export function startApplicationProvisioner(): void {
+  if (
+    !process.env.KEYCLOAK_PROVISIONER_CLIENT_ID ||
+    !process.env.KEYCLOAK_PROVISIONER_CLIENT_SECRET
+  ) {
+    console.info(
+      "account provisioning is off: KEYCLOAK_PROVISIONER_CLIENT_ID/_SECRET are not set"
+    )
+    return
+  }
+  const d = productionDeps()
+  const keycloak = d.provisioner()
+  const worker = new ProvisioningWorker({
+    store: d.store,
+    clock: d.clock,
+    // In STEP_NAMES order.
+    steps: [
+      new CreateAccountStep(keycloak),
+      new JoinMailGroupsStep(d.mailGroups, d.authority, d.settings),
+      new ActivateAndMailStep(keycloak, d.retention),
+      new FinishStep(keycloak, d.directory, d.mail, d.authority),
+    ],
+    retry: new RetryPolicy(),
+    tracer: { span: traced },
+    notifier: notifier("lab_application_provisioning"),
+    composer: d.mail,
+    authority: d.authority,
+  })
+  // drain() guards itself against overlapping runs.
+  const wake = () => void worker.drain().catch((e) => emitErrorLog(e, {}))
+  onChange(wake).catch((e) => emitErrorLog(e, {}))
+  setInterval(wake, 60_000).unref()
+  wake()
+}
+
+/** The hourly housekeeping of applications, once at startup and then hourly. */
+export function startApplicationRetention(): void {
+  const d = productionDeps()
+  const job = new RetentionJob({
+    store: d.store,
+    clock: d.clock,
+    retention: d.retention,
+    composer: d.mail,
+    authority: d.authority,
+    notifier: notifier("lab_application_retention"),
+    tracer: { span: traced },
+  })
+  // tick() has no guard of its own, so a slow run never overlaps the next.
+  let running = false
+  const run = () => {
+    if (running) return
+    running = true
+    void job
+      .tick()
+      .catch((e) => emitErrorLog(e, {}))
+      .finally(() => {
+        running = false
+      })
+  }
+  setInterval(run, 60 * 60_000).unref()
+  run()
+}

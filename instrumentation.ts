@@ -20,6 +20,10 @@ export async function register() {
     startMeetingMailScheduler()
     const { startDoorCardsScheduler } = await import("@/lib/actions/door-cards")
     startDoorCardsScheduler()
+    const { startApplicationProvisioner, startApplicationRetention } =
+      await import("@/lib/actions/applications/container")
+    startApplicationProvisioner()
+    startApplicationRetention()
     const { startCalendarSync } = await import("@/lib/actions/calendar")
     startCalendarSync()
     const { startMemberSweep } = await import("@/lib/auth/member")
