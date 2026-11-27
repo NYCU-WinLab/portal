@@ -2,6 +2,7 @@ import { afterEach, beforeEach, expect, test } from "bun:test"
 
 import {
   deleteClientAsAdmin,
+  deleteClientOrAdmin,
   reissueRegistrationToken,
 } from "@/lib/keycloak-registration"
 
@@ -89,4 +90,53 @@ test("delete counts a missing client as deleted", async () => {
   stub(() => Response.json([]))
   await deleteClientAsAdmin("app-1")
   expect(calls.some((c) => c.method === "DELETE")).toBe(false)
+})
+
+const reg =
+  "https://sso.example.test/realms/winlab/clients-registrations/default/app-1"
+
+test("delete with a refused token falls back to the admin delete", async () => {
+  stub((method, url) =>
+    url === reg
+      ? new Response(null, { status: 401 })
+      : url === lookup
+        ? Response.json([{ id: "uuid-1", clientId: "app-1" }])
+        : method === "DELETE" && url === `${ADMIN}/clients/uuid-1`
+          ? new Response(null, { status: 204 })
+          : new Response(null, { status: 500 })
+  )
+  expect(await deleteClientOrAdmin("app-1", "rat")).toBe(true)
+  expect(calls.some((c) => c.url === `${ADMIN}/clients/uuid-1`)).toBe(true)
+})
+
+test("delete with a refused token and a failing admin delete reports false", async () => {
+  stub((_method, url) =>
+    url === reg
+      ? new Response(null, { status: 401 })
+      : new Response(null, { status: 500 })
+  )
+  const errors: unknown[] = []
+  expect(await deleteClientOrAdmin("app-1", "rat", (e) => errors.push(e))).toBe(
+    false
+  )
+  expect(errors).toHaveLength(1)
+})
+
+test("delete with a working token never calls the admin API", async () => {
+  stub((_method, url) =>
+    url === reg
+      ? new Response(null, { status: 204 })
+      : new Response(null, { status: 500 })
+  )
+  expect(await deleteClientOrAdmin("app-1", "rat")).toBe(true)
+  expect(calls.some((c) => c.url.startsWith(ADMIN))).toBe(false)
+})
+
+test("delete with another registrar failure still throws", async () => {
+  stub((_method, url) =>
+    url === reg
+      ? new Response(null, { status: 500 })
+      : new Response(null, { status: 500 })
+  )
+  expect(deleteClientOrAdmin("app-1", "rat")).rejects.toThrow("DELETE 500")
 })
