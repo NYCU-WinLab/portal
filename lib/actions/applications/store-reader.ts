@@ -2,7 +2,7 @@
 // connection to read on: the pool for the reader, the transaction for a unit
 // of work (which passes `lock` to take row locks). Mirrors the reads of
 // lib/applications/testing/memory-store.ts.
-import { and, asc, desc, eq, inArray, isNull, ne, sql } from "drizzle-orm"
+import { and, asc, desc, eq, inArray, isNull, ne, not } from "drizzle-orm"
 
 import {
   Application,
@@ -12,7 +12,6 @@ import {
 } from "@/lib/applications/domain/application"
 import {
   ACTIVE_STATUSES,
-  PASSWORD_MAIL_EVENT_KINDS,
   STEP_NAMES,
   type ApplicationStatus,
   type EventKind,
@@ -21,11 +20,6 @@ import {
   type StepName,
   type TokenPurpose,
 } from "@/lib/applications/domain/constants"
-import {
-  derivePasswordMail,
-  type PasswordMailEvent,
-  type PasswordMailState,
-} from "@/lib/applications/domain/password-mail"
 import { ProvisioningRun } from "@/lib/applications/domain/provisioning-run"
 import {
   ApplicantProfile,
@@ -235,7 +229,6 @@ export async function loadRuns(
         blockedAt: r.blockedAt,
         startedAt: r.startedAt,
         finishedAt: r.finishedAt,
-        releasedAt: r.releasedAt,
         // Steps complete in STEP_NAMES order; the table keeps no other order.
         completed: (stepsOf.get(r.applicationId) ?? [])
           .sort(
@@ -283,15 +276,7 @@ export async function loadByToken(
   const [found] = lock ? await query.for("update") : await query
   if (!found) return null
   const [application] = await hydrate(q, [found.application])
-  const [run] = await q
-    .select({ releasedAt: labApplicationProvisioning.releasedAt })
-    .from(labApplicationProvisioning)
-    .where(eq(labApplicationProvisioning.applicationId, application.id))
-  return {
-    application,
-    tokenCreatedAt: found.tokenCreatedAt,
-    releasedAt: run?.releasedAt ?? null,
-  }
+  return { application, tokenCreatedAt: found.tokenCreatedAt }
 }
 
 function actorOf(row: { actorKind: string; actorId: string | null }) {
@@ -335,16 +320,6 @@ async function loadEvents(
     else map.set(row.applicationId, [record])
   }
   return map
-}
-
-export async function loadPasswordMail(
-  q: Q,
-  applicationId: string
-): Promise<PasswordMailState> {
-  const events = await loadEvents(q, [applicationId], PASSWORD_MAIL_EVENT_KINDS)
-  return derivePasswordMail(
-    (events.get(applicationId) ?? []) as PasswordMailEvent[]
-  )
 }
 
 const historyColumns = {
@@ -411,20 +386,13 @@ export async function loadClaimedUsernames(
 }
 
 async function loadList(q: Q, closed: boolean): Promise<ReviewRow[]> {
-  // Open: an active status, or accepted with the run not yet released.
-  const open = sql`(${inArray(labApplications.status, [...ACTIVE])} or (${labApplications.status} = 'accepted' and ${labApplicationProvisioning.releasedAt} is null))`
+  // Open: an active status. Accepted, rejected and withdrawn are closed.
+  const open = inArray(labApplications.status, [...ACTIVE])
   const rows = await q
     .select({ application: labApplications })
     .from(labApplications)
-    .leftJoin(
-      labApplicationProvisioning,
-      eq(labApplicationProvisioning.applicationId, labApplications.id)
-    )
     .where(
-      and(
-        ne(labApplications.status, "unverified"),
-        closed ? sql`not ${open}` : open
-      )
+      and(ne(labApplications.status, "unverified"), closed ? not(open) : open)
     )
     .orderBy(asc(labApplications.createdAt), asc(labApplications.id))
   const appRows = rows.map((r) => r.application)
@@ -474,7 +442,6 @@ export function applicationReader(db: Db): ApplicationReader {
   return {
     byToken: (hash, purpose) => loadByToken(db, hash, purpose, false),
     list: ({ closed }) => loadList(db, closed),
-    passwordMail: (id) => loadPasswordMail(db, id),
     claimedUsernames: (names, exceptId) =>
       loadClaimedUsernames(db, names, exceptId),
     history: (email, exceptId) => loadHistory(db, email, exceptId),

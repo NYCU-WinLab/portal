@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import {
   APPLICANT,
-  SYSTEM,
   type Application,
   type Changed,
   type Transition,
@@ -29,6 +28,12 @@ export type StoreSubject = {
   /** Deletes the member `adminId`, as the FK does: their events keep the row
    * with actor_id set to null. */
   forgetAdmin(adminId: string): Promise<void>
+  /**
+   * True when two transactions can be open at once, so one can hold a row
+   * lock while another selects. The memory store runs transactions one at a
+   * time and cannot; the Postgres harness sets it.
+   */
+  concurrentTransactions?: boolean
 }
 
 const MINUTE = 60_000
@@ -102,7 +107,6 @@ async function saveRun(store: ApplicationStore, run: ProvisioningRun) {
 
 const ALL_STEPS = [
   "create_account",
-  "join_keycloak_groups",
   "join_mail_groups",
   "activate_and_mail",
   "finish",
@@ -421,6 +425,244 @@ export function applicationStoreContract(
       expect(run?.attempts).toBe(2)
     })
 
+    describe("retention selections", () => {
+      const CUT = at(10 * DAY)
+      const tokens = new SequentialTokens()
+      const SYSTEM_ACTOR = { kind: "system" as const }
+
+      async function seedUnverified(s: StoreSubject, tokenAt: Date) {
+        const input = await submitInput()
+        const a = await saveOk(s.store, App.submit(input, at(0)))
+        await s.store.transaction((uow) =>
+          uow.putToken(a.id, "verify", tokens.generate().hash, tokenAt)
+        )
+        return a
+      }
+
+      async function seedRejected(s: StoreSubject, closedAt: Date) {
+        const a = await seedPending(s.store, { at: at(0) })
+        return saveOk(s.store, a.reject(null, SYSTEM_ACTOR, closedAt))
+      }
+
+      test("staleUnverified selects unverified applications whose verify token is at or before the cutoff", async () => {
+        const s = await subject()
+        const fresh = await seedUnverified(s, at(10 * DAY + 1))
+        const edge = await seedUnverified(s, CUT)
+        const old = await seedUnverified(s, at(10 * DAY - 1))
+        const confirmed = await seedPending(s.store, { at: at(0) })
+        await s.store.transaction((uow) =>
+          uow.putToken(confirmed.id, "verify", tokens.generate().hash, at(0))
+        )
+        const ids = await s.store.transaction((uow) =>
+          uow.staleUnverified(CUT, 100)
+        )
+        expect([...ids].sort()).toEqual([edge.id, old.id].sort())
+        expect(ids).not.toContain(fresh.id)
+        expect(ids).not.toContain(confirmed.id)
+      })
+
+      test("staleUnverified honours the limit", async () => {
+        const s = await subject()
+        await seedUnverified(s, at(0))
+        await seedUnverified(s, at(1))
+        await seedUnverified(s, at(2))
+        const ids = await s.store.transaction((uow) =>
+          uow.staleUnverified(CUT, 2)
+        )
+        expect(ids).toHaveLength(2)
+      })
+
+      test("overdueChangeRequests selects open requests due at or before the cutoff", async () => {
+        const s = await subject()
+        const admin = { kind: "admin" as const, id: s.adminId }
+        const request = async (dueAt: Date) => {
+          const a = await seedPending(s.store, { at: at(0) })
+          await saveOk(
+            s.store,
+            a.requestChanges({ note: "n", dueAt }, a.version, admin, at(1))
+          )
+          return a.id
+        }
+        const later = await request(at(10 * DAY + 1))
+        const edge = await request(CUT)
+        const earlier = await request(at(10 * DAY - 1))
+        const plain = await seedPending(s.store, { at: at(0) })
+        const ids = await s.store.transaction((uow) =>
+          uow.overdueChangeRequests(CUT, 100)
+        )
+        expect([...ids].sort()).toEqual([edge, earlier].sort())
+        expect(ids).not.toContain(later)
+        expect(ids).not.toContain(plain.id)
+      })
+
+      test("overdueChangeRequests ignores a request the applicant already answered", async () => {
+        const s = await subject()
+        const admin = { kind: "admin" as const, id: s.adminId }
+        const a = await seedPending(s.store, { at: at(0) })
+        const asked = await saveOk(
+          s.store,
+          a.requestChanges(
+            { note: "n", dueAt: at(DAY) },
+            a.version,
+            admin,
+            at(1)
+          )
+        )
+        const answered = asked.resubmit(
+          { profile: asked.profile!, requestedStatus: asked.requestedStatus },
+          at(2)
+        )
+        await saveOk(s.store, answered)
+        expect(
+          await s.store.transaction((uow) =>
+            uow.overdueChangeRequests(CUT, 100)
+          )
+        ).toEqual([])
+      })
+
+      test("purgeDue selects closed, unpurged applications closed at or before the cutoff", async () => {
+        const s = await subject()
+        const later = await seedRejected(s, at(10 * DAY + 1))
+        const edge = await seedRejected(s, CUT)
+        const earlier = await seedRejected(s, at(10 * DAY - 1))
+        const open = await seedPending(s.store, { at: at(0) })
+        const done = await seedRejected(s, at(0))
+        await saveOk(s.store, done.purge(at(1)))
+        const ids = await s.store.transaction((uow) => uow.purgeDue(CUT, 100))
+        expect([...ids].sort()).toEqual([edge.id, earlier.id].sort())
+        expect(ids).not.toContain(later.id)
+        expect(ids).not.toContain(open.id)
+        expect(ids).not.toContain(done.id)
+      })
+
+      test("deleteVerifyTokens deletes verify tokens of confirmed applications at or before the cutoff", async () => {
+        const s = await subject()
+        const confirmedToken = async (createdAt: Date) => {
+          const a = await seedPending(s.store, { at: at(0) })
+          const verify = tokens.generate()
+          const access = tokens.generate()
+          await s.store.transaction(async (uow) => {
+            await uow.putToken(a.id, "verify", verify.hash, createdAt)
+            await uow.putToken(a.id, "access", access.hash, at(0))
+          })
+          return { id: a.id, verify: verify.hash, access: access.hash }
+        }
+        const later = await confirmedToken(at(10 * DAY + 1))
+        const edge = await confirmedToken(CUT)
+        const earlier = await confirmedToken(at(10 * DAY - 1))
+        const unverified = await seedUnverified(s, at(0))
+        const n = await s.store.transaction((uow) =>
+          uow.deleteVerifyTokens(CUT, 100)
+        )
+        expect(n).toBe(2)
+        const verifyOf = (hash: typeof edge.verify) =>
+          s.store.reader.byToken(hash, "verify")
+        expect(await verifyOf(edge.verify)).toBeNull()
+        expect(await verifyOf(earlier.verify)).toBeNull()
+        expect((await verifyOf(later.verify))?.application.id).toBe(later.id)
+        // Access tokens stay.
+        expect(
+          (await s.store.reader.byToken(edge.access, "access"))?.application.id
+        ).toBe(edge.id)
+        // The unverified application's verify token stays.
+        expect(
+          await s.store.transaction((uow) => uow.staleUnverified(CUT, 100))
+        ).toEqual([unverified.id])
+      })
+
+      test("deleteVerifyTokens honours the limit", async () => {
+        const s = await subject()
+        for (let i = 0; i < 3; i++) {
+          const a = await seedPending(s.store, { at: at(0) })
+          await s.store.transaction((uow) =>
+            uow.putToken(a.id, "verify", tokens.generate().hash, at(i))
+          )
+        }
+        expect(
+          await s.store.transaction((uow) => uow.deleteVerifyTokens(CUT, 2))
+        ).toBe(2)
+        expect(
+          await s.store.transaction((uow) => uow.deleteVerifyTokens(CUT, 2))
+        ).toBe(1)
+      })
+
+      test("deleteMailLog deletes entries at or before the cutoff", async () => {
+        const s = await subject()
+        const log = (n: number, when: Date) =>
+          s.store.transaction((uow) =>
+            uow.reserveMail(Email.parse(`log${n}@example.com`), "verify", when)
+          )
+        expect(await log(1, at(10 * DAY + 1))).toBe("ok")
+        expect(await log(2, CUT)).toBe("ok")
+        expect(await log(3, at(10 * DAY - 1))).toBe("ok")
+        expect(await s.store.transaction((uow) => uow.deleteMailLog(CUT))).toBe(
+          2
+        )
+        expect(await s.store.transaction((uow) => uow.deleteMailLog(CUT))).toBe(
+          0
+        )
+      })
+
+      test("awaitingReview counts pending applications verified at or before the cutoff", async () => {
+        const s = await subject()
+        await seedPending(s.store, { at: at(10 * DAY + 1) })
+        await seedPending(s.store, { at: CUT })
+        await seedPending(s.store, { at: at(10 * DAY - 1) })
+        await seedRejected(s, at(1))
+        await seedUnverified(s, at(0))
+        expect(
+          await s.store.transaction((uow) => uow.awaitingReview(CUT))
+        ).toBe(2)
+      })
+
+      test("selections skip rows another open transaction has locked", async () => {
+        const s = await subject()
+        // Memory runs transactions one at a time; only Postgres can hold two.
+        if (!s.concurrentTransactions) return
+        const admin = { kind: "admin" as const, id: s.adminId }
+        const stale = await seedUnverified(s, at(0))
+        const overdueApp = await seedPending(s.store, { at: at(0) })
+        await saveOk(
+          s.store,
+          overdueApp.requestChanges(
+            { note: "n", dueAt: at(DAY) },
+            overdueApp.version,
+            admin,
+            at(1)
+          )
+        )
+        const closed = await seedRejected(s, at(0))
+        const select = () =>
+          s.store.transaction(async (uow) => ({
+            stale: await uow.staleUnverified(CUT, 100),
+            overdue: await uow.overdueChangeRequests(CUT, 100),
+            purge: await uow.purgeDue(CUT, 100),
+          }))
+        let release: () => void = () => {}
+        const held = new Promise<void>((r) => (release = r))
+        let locked: () => void = () => {}
+        const ready = new Promise<void>((r) => (locked = r))
+        const holder = s.store.transaction(async (uow) => {
+          await uow.lock(stale.id)
+          await uow.lock(overdueApp.id)
+          await uow.lock(closed.id)
+          locked()
+          await held
+        })
+        await ready
+        try {
+          expect(await select()).toEqual({ stale: [], overdue: [], purge: [] })
+        } finally {
+          release()
+          await holder
+        }
+        const after = await select()
+        expect(after.stale).toEqual([stale.id])
+        expect(after.overdue).toEqual([overdueApp.id])
+        expect(after.purge).toEqual([closed.id])
+      })
+    })
+
     test("putToken replaces the token of that purpose", async () => {
       const s = await subject()
       const tokens = new SequentialTokens()
@@ -447,29 +689,6 @@ export function applicationStoreContract(
       expect(kept?.tokenCreatedAt).toEqual(NOW)
     })
 
-    test("byToken reports releasedAt from the run", async () => {
-      const s = await subject()
-      const tokens = new SequentialTokens()
-      const a = await seedProvisioning(s, "released")
-      const token = tokens.generate()
-      await s.store.transaction((uow) =>
-        uow.putToken(a.id, "access", token.hash, NOW)
-      )
-      expect(
-        (await s.store.reader.byToken(token.hash, "access"))?.releasedAt
-      ).toBeNull()
-
-      const run = completeAll(ProvisioningRun.start(a.id, NOW), at(1))
-      await saveRun(s.store, run.finish(at(2), at(3)))
-      expect(
-        (await s.store.reader.byToken(token.hash, "access"))?.releasedAt
-      ).toBeNull()
-      await saveRun(s.store, run.finish(at(2), at(3)).release(at(HOUR)))
-      expect(
-        (await s.store.reader.byToken(token.hash, "access"))?.releasedAt
-      ).toEqual(at(HOUR))
-    })
-
     test("lockByEmail returns the newest application in the given statuses", async () => {
       const s = await subject()
       const email = Email.parse("again@example.com")
@@ -489,7 +708,7 @@ export function applicationStoreContract(
       ).toBeNull()
     })
 
-    test("claimDue returns a due run and skips blocked, released or future ones", async () => {
+    test("claimDue returns a due run and skips blocked, finished or future ones", async () => {
       const s = await subject()
       const now = at(DAY)
       const blocked = await seedProvisioning(s, "blocked")
@@ -501,12 +720,10 @@ export function applicationStoreContract(
           NOW
         )
       )
-      const released = await seedProvisioning(s, "released")
+      const finished = await seedProvisioning(s, "finished")
       await saveRun(
         s.store,
-        completeAll(ProvisioningRun.start(released.id, NOW), NOW)
-          .finish(NOW, NOW)
-          .release(NOW)
+        completeAll(ProvisioningRun.start(finished.id, NOW), NOW).finish(NOW)
       )
       const future = await seedProvisioning(s, "future")
       await saveRun(
@@ -530,12 +747,24 @@ export function applicationStoreContract(
       ).toBeNull()
     })
 
+    test("claimDue skips finished runs", async () => {
+      const s = await subject()
+      const a = await seedProvisioning(s, "finished-only")
+      await saveRun(
+        s.store,
+        completeAll(ProvisioningRun.start(a.id, NOW), NOW).finish(NOW)
+      )
+      expect(
+        await s.store.transaction((uow) => uow.claimDue(at(DAY)))
+      ).toBeNull()
+    })
+
     test("saveRun round-trips completed steps and restart removes them", async () => {
       const s = await subject()
       const a = await seedProvisioning(s, "steps")
       const run = ProvisioningRun.start(a.id, NOW)
         .complete("create_account", at(1))
-        .complete("join_keycloak_groups", at(2))
+        .complete("join_mail_groups", at(2))
         .fail({ blocked: false, reason: "flaky" }, retry, at(3))
       await saveRun(s.store, run)
       const loaded = await s.store.transaction((uow) => uow.lockRun(a.id))
@@ -562,39 +791,20 @@ export function applicationStoreContract(
       expect(fresh?.snapshot.completed).toEqual([])
     })
 
-    test("passwordMail derives from events in id order", async () => {
-      const s = await subject()
-      const a = await seedPending(s.store)
-      const admin = { kind: "admin" as const, id: s.adminId }
-      await s.store.transaction(async (uow) => {
-        await uow.appendEvent(a.id, "password_mail_sent", null, SYSTEM, NOW)
-        await uow.appendEvent(a.id, "password_mail_requested", null, admin, NOW)
-      })
-      const state = await s.store.reader.passwordMail(a.id)
-      expect(state.pendingRequest).toEqual(admin)
-      expect(state.lastSentAt).toEqual(NOW)
-      const inTx = await s.store.transaction((uow) => uow.passwordMail(a.id))
-      expect(inTx).toEqual(state)
-    })
-
     test("an event whose admin was deleted reads back with a null id", async () => {
       const s = await subject()
       const a = await seedPending(s.store)
       const admin = { kind: "admin" as const, id: s.adminId }
       await s.store.transaction(async (uow) => {
-        await uow.appendEvent(a.id, "password_mail_requested", null, admin, NOW)
+        await uow.appendEvent(a.id, "provision_retried", null, admin, NOW)
       })
       await s.forgetAdmin(s.adminId)
       const gone = { kind: "admin" as const, id: null }
-      const state = await s.store.reader.passwordMail(a.id)
-      expect(state.pendingRequest).toEqual(gone)
-      const inTx = await s.store.transaction((uow) => uow.passwordMail(a.id))
-      expect(inTx).toEqual(state)
       const row = (await s.store.reader.list({ closed: false })).find(
         (r) => r.application.id === a.id
       )
       expect(row?.events.at(-1)).toMatchObject({
-        kind: "password_mail_requested",
+        kind: "provision_retried",
         actor: gone,
       })
     })
@@ -739,10 +949,10 @@ export function applicationStoreContract(
       expect(await s.queuedMails()).toEqual([])
       const run = await s.store.transaction((uow) => uow.lockRun(a.id))
       expect(run?.error).toBeNull()
-      expect(run?.snapshot.completed).toHaveLength(5)
+      expect(run?.snapshot.completed).toHaveLength(4)
       expect(await s.changeRequestNotes(a.id)).toEqual([null])
 
-      const rows = await s.store.reader.list({ closed: false })
+      const rows = await s.store.reader.list({ closed: true })
       const row = rows.find((r) => r.application.id === a.id)
       expect(row).toBeDefined()
       const withChanges = row!.events.filter((e) => e.changes !== null)
@@ -772,7 +982,6 @@ export function applicationStoreContract(
       const accept = async (username: string, when: Date) => {
         const p = await seedProvisioning(s, username, { at: when })
         const run = completeAll(ProvisioningRun.start(p.id, when), when).finish(
-          when,
           when
         )
         await saveRun(s.store, run)
@@ -784,18 +993,18 @@ export function applicationStoreContract(
         return { id: p.id, run }
       }
       const held = await accept("held", at(4))
-      const freed = await accept("freed", at(5))
-      await saveRun(s.store, freed.run.release(at(6)))
+      const accepted = await accept("accepted", at(5))
 
       const ids = async (closed: boolean) =>
         (await s.store.reader.list({ closed })).map((r) => r.application.id)
-      expect(await ids(false)).toEqual([pendingApp.id, held.id])
-      expect(await ids(true)).toEqual([withdrawn.id, freed.id])
+      expect(await ids(false)).toEqual([pendingApp.id])
+      expect(await ids(true)).toEqual([withdrawn.id, held.id, accepted.id])
       const all = [...(await ids(false)), ...(await ids(true))]
       expect(all).not.toContain(unverified.id)
 
       const open = await s.store.reader.list({ closed: false })
-      const heldRow = open.find((r) => r.application.id === held.id)
+      const closedRows = await s.store.reader.list({ closed: true })
+      const heldRow = closedRows.find((r) => r.application.id === held.id)
       expect(heldRow?.run?.applicationId).toBe(held.id)
       const eventIds = heldRow!.events.map((e) => e.id)
       expect(eventIds).toEqual([...eventIds].sort((x, y) => x - y))

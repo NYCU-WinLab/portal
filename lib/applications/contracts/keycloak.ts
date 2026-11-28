@@ -10,8 +10,11 @@ export type KeycloakSubject = {
   directory: KeycloakDirectory
   provisioner: KeycloakProvisioner
   addGroup(path: string): Promise<void>
-  setPassword(id: string): Promise<void>
   deleteUser(id: string): Promise<void>
+  /** The user still exists, but the provisioner can no longer see or change it. */
+  moveOutsideBoundary(id: string): Promise<void>
+  /** The group exists, but the provisioner has no permission on it. */
+  withholdGroupPermission(path: string): Promise<void>
 }
 
 const newUser = (o: Partial<NewKeycloakUser> = {}): NewKeycloakUser => ({
@@ -73,6 +76,16 @@ export function keycloakContract(make: () => Promise<KeycloakSubject>) {
       expect(await s.provisioner.joinGroup(id, "/mail")).toBe("user_gone")
     })
 
+    test("joinGroup reports group_forbidden for a group the provisioner has no permission on", async () => {
+      const s = await make()
+      const id = await created(s)
+      await s.addGroup("/lab-member/118")
+      await s.withholdGroupPermission("/lab-member/118")
+      expect(await s.provisioner.joinGroup(id, "/lab-member/118")).toBe(
+        "group_forbidden"
+      )
+    })
+
     test("leaveGroup is gone for a deleted user and ok otherwise", async () => {
       const s = await make()
       const id = await created(s)
@@ -99,14 +112,23 @@ export function keycloakContract(make: () => Promise<KeycloakSubject>) {
       expect(await s.provisioner.readUser(id)).toBeNull()
     })
 
-    test("hasPassword is false until set and user_gone after delete", async () => {
+    test("a user outside the boundary is forbidden for writes but still readable", async () => {
       const s = await make()
       const id = await created(s)
-      expect(await s.provisioner.hasPassword(id)).toBe(false)
-      await s.setPassword(id)
-      expect(await s.provisioner.hasPassword(id)).toBe(true)
-      await s.deleteUser(id)
-      expect(await s.provisioner.hasPassword(id)).toBe("user_gone")
+      await s.addGroup("/mail")
+      await s.moveOutsideBoundary(id)
+      const opts = {
+        lifespanSeconds: 60,
+        signal: new AbortController().signal,
+      }
+      expect(await s.provisioner.setEnabled(id, true)).toBe("forbidden")
+      expect(await s.provisioner.joinGroup(id, "/mail")).toBe("forbidden")
+      expect(await s.provisioner.executeActionsEmail(id, opts)).toBe(
+        "forbidden"
+      )
+      expect(await s.provisioner.leaveGroup(id, "/provisioning")).toBe("gone")
+      expect((await s.provisioner.readUser(id))?.username).toBe("xmwang")
+      expect(await s.provisioner.findByApplicationId("app-1")).toBe(id)
     })
 
     test("directory reads what was created", async () => {

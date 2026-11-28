@@ -52,9 +52,9 @@ test("FakeMailGroups outcomes", async () => {
 
 test("FakeKeycloak fail throws KeycloakUnavailable the given number of times", async () => {
   const kc = new FakeKeycloak()
-  kc.fail("hasPassword", 2)
-  await expect(kc.hasPassword("x")).rejects.toBeInstanceOf(KeycloakUnavailable)
-  await expect(kc.hasPassword("x")).rejects.toBeInstanceOf(KeycloakUnavailable)
-  expect(await kc.hasPassword("x")).toBe("user_gone")
+  kc.fail("readUser", 2)
+  await expect(kc.readUser("x")).rejects.toBeInstanceOf(KeycloakUnavailable)
+  await expect(kc.readUser("x")).rejects.toBeInstanceOf(KeycloakUnavailable)
+  expect(await kc.readUser("x")).toBeNull()
   expect(Username.restore("a").value).toBe("a")
 })

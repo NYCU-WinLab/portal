@@ -11,7 +11,6 @@ import type {
   MailKind,
   TokenPurpose,
 } from "./domain/constants"
-import type { PasswordMailState } from "./domain/password-mail"
 import type { ProvisioningRun } from "./domain/provisioning-run"
 import type { Email, TokenHash, Username } from "./domain/values"
 
@@ -39,7 +38,6 @@ export type SaveResult = "ok" | "active_email_taken" | "username_claimed"
 export type TokenLookup = {
   application: Application
   tokenCreatedAt: Date
-  releasedAt: Date | null
 }
 export type EventRecord = {
   id: number
@@ -70,7 +68,6 @@ export interface ApplicationStore {
 export interface ApplicationReader {
   byToken(hash: TokenHash, purpose: TokenPurpose): Promise<TokenLookup | null>
   list(filter: { closed: boolean }): Promise<ReviewRow[]>
-  passwordMail(applicationId: string): Promise<PasswordMailState>
   claimedUsernames(
     names: readonly Username[],
     exceptId?: string
@@ -105,11 +102,6 @@ export interface UnitOfWork {
   claimDue(
     now: Date
   ): Promise<{ application: Application; run: ProvisioningRun } | null>
-  /**
-   * Reads the events of `PASSWORD_MAIL_EVENT_KINDS` and hands them to
-   * `derivePasswordMail`.
-   */
-  passwordMail(applicationId: string): Promise<PasswordMailState>
   /**
    * Writes the application row (version-checked), its profile, ends and
    * inserts change requests, inserts mail-group rows when an assignment
@@ -174,6 +166,28 @@ export interface UnitOfWork {
    * table and the profile.
    */
   purge(applicationId: string, at: Date): Promise<void>
+  /**
+   * The retention selections lock the rows they return (`for update skip
+   * locked`) and return at most `limit` ids, oldest first. Every time bound
+   * is inclusive: a row whose time equals the bound is selected.
+   *
+   * Unverified applications whose verify token was created at or before the
+   * bound.
+   */
+  staleUnverified(verifyTokenBefore: Date, limit: number): Promise<string[]>
+  /** `changes_requested` applications whose open request is due at or before the bound. */
+  overdueChangeRequests(dueBefore: Date, limit: number): Promise<string[]>
+  /** Applications closed at or before the bound and not yet purged. */
+  purgeDue(closedBefore: Date, limit: number): Promise<string[]>
+  /**
+   * Deletes up to `limit` verify tokens created at or before the bound, of
+   * applications that are no longer unverified. Returns how many.
+   */
+  deleteVerifyTokens(createdBefore: Date, limit: number): Promise<number>
+  /** Deletes the rate log entries at or before the bound. Returns how many. */
+  deleteMailLog(before: Date): Promise<number>
+  /** Counts `pending` applications verified at or before the bound. */
+  awaitingReview(verifiedBefore: Date): Promise<number>
 }
 
 export interface SettingsStore {
@@ -247,17 +261,30 @@ export interface KeycloakProvisioner {
     enabled: boolean
     attributes: Record<string, string[]>
   } | null>
+  /**
+   * "group_forbidden": the user is still in /provisioning but the provisioner
+   * has no permission on this group (a new cohort not yet added to it);
+   * "forbidden": the user is outside what the provisioner may change.
+   */
   joinGroup(
     id: string,
     path: string
-  ): Promise<"ok" | "user_gone" | "group_missing">
+  ): Promise<
+    "ok" | "user_gone" | "group_missing" | "group_forbidden" | "forbidden"
+  >
   leaveGroup(id: string, path: string): Promise<"ok" | "gone">
-  setEnabled(id: string, enabled: boolean): Promise<"ok" | "user_gone">
+  /**
+   * "forbidden": the account exists but is outside what the provisioner may
+   * change (it left /provisioning); "user_gone": it was deleted.
+   */
+  setEnabled(
+    id: string,
+    enabled: boolean
+  ): Promise<"ok" | "user_gone" | "forbidden">
   executeActionsEmail(
     id: string,
     opts: { lifespanSeconds: number; signal: AbortSignal }
-  ): Promise<"ok" | "user_gone" | "invalid">
-  hasPassword(id: string): Promise<boolean | "user_gone">
+  ): Promise<"ok" | "user_gone" | "invalid" | "forbidden">
 }
 
 export interface MailGroups {

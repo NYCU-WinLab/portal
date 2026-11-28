@@ -6,6 +6,8 @@ import type { Email, Username } from "@/lib/applications/domain/values"
 import {
   KeycloakUnavailable,
   type KeycloakDirectory,
+  type KeycloakProvisioner,
+  type NewKeycloakUser,
 } from "@/lib/applications/ports"
 import { traced } from "@/lib/otel"
 
@@ -442,13 +444,19 @@ const unpatchedFetch: Fetch = (url, init) => {
 }
 
 /**
- * A read-only client of the realm for the account application: its own
- * token per instance, one retry after a 401, and every HTTP call in a span
- * named by method and path (never the query, which carries the email or
- * username being looked up). A 5xx, a timeout or a dropped connection throws
- * KeycloakUnavailable; any other unexpected answer throws a plain Error.
+ * A client of the realm for the account application: its own token per
+ * instance, one retry after a 401, and every HTTP call in a span named by
+ * method and path (never the query, which carries the email, username or
+ * application id being looked up). The portal client only reads; the
+ * `portal-provisioner` client, scoped to a group, also writes. That scope
+ * also hides everything else from it: every user search and every user it
+ * cannot see answers 403, never 404. So the provisioner takes a `reader`
+ * (the portal client) for its lookups and to tell a deleted user (reader
+ * 404, "user_gone") from one outside its scope ("forbidden"). A 5xx, a
+ * timeout or a dropped connection throws KeycloakUnavailable; any other
+ * unexpected answer throws a plain Error.
  */
-export class KeycloakAdmin implements KeycloakDirectory {
+export class KeycloakAdmin implements KeycloakDirectory, KeycloakProvisioner {
   private token: { value: string; expires: number } | null = null
   private readonly timeoutMs: number
   private readonly http: Fetch
@@ -463,6 +471,10 @@ export class KeycloakAdmin implements KeycloakDirectory {
       timeoutMs?: number
       fetch?: typeof globalThis.fetch
       span?: Span
+      /** Sent with execute-actions-email, so the link returns to the portal. */
+      actionsEmail?: { clientId?: string; redirectUri?: string }
+      /** Answers this client's lookups; the portal client, for the provisioner. */
+      reader?: KeycloakAdmin
     }
   ) {
     this.timeoutMs = config.timeoutMs ?? 5000
@@ -510,6 +522,190 @@ export class KeycloakAdmin implements KeycloakDirectory {
     return found !== null
   }
 
+  async findByApplicationId(id: string): Promise<string | null> {
+    if (this.config.reader) return this.config.reader.findByApplicationId(id)
+    const found = await this.get<{ id: string }[]>(
+      "/users",
+      new URLSearchParams({
+        q: `portal_application_id:${id}`,
+        exact: "true",
+      })
+    )
+    return found?.[0]?.id ?? null
+  }
+
+  async createUser(user: NewKeycloakUser) {
+    const response = await this.send("POST", "/users", {
+      body: {
+        username: user.username,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        enabled: false,
+        emailVerified: true,
+        attributes: user.attributes,
+        groups: user.groups,
+      },
+    })
+    if (response.status === 201) {
+      const id = response.headers.get("location")?.split("/").pop()
+      if (!id) throw new Error("Keycloak /users 201 without a Location")
+      return { ok: true, id } as const
+    }
+    // 403: a group the provisioner has no rights on, or none at all.
+    if (response.status === 400 || response.status === 403)
+      return { ok: false, reason: "invalid" } as const
+    if (response.status !== 409)
+      throw new Error(`Keycloak /users ${response.status}`)
+    // Keycloak's message does not say which field clashed, so ask.
+    const lookup = this.config.reader ?? this
+    const username = user.username.toLowerCase()
+    const byName = await lookup.get<{ username?: string }[]>(
+      "/users",
+      new URLSearchParams({ username, exact: "true" })
+    )
+    if ((byName ?? []).some((u) => u.username?.toLowerCase() === username))
+      return { ok: false, reason: "username_taken" } as const
+    const email = user.email.toLowerCase()
+    const byEmail = await lookup.get<{ email?: string }[]>(
+      "/users",
+      new URLSearchParams({ email, exact: "true" })
+    )
+    if ((byEmail ?? []).some((u) => u.email?.toLowerCase() === email))
+      return { ok: false, reason: "email_taken" } as const
+    throw new Error("Keycloak /users 409 without a matching user")
+  }
+
+  async readUser(id: string): ReturnType<KeycloakProvisioner["readUser"]> {
+    if (this.config.reader) return this.config.reader.readUser(id)
+    const u = await this.get<{
+      username: string
+      email: string
+      enabled: boolean
+      attributes?: Record<string, string[]>
+    }>(`/users/${encodeURIComponent(id)}`, undefined, true)
+    if (!u) return null
+    return {
+      username: u.username,
+      email: u.email,
+      enabled: u.enabled,
+      attributes: u.attributes ?? {},
+    }
+  }
+
+  async joinGroup(id: string, path: string) {
+    const groupId = await this.groupId(path)
+    if (!groupId) return "group_missing" as const
+    const response = await this.send(
+      "PUT",
+      `/users/${encodeURIComponent(id)}/groups/${encodeURIComponent(groupId)}`
+    )
+    if (response.status === 404) return "user_gone" as const
+    if (response.status === 403) return this.whyJoinForbidden(id)
+    if (!response.ok) throw new Error(`Keycloak join group ${response.status}`)
+    return "ok" as const
+  }
+
+  async leaveGroup(id: string, path: string) {
+    const groupId = await this.groupId(path)
+    if (!groupId) return "gone" as const
+    const response = await this.send(
+      "DELETE",
+      `/users/${encodeURIComponent(id)}/groups/${encodeURIComponent(groupId)}`
+    )
+    // Once the user left /provisioning the client can no longer see them,
+    // and Keycloak answers 403 where it would have answered 404.
+    if (response.status === 403 || response.status === 404)
+      return "gone" as const
+    if (!response.ok) throw new Error(`Keycloak leave group ${response.status}`)
+    return "ok" as const
+  }
+
+  async setEnabled(id: string, enabled: boolean) {
+    const response = await this.send(
+      "PUT",
+      `/users/${encodeURIComponent(id)}`,
+      {
+        body: { enabled },
+      }
+    )
+    if (response.status === 404) return "user_gone" as const
+    if (response.status === 403) return this.whyForbidden(id)
+    if (!response.ok) throw new Error(`Keycloak set enabled ${response.status}`)
+    return "ok" as const
+  }
+
+  async executeActionsEmail(
+    id: string,
+    opts: { lifespanSeconds: number; signal: AbortSignal }
+  ) {
+    const query = new URLSearchParams({
+      lifespan: String(opts.lifespanSeconds),
+    })
+    const { clientId, redirectUri } = this.config.actionsEmail ?? {}
+    if (clientId) query.set("client_id", clientId)
+    if (redirectUri) query.set("redirect_uri", redirectUri)
+    const response = await this.send(
+      "PUT",
+      `/users/${encodeURIComponent(id)}/execute-actions-email`,
+      { query, body: ["UPDATE_PASSWORD"], signal: opts.signal }
+    )
+    if (response.status === 404) return "user_gone" as const
+    if (response.status === 403) return this.whyForbidden(id)
+    if (response.status === 400) return "invalid" as const
+    if (!response.ok)
+      throw new Error(`Keycloak execute-actions-email ${response.status}`)
+    return "ok" as const
+  }
+
+  /**
+   * A write answered 403: the provisioner cannot see this user. The reader
+   * knows whether it was deleted or merely left /provisioning.
+   */
+  private async whyForbidden(id: string): Promise<"user_gone" | "forbidden"> {
+    const seen = await this.config.reader?.readUser(id)
+    return seen === null ? "user_gone" : "forbidden"
+  }
+
+  /**
+   * A join answered 403 although the reader still sees the user: either the
+   * user left /provisioning ("forbidden") or the provisioner has no
+   * permission on the target group ("group_forbidden", e.g. a new cohort
+   * not yet added to it). The reader's view of the user's groups tells them
+   * apart.
+   */
+  private async whyJoinForbidden(
+    id: string
+  ): Promise<"user_gone" | "forbidden" | "group_forbidden"> {
+    const reader = this.config.reader
+    if (!reader) return "forbidden"
+    if ((await reader.readUser(id)) === null) return "user_gone"
+    const memberOf = await reader.get<{ path: string }[]>(
+      `/users/${encodeURIComponent(id)}/groups`,
+      undefined,
+      true
+    )
+    if (memberOf === null) return "user_gone"
+    return memberOf.some((g) => g.path === "/provisioning")
+      ? "group_forbidden"
+      : "forbidden"
+  }
+
+  /**
+   * The group's id, or null when no group has this path. Read through the
+   * reader (the provisioner may lack view on a group it cannot manage, which
+   * must not look like a missing group).
+   */
+  private async groupId(path: string): Promise<string | null> {
+    const segments = path.split("/").filter(Boolean).map(encodeURIComponent)
+    const group = await (this.config.reader ?? this).get<{ id: string }>(
+      `/group-by-path/${segments.join("/")}`,
+      undefined,
+      true
+    )
+    return group?.id ?? null
+  }
+
   private async accessToken(): Promise<string> {
     if (this.token && this.token.expires > Date.now() + 10_000)
       return this.token.value
@@ -540,10 +736,33 @@ export class KeycloakAdmin implements KeycloakDirectory {
     query?: URLSearchParams,
     missingIsNull = false
   ): Promise<T | null> {
-    const url = `${this.base}${path}${query ? `?${query}` : ""}`
+    const response = await this.send("GET", path, { query })
+    if (response.status === 404 && missingIsNull) return null
+    if (!response.ok) throw new Error(`Keycloak ${path} ${response.status}`)
+    return (await response.json()) as T
+  }
+
+  /** One admin call with the bearer token, retried once after a 401. */
+  private async send(
+    method: string,
+    path: string,
+    opts: {
+      query?: URLSearchParams
+      body?: unknown
+      signal?: AbortSignal
+    } = {}
+  ): Promise<Response> {
+    const url = `${this.base}${path}${opts.query ? `?${opts.query}` : ""}`
     const send = async () =>
-      this.call("GET", url, path, {
-        headers: { authorization: `Bearer ${await this.accessToken()}` },
+      this.call(method, url, path, {
+        headers: {
+          authorization: `Bearer ${await this.accessToken()}`,
+          ...(opts.body === undefined
+            ? {}
+            : { "content-type": "application/json" }),
+        },
+        body: opts.body === undefined ? undefined : JSON.stringify(opts.body),
+        signal: opts.signal,
       })
     let response = await send()
     // A token Keycloak dropped early: fetch a new one, once.
@@ -551,9 +770,7 @@ export class KeycloakAdmin implements KeycloakDirectory {
       this.token = null
       response = await send()
     }
-    if (response.status === 404 && missingIsNull) return null
-    if (!response.ok) throw new Error(`Keycloak ${path} ${response.status}`)
-    return (await response.json()) as T
+    return response
   }
 
   /** One HTTP call in a span; 5xx, timeout and network errors are Unavailable. */
@@ -573,7 +790,10 @@ export class KeycloakAdmin implements KeycloakDirectory {
             ...init,
             method,
             cache: "no-store",
-            signal: AbortSignal.timeout(this.timeoutMs),
+            // A caller's signal is its own deadline (the set-password mail
+            // waits on SMTP for up to the step's 30 s); the default applies
+            // only to calls that bring none.
+            signal: init.signal ?? AbortSignal.timeout(this.timeoutMs),
           })
         } catch (error) {
           throw new KeycloakUnavailable(
@@ -603,7 +823,31 @@ export function keycloakReader(): KeycloakAdmin {
   }))
 }
 
-/** Clears this module's caches and the reader's token. */
+const provisionerKey = Symbol.for("portal.keycloakProvisioner")
+
+/**
+ * The `portal-provisioner` client, scoped to the provisioning group: the
+ * only Keycloak client that writes. Throws when its credentials are unset.
+ */
+export function keycloakProvisioner(): KeycloakAdmin {
+  const clientId = process.env.KEYCLOAK_PROVISIONER_CLIENT_ID
+  const clientSecret = process.env.KEYCLOAK_PROVISIONER_CLIENT_SECRET
+  if (!clientId || !clientSecret)
+    throw new Error("KEYCLOAK_PROVISIONER_CLIENT_ID and _SECRET must be set")
+  const store = globalThis as unknown as Record<symbol, KeycloakAdmin>
+  return (store[provisionerKey] ??= new KeycloakAdmin({
+    issuer: issuer(),
+    clientId,
+    clientSecret,
+    reader: keycloakReader(),
+    actionsEmail: {
+      clientId: process.env.KEYCLOAK_CLIENT_ID,
+      redirectUri: process.env.BETTER_AUTH_URL,
+    },
+  }))
+}
+
+/** Clears this module's caches and the clients' tokens. */
 export function forgetDirectoryCaches(): void {
   cached = null
   directory = null
@@ -613,4 +857,5 @@ export function forgetDirectoryCaches(): void {
   systemNames = null
   const store = globalThis as unknown as Record<symbol, KeycloakAdmin>
   store[readerKey]?.forgetCaches()
+  store[provisionerKey]?.forgetCaches()
 }

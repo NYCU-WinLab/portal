@@ -11,7 +11,7 @@ const started = () => ProvisioningRun.start("app-1", NOW)
 const transient = { blocked: false, reason: "Keycloak 逾時" }
 const allDone = () =>
   STEP_NAMES.reduce((run, step) => run.complete(step, NOW), started())
-const finished = () => allDone().finish(NOW, new Date(NOW.getTime() + MIN))
+const finished = () => allDone().finish(NOW)
 const refusal = (fn: () => unknown) => {
   try {
     fn()
@@ -36,7 +36,7 @@ describe("ProvisioningRun", () => {
 
   test("nextStep returns the first step not completed", () =>
     expect(started().complete("create_account", NOW).nextStep(STEP_NAMES)).toBe(
-      "join_keycloak_groups"
+      "join_mail_groups"
     ))
 
   test("nextStep is null when everything is completed", () =>
@@ -102,10 +102,10 @@ describe("ProvisioningRun", () => {
     expect(run.nextAt.getTime() - NOW.getTime()).toBe(60 * MIN)
   })
 
-  test("retry unblocks; username only before create_account, cohort only before join_keycloak_groups", () => {
+  test("retry unblocks; username and cohort only before create_account", () => {
     const blocked = started().fail({ blocked: true, reason: "x" }, policy, NOW)
     const later = new Date(NOW.getTime() + 5 * MIN)
-    const r = blocked.retry({ username: "new" }, later)
+    const r = blocked.retry({ username: "new", cohort: "113" }, later)
     expect([r.blocked, r.attempts, r.error]).toEqual([false, 0, null])
     expect(r.nextAt).toEqual(later)
 
@@ -113,54 +113,30 @@ describe("ProvisioningRun", () => {
     expect(refusal(() => afterAccount.retry({ username: "n" }, NOW))).toBe(
       "wrong_state:username"
     )
-    expect(() => afterAccount.retry({ cohort: "113" }, NOW)).not.toThrow()
-
-    const afterGroups = afterAccount.complete("join_keycloak_groups", NOW)
-    expect(refusal(() => afterGroups.retry({ cohort: "113" }, NOW))).toBe(
+    expect(refusal(() => afterAccount.retry({ cohort: "113" }, NOW))).toBe(
       "wrong_state:cohort"
     )
-    expect(() => afterGroups.retry({}, NOW)).not.toThrow()
+    expect(() => afterAccount.retry({}, NOW)).not.toThrow()
   })
 
   test("retry on a finished run is wrong_state", () =>
     expect(refusal(() => finished().retry({}, NOW))).toBe("wrong_state"))
 
-  test("finish requires every step and schedules the first check", () => {
-    expect(() => started().finish(NOW, NOW)).toThrow()
-    const first = new Date(NOW.getTime() + 15 * MIN)
-    const run = allDone().finish(NOW, first)
+  test("finish requires every step and ends the run", () => {
+    expect(() => started().finish(NOW)).toThrow()
+    const run = allDone().finish(NOW)
     expect([run.finished, run.attempts, run.error]).toEqual([true, 0, null])
-    expect(run.nextAt).toEqual(first)
     expect(run.snapshot.finishedAt).toEqual(NOW)
   })
 
-  test("requestMail needs a finished, unreleased run", () => {
-    const later = new Date(NOW.getTime() + MIN)
-    expect(refusal(() => started().requestMail(NOW))).toBe("wrong_state")
-    expect(finished().requestMail(later).nextAt).toEqual(later)
-    expect(refusal(() => finished().release(NOW).requestMail(NOW))).toBe(
-      "password_already_set"
-    )
+  test("a finished run is never due", () => {
+    expect(finished().isDue(new Date(NOW.getTime() + 999 * MIN))).toBe(false)
   })
 
-  test("scheduleCheck needs a finished run", () => {
-    const at = new Date(NOW.getTime() + 3 * MIN)
-    expect(() => started().scheduleCheck(at)).toThrow()
-    expect(finished().scheduleCheck(at).nextAt).toEqual(at)
-  })
-
-  test("release needs a finished run and is idempotent", () => {
-    expect(() => started().release(NOW)).toThrow()
-    const released = finished().release(NOW)
-    expect([released.released, released.releasedAt]).toEqual([true, NOW])
-    expect(released.release(new Date(NOW.getTime() + MIN))).toBe(released)
-  })
-
-  test("isDue is false when blocked, released or not yet due", () => {
+  test("isDue is false when blocked or not yet due", () => {
     const later = new Date(NOW.getTime() + 10 * MIN)
     const blocked = started().fail({ blocked: true, reason: "x" }, policy, NOW)
     expect(blocked.isDue(later)).toBe(false)
-    expect(finished().release(NOW).isDue(later)).toBe(false)
     const waiting = started().fail(transient, policy, NOW)
     expect(waiting.isDue(NOW)).toBe(false)
     expect(waiting.isDue(new Date(NOW.getTime() + MIN))).toBe(true)

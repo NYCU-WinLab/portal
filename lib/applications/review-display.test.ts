@@ -4,7 +4,6 @@ import { REFUSAL_CODES, ApplicationRefusal } from "./domain/refusal"
 import { KeycloakUnavailable, MailGroupsUnavailable } from "./ports"
 import {
   actorName,
-  awaitsPassword,
   eventDetail,
   profilePatch,
   refusalText,
@@ -124,7 +123,7 @@ describe("eventDetail", () => {
           changes: { step: "create_account", error: "timeout" },
         })
       )
-    ).toBe("建立帳號：timeout")
+    ).toBe("建立帳號並加入群組：timeout")
   })
 
   test("nothing to add", () => {
@@ -140,7 +139,6 @@ describe("stepRows", () => {
     blockedAt: null,
     startedAt: "2026-11-26T06:00:00.000Z",
     finishedAt: null,
-    releasedAt: null,
     steps: [
       {
         name: "create_account" as const,
@@ -153,7 +151,6 @@ describe("stepRows", () => {
     expect(stepRows(base).map((s) => s.state)).toEqual([
       "done",
       "running",
-      "waiting",
       "waiting",
       "waiting",
     ])
@@ -227,29 +224,6 @@ describe("retryChange", () => {
     ).toEqual({
       cohort: 117,
     })
-  })
-})
-
-describe("awaitsPassword", () => {
-  test("accepted, password mail not yet used", () => {
-    const mail = {
-      lastSentAt: null,
-      expiresAt: null,
-      passwordSet: false,
-      canResend: true,
-    }
-    expect(awaitsPassword({ status: "accepted", passwordMail: mail })).toBe(
-      true
-    )
-    expect(
-      awaitsPassword({
-        status: "accepted",
-        passwordMail: { ...mail, passwordSet: true },
-      })
-    ).toBe(false)
-    expect(awaitsPassword({ status: "pending", passwordMail: null })).toBe(
-      false
-    )
   })
 })
 

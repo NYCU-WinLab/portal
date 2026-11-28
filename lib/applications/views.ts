@@ -25,12 +25,6 @@ export type ChangeRequestView = {
   dueAt: string
   expired: boolean
 }
-export type PasswordMailView = {
-  lastSentAt: string | null
-  expiresAt: string | null
-  passwordSet: boolean
-  canResend: boolean
-}
 export type OkResult = { ok: true }
 export type ConfirmResult =
   { ok: true; already: boolean } | { ok: false; code: "already_applied" }
@@ -57,7 +51,6 @@ export type ApplicationStatusView = {
     | { kind: "has_account" }
     | { kind: "withdrawn" }
     | null
-  passwordMail: PasswordMailView | null
 }
 export type EditView = {
   profile: ProfileView
@@ -98,10 +91,8 @@ export type ReviewItem = {
     blockedAt: string | null
     startedAt: string
     finishedAt: string | null
-    releasedAt: string | null
     steps: { name: StepName; completedAt: string }[]
   } | null
-  passwordMail: PasswordMailView | null
   history: {
     id: string
     status: ApplicationStatus

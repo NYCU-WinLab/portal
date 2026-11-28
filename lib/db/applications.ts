@@ -286,7 +286,6 @@ export const labApplicationProvisioning = pgTable(
     blockedAt: timestamp({ withTimezone: true }),
     startedAt: timestamp({ withTimezone: true }).notNull(),
     finishedAt: timestamp({ withTimezone: true }),
-    releasedAt: timestamp({ withTimezone: true }),
   },
   (table) => [
     check("lab_application_provisioning_attempts", sql`${table.attempts} >= 0`),
@@ -294,13 +293,9 @@ export const labApplicationProvisioning = pgTable(
       "lab_application_provisioning_finished_unblocked",
       sql`${table.finishedAt} is null or ${table.blockedAt} is null`
     ),
-    check(
-      "lab_application_provisioning_released_finished",
-      sql`${table.releasedAt} is null or ${table.finishedAt} is not null`
-    ),
     index("lab_application_provisioning_due")
       .on(table.nextAt)
-      .where(sql`${table.blockedAt} is null and ${table.releasedAt} is null`),
+      .where(sql`${table.blockedAt} is null and ${table.finishedAt} is null`),
   ]
 )
 

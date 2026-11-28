@@ -70,11 +70,10 @@ Set these in `.env`; [.env.example](.env.example) documents every one.
 |-----|--------------|---------|
 | `POSTGRES_PASSWORD` | The database password, used by every service | required |
 | `BETTER_AUTH_URL` | The public URL; the MCP resource is `<url>/mcp` | required |
-| `BETTER_AUTH_SECRET` | Signs sessions and OAuth queries; also the source of the key for the account-application mail rate-limit log (only the hash of the address is stored), so rotating it also resets that rate-limit history | required |
+| `BETTER_AUTH_SECRET` | Signs sessions and OAuth queries | required |
 | `KEYCLOAK_ISSUER` | The realm URL, e.g. `https://auth.example.com/realms/lab` | required |
 | `KEYCLOAK_CLIENT_ID`, `KEYCLOAK_CLIENT_SECRET` | The portal's Keycloak client | required |
 | `KEYCLOAK_MCP_CLIENT_ID` | The public client MCP tokens must be issued to | `portal-mcp` |
-| _(not env)_ apply-site URL | The address account-application mails link to is a setting, not env: after deploy, a portal or accounts admin sets it with `set_apply_site_url` (MCP); until then applicant mails fail with 「申請網站網址尚未設定」. Old `APPLY_SITE_URL` and `APPLICATION_HASH_SECRET` lines in `.env` can be deleted | set after first deploy |
 | `PORTAL_VERSION` | Image tag | `main` |
 | `PORTAL_BIND`, `PORTAL_PORT` | Where web listens on the host | `127.0.0.1`, `3000` |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | OTLP/HTTP endpoint for traces and error logs; off when empty | empty |

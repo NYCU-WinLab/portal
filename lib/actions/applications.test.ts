@@ -54,11 +54,15 @@ async function setup() {
   const deps: Deps = {
     store,
     directory: new FakeKeycloak(),
+    provisioner: () => new FakeKeycloak(),
     authority: new FakeAuthority({ processorEmails: [] }),
     settings,
     mailGroups: new FakeMailGroups({}),
     reserved: new FixedReservedNames([]),
-    mail: new MailComposer({ siteUrl: "https://portal.example.test" }),
+    mail: new MailComposer({
+      siteUrl: "https://portal.example.test",
+      resetPasswordUrl: "https://id.example.test/reset",
+    }),
     tokens: new SequentialTokens(),
     retention: new RetentionPolicy(),
     rate: new MailRatePolicy(),
@@ -78,11 +82,15 @@ async function setupSettings() {
   const deps: Deps = {
     store,
     directory: new FakeKeycloak(),
+    provisioner: () => new FakeKeycloak(),
     authority: new FakeAuthority({ accountsAdminIds: [processor.userId] }),
     settings,
     mailGroups: new FakeMailGroups({}),
     reserved: new FixedReservedNames([]),
-    mail: new MailComposer({ siteUrl: "https://portal.example.test" }),
+    mail: new MailComposer({
+      siteUrl: "https://portal.example.test",
+      resetPasswordUrl: "https://id.example.test/reset",
+    }),
     tokens: new SequentialTokens(),
     retention: new RetentionPolicy(),
     rate: new MailRatePolicy(),
@@ -108,11 +116,10 @@ const inputs = (a: ApplicantActions) =>
     [a.withdraw, { token }],
     [a.getForEdit, { token }],
     [a.resubmit, { token, requestedStatus: "master", profile: form }],
-    [a.requestPasswordMail, { token }],
   ] as const
 
 describe("applicant actions", () => {
-  test("define the nine actions for the apply site", async () => {
+  test("define the eight actions for the apply site", async () => {
     const a = await setup()
     expect(Object.values(a).map((x) => x.name)).toEqual([
       "submit_lab_application",
@@ -123,7 +130,6 @@ describe("applicant actions", () => {
       "withdraw_lab_application",
       "get_lab_application_for_edit",
       "resubmit_lab_application",
-      "send_lab_application_password_mail",
     ])
     for (const x of Object.values(a)) {
       expect(x.description.startsWith("Apply site only: ")).toBe(true)
@@ -242,7 +248,6 @@ describe("review actions", () => {
       accept: spy("accept"),
       retryProvisioning: spy("retryProvisioning"),
       reject: spy("reject"),
-      resendPasswordMail: spy("resendPasswordMail"),
     },
     settings: {
       list: spy("settingsList"),
@@ -280,11 +285,6 @@ describe("review actions", () => {
       ["retryProvisioning", processor.userId, ID, { username: "bob" }],
     ],
     [r.reject, { id: ID }, ["reject", processor.userId, ID, undefined]],
-    [
-      r.resendPasswordMail,
-      { id: ID },
-      ["resendPasswordMail", processor.userId, ID],
-    ],
     [r.listSettings, {}, ["settingsList", processor.userId]],
     [
       r.setNotifiee,
@@ -298,7 +298,7 @@ describe("review actions", () => {
     ],
   ] as const
 
-  test("ten actions, accounts admins only, in no API app", () => {
+  test("nine actions, accounts admins only, in no API app", () => {
     expect(cases.map(([a]) => a.name)).toEqual([
       "list_lab_applications",
       "update_lab_application",
@@ -306,7 +306,6 @@ describe("review actions", () => {
       "accept_lab_application",
       "retry_lab_application_provisioning",
       "reject_lab_application",
-      "resend_lab_application_password_mail",
       "list_application_settings",
       "set_application_notifiee",
       "set_application_mail_group",
@@ -333,7 +332,6 @@ describe("review actions", () => {
       accept_lab_application: ["mutation", true],
       retry_lab_application_provisioning: ["mutation", true],
       reject_lab_application: ["mutation", true],
-      resend_lab_application_password_mail: ["mutation", false],
       list_application_settings: ["query", false],
       set_application_notifiee: ["mutation", true],
       set_application_mail_group: ["mutation", true],

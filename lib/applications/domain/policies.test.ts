@@ -61,71 +61,51 @@ test.each([
   expect(check(r, at(threshold))).toBe(!before)
 })
 
-test("access link: open always, accepted until 30 days after release, closed until 30 days after closing", () => {
+test("access link: open always, closed (accepted, rejected, withdrawn) until 30 days after closing", () => {
   const r = new RetentionPolicy(),
     late = at(31 * DAY)
   expect(
     r.accessValid(
       { status: "provisioning", closedAt: null, purgedAt: null },
-      null,
       late
     )
   ).toBe(true)
+  for (const status of ["accepted", "withdrawn", "rejected"] as const) {
+    const a = { status, closedAt: T, purgedAt: null }
+    expect(r.accessValid(a, at(30 * DAY - SEC))).toBe(true)
+    expect(r.accessValid(a, at(30 * DAY))).toBe(false)
+  }
   expect(
-    r.accessValid(
-      { status: "accepted", closedAt: T, purgedAt: null },
-      null,
-      at(365 * DAY)
-    )
-  ).toBe(true)
-  expect(
-    r.accessValid(
-      { status: "accepted", closedAt: T, purgedAt: null },
-      T,
-      at(30 * DAY - SEC)
-    )
-  ).toBe(true)
-  expect(
-    r.accessValid(
-      { status: "accepted", closedAt: T, purgedAt: null },
-      T,
-      at(30 * DAY)
-    )
+    r.accessValid({ status: "rejected", closedAt: T, purgedAt: T }, at(SEC))
   ).toBe(false)
   expect(
-    r.accessValid(
-      { status: "withdrawn", closedAt: T, purgedAt: null },
-      null,
-      at(30 * DAY)
-    )
-  ).toBe(false)
-  expect(
-    r.accessValid(
-      { status: "rejected", closedAt: T, purgedAt: T },
-      null,
-      at(SEC)
-    )
-  ).toBe(false)
-  expect(
-    r.accessValid(
-      { status: "unverified", closedAt: null, purgedAt: null },
-      null,
-      T
-    )
+    r.accessValid({ status: "unverified", closedAt: null, purgedAt: null }, T)
   ).toBe(false)
 })
 
 test("other retention values", () => {
   const r = new RetentionPolicy()
   expect(r.changesDue(T)).toEqual(at(7 * DAY))
-  expect(r.passwordMailExpiresAt(T)).toEqual(at(7 * DAY))
   expect(r.passwordMailLifespanSeconds()).toBe(604_800)
-  expect(r.nextPasswordCheck(T)).toEqual(at(15 * MIN))
   expect(r.mailLogCutoff(T)).toEqual(at(-2 * DAY))
   expect(r.cohortAlertNotBefore(T)).toEqual(at(-DAY))
   expect(
     new RetentionPolicy({ verifyTtlMs: MIN }).verifyValid(T, at(MIN))
   ).toBe(false)
+})
+
+test("retention cutoffs: an item is due when its time is at or before the cutoff", () => {
+  const r = new RetentionPolicy()
+  expect(r.verifyCutoff(T)).toEqual(at(-DAY))
+  expect(r.autoRejectCutoff(T)).toEqual(at(-14 * DAY))
+  expect(r.purgeCutoff(T)).toEqual(at(-90 * DAY))
+  expect(r.digestCutoff(T)).toEqual(at(-3 * DAY))
+  // Each cutoff agrees with the matching due check.
+  expect(r.purgeDue(r.purgeCutoff(T), T)).toBe(true)
+  expect(r.purgeDue(at(-90 * DAY + 1), T)).toBe(false)
+  expect(r.autoRejectDue(r.autoRejectCutoff(T), T)).toBe(true)
+  expect(r.digestOverdue(r.digestCutoff(T), T)).toBe(true)
+  expect(r.verifyValid(r.verifyCutoff(T), T)).toBe(false)
 })
 
 test.each([
@@ -162,9 +142,3 @@ test.each([
 ])("allows(%p) = %p", (counts, expected) =>
   expect(new MailRatePolicy().allows(counts)).toBe(expected as "ok")
 )
-test("one password mail request per hour", () => {
-  const p = new MailRatePolicy()
-  expect(p.passwordMailRequestAllowed(null, T)).toBe(true)
-  expect(p.passwordMailRequestAllowed(T, at(HOUR - SEC))).toBe(false)
-  expect(p.passwordMailRequestAllowed(T, at(HOUR))).toBe(true)
-})

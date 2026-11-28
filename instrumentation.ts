@@ -20,6 +20,10 @@ export async function register() {
     startMeetingMailScheduler()
     const { startDoorCardsScheduler } = await import("@/lib/actions/door-cards")
     startDoorCardsScheduler()
+    const { startApplicationProvisioner, startApplicationRetention } =
+      await import("@/lib/actions/applications/container")
+    startApplicationProvisioner()
+    startApplicationRetention()
     const { startCalendarSync } = await import("@/lib/actions/calendar")
     startCalendarSync()
     const { startMemberSweep } = await import("@/lib/auth/member")
@@ -43,8 +47,15 @@ export async function register() {
     "/realms/",
     "/admin/realms/"
   ).concat("/users?")
+  // The set-password mail's query carries the portal URL and client id; the
+  // provisioner's `keycloak PUT …/execute-actions-email` span already covers it.
   const keycloakLookups = keycloakUsers
-    ? [`${keycloakUsers}email=`, `${keycloakUsers}username=`]
+    ? [
+        `${keycloakUsers}email=`,
+        `${keycloakUsers}username=`,
+        `${keycloakUsers}q=`,
+        /\/admin\/realms\/[^/]+\/users\/[^/?]+\/execute-actions-email\?/,
+      ]
     : []
 
   registerOTel({

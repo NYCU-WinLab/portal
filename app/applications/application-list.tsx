@@ -3,7 +3,6 @@
 import { EllipsisIcon } from "lucide-react"
 import * as React from "react"
 
-import { ConfirmDialog } from "@/components/confirm-dialog"
 import { EmptyState } from "@/components/empty-state"
 import { ExpandRow } from "@/components/expand-row"
 import { FieldList, FieldRow } from "@/components/field-list"
@@ -25,17 +24,14 @@ import {
   STATUS_BADGES,
   STATUS_LABELS,
   actorName,
-  awaitsPassword,
   eventDetail,
   stepRows,
   taipeiTime,
   type StepState,
 } from "@/lib/applications/review-display"
 import type { ReviewItem } from "@/lib/applications/views"
-import { report } from "@/lib/report"
 import { cn } from "@/lib/utils"
 
-import { resendPasswordMail } from "./actions"
 import {
   AcceptDialog,
   type Control,
@@ -46,7 +42,7 @@ import {
   RetryDialog,
 } from "./review-dialogs"
 
-type Dialog = "edit" | "changes" | "accept" | "reject" | "retry" | "resend"
+type Dialog = "edit" | "changes" | "accept" | "reject" | "retry"
 
 /** The verbs a row offers in its state, destructive last. */
 function verbsFor(item: ReviewItem): { dialog: Dialog; label: string }[] {
@@ -66,8 +62,6 @@ function verbsFor(item: ReviewItem): { dialog: Dialog; label: string }[] {
     (item.provisioning?.blockedAt || item.provisioning?.error)
   )
     verbs.push({ dialog: "retry", label: "重試" })
-  if (awaitsPassword(item) && item.passwordMail?.canResend)
-    verbs.push({ dialog: "resend", label: "重寄設定密碼信" })
   if (item.status === "pending" || item.status === "changes_requested")
     verbs.push({ dialog: "reject", label: "退回" })
   return verbs
@@ -153,17 +147,6 @@ function RowActions({
           key={keyOf("retry")}
           item={item}
           control={control("retry")}
-        />
-      )}
-      {has("resend") && (
-        <ConfirmDialog
-          {...control("resend")}
-          title="重寄設定密碼信？"
-          confirmLabel="重寄"
-          variant="default"
-          onConfirm={() =>
-            report(resendPasswordMail({ id: item.id }), "已排入寄信")
-          }
         />
       )}
     </>
@@ -290,19 +273,6 @@ function Details({
             )}
           </FieldRow>
         )}
-        {awaitsPassword(item) && item.passwordMail && (
-          <FieldRow label="設定密碼信">
-            {item.passwordMail.lastSentAt ? (
-              <span className="tabular-nums">
-                {taipeiTime(item.passwordMail.lastSentAt)} 寄出
-                {item.passwordMail.expiresAt &&
-                  `，${taipeiTime(item.passwordMail.expiresAt)} 到期`}
-              </span>
-            ) : (
-              "還沒寄出"
-            )}
-          </FieldRow>
-        )}
         {item.history.length > 0 && (
           <FieldRow label="過去的申請">
             <ul className="flex flex-col gap-1">
@@ -367,9 +337,6 @@ function Summary({ item }: { item: ReviewItem }) {
       )}
       {item.provisioning?.blockedAt && (
         <span className="text-destructive">建立帳號卡住</span>
-      )}
-      {awaitsPassword(item) && (
-        <span className="text-muted-foreground">還沒設定密碼</span>
       )}
     </div>
   )

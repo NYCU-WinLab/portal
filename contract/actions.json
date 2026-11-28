@@ -4139,7 +4139,7 @@
     "description": "Apply site only: where an application stands, found by the access token from the status link.",
     "kind": "query",
     "app": "applications",
-    "hash": "5cfba92bdfc8b441",
+    "hash": "7c9cd3943f37bacb",
     "input": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
@@ -4258,51 +4258,6 @@
             }
           ]
         },
-        "passwordMail": {
-          "anyOf": [
-            {
-              "additionalProperties": false,
-              "properties": {
-                "canResend": {
-                  "type": "boolean"
-                },
-                "expiresAt": {
-                  "anyOf": [
-                    {
-                      "type": "null"
-                    },
-                    {
-                      "type": "string"
-                    }
-                  ]
-                },
-                "lastSentAt": {
-                  "anyOf": [
-                    {
-                      "type": "null"
-                    },
-                    {
-                      "type": "string"
-                    }
-                  ]
-                },
-                "passwordSet": {
-                  "type": "boolean"
-                }
-              },
-              "required": [
-                "lastSentAt",
-                "expiresAt",
-                "passwordSet",
-                "canResend"
-              ],
-              "type": "object"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
         "reviewedAt": {
           "anyOf": [
             {
@@ -4346,8 +4301,7 @@
         "reviewedAt",
         "closedAt",
         "changeRequest",
-        "closure",
-        "passwordMail"
+        "closure"
       ],
       "type": "object"
     }
@@ -12648,41 +12602,6 @@
       },
       "required": [
         "email"
-      ],
-      "type": "object"
-    },
-    "output": {
-      "additionalProperties": false,
-      "properties": {
-        "ok": {
-          "const": true,
-          "type": "boolean"
-        }
-      },
-      "required": [
-        "ok"
-      ],
-      "type": "object"
-    }
-  },
-  {
-    "name": "send_lab_application_password_mail",
-    "title": "重寄設定密碼信",
-    "description": "Apply site only: asks for the set-password mail again after an application was accepted; one request an hour.",
-    "kind": "mutation",
-    "app": "applications",
-    "hash": "7777ff0968bffe4d",
-    "input": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "properties": {
-        "token": {
-          "maxLength": 128,
-          "minLength": 20,
-          "type": "string"
-        }
-      },
-      "required": [
-        "token"
       ],
       "type": "object"
     },

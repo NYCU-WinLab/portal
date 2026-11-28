@@ -2719,51 +2719,6 @@
           }
         ]
       },
-      "passwordMail": {
-        "anyOf": [
-          {
-            "additionalProperties": false,
-            "properties": {
-              "canResend": {
-                "type": "boolean"
-              },
-              "expiresAt": {
-                "anyOf": [
-                  {
-                    "type": "null"
-                  },
-                  {
-                    "type": "string"
-                  }
-                ]
-              },
-              "lastSentAt": {
-                "anyOf": [
-                  {
-                    "type": "null"
-                  },
-                  {
-                    "type": "string"
-                  }
-                ]
-              },
-              "passwordSet": {
-                "type": "boolean"
-              }
-            },
-            "required": [
-              "lastSentAt",
-              "expiresAt",
-              "passwordSet",
-              "canResend"
-            ],
-            "type": "object"
-          },
-          {
-            "type": "null"
-          }
-        ]
-      },
       "reviewedAt": {
         "anyOf": [
           {
@@ -2807,8 +2762,7 @@
       "reviewedAt",
       "closedAt",
       "changeRequest",
-      "closure",
-      "passwordMail"
+      "closure"
     ],
     "type": "object"
   },
@@ -6567,10 +6521,7 @@
                   "changes_requested",
                   "edited",
                   "link_sent",
-                  "password_mail_expired",
-                  "password_mail_requested",
                   "password_mail_sent",
-                  "password_set",
                   "provision_blocked",
                   "provision_failed",
                   "provision_retried",
@@ -6643,51 +6594,6 @@
         },
         "id": {
           "type": "string"
-        },
-        "passwordMail": {
-          "anyOf": [
-            {
-              "additionalProperties": false,
-              "properties": {
-                "canResend": {
-                  "type": "boolean"
-                },
-                "expiresAt": {
-                  "anyOf": [
-                    {
-                      "type": "null"
-                    },
-                    {
-                      "type": "string"
-                    }
-                  ]
-                },
-                "lastSentAt": {
-                  "anyOf": [
-                    {
-                      "type": "null"
-                    },
-                    {
-                      "type": "string"
-                    }
-                  ]
-                },
-                "passwordSet": {
-                  "type": "boolean"
-                }
-              },
-              "required": [
-                "lastSentAt",
-                "expiresAt",
-                "passwordSet",
-                "canResend"
-              ],
-              "type": "object"
-            },
-            {
-              "type": "null"
-            }
-          ]
         },
         "profile": {
           "anyOf": [
@@ -6799,16 +6705,6 @@
                 "nextAt": {
                   "type": "string"
                 },
-                "releasedAt": {
-                  "anyOf": [
-                    {
-                      "type": "null"
-                    },
-                    {
-                      "type": "string"
-                    }
-                  ]
-                },
                 "startedAt": {
                   "type": "string"
                 },
@@ -6824,7 +6720,6 @@
                           "activate_and_mail",
                           "create_account",
                           "finish",
-                          "join_keycloak_groups",
                           "join_mail_groups"
                         ],
                         "type": "string"
@@ -6846,7 +6741,6 @@
                 "blockedAt",
                 "startedAt",
                 "finishedAt",
-                "releasedAt",
                 "steps"
               ],
               "type": "object"
@@ -6929,7 +6823,6 @@
         "usernameTaken",
         "changeRequest",
         "provisioning",
-        "passwordMail",
         "history",
         "events"
       ],
@@ -10802,19 +10695,6 @@
     ],
     "type": "object"
   },
-  "resend_lab_application_password_mail": {
-    "additionalProperties": false,
-    "properties": {
-      "ok": {
-        "const": true,
-        "type": "boolean"
-      }
-    },
-    "required": [
-      "ok"
-    ],
-    "type": "object"
-  },
   "resubmit_lab_application": {
     "additionalProperties": false,
     "properties": {
@@ -11110,19 +10990,6 @@
     "type": "object"
   },
   "send_lab_application_link": {
-    "additionalProperties": false,
-    "properties": {
-      "ok": {
-        "const": true,
-        "type": "boolean"
-      }
-    },
-    "required": [
-      "ok"
-    ],
-    "type": "object"
-  },
-  "send_lab_application_password_mail": {
     "additionalProperties": false,
     "properties": {
       "ok": {

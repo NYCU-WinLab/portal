@@ -9,7 +9,6 @@ import {
 } from "../domain/application"
 import {
   ACTIVE_STATUSES,
-  PASSWORD_MAIL_EVENT_KINDS,
   type AnonymousMailKind,
   type ApplicationStatus,
   type EventKind,
@@ -18,11 +17,6 @@ import {
   type StepName,
   type TokenPurpose,
 } from "../domain/constants"
-import {
-  derivePasswordMail,
-  type PasswordMailEvent,
-  type PasswordMailState,
-} from "../domain/password-mail"
 import { MailRatePolicy } from "../domain/policies"
 import { ProvisioningRun } from "../domain/provisioning-run"
 import {
@@ -111,7 +105,6 @@ type RunRow = {
   blockedAt: Date | null
   startedAt: Date
   finishedAt: Date | null
-  releasedAt: Date | null
 }
 type StepRow = { applicationId: string; step: StepName; at: Date }
 type MailLogRow = { rateKey: string; kind: AnonymousMailKind; at: Date }
@@ -264,7 +257,6 @@ class Tables {
       blockedAt: copyOptionalDate(row.blockedAt),
       startedAt: copyDate(row.startedAt),
       finishedAt: copyOptionalDate(row.finishedAt),
-      releasedAt: copyOptionalDate(row.releasedAt),
       completed: this.s.steps
         .filter((st) => st.applicationId === applicationId)
         .map((st) => ({ step: st.step, at: copyDate(st.at) })),
@@ -278,12 +270,7 @@ class Tables {
     if (!token) return null
     const application = this.application(token.applicationId)
     if (!application) return null
-    const run = this.s.runs.find((r) => r.applicationId === token.applicationId)
-    return {
-      application,
-      tokenCreatedAt: copyDate(token.createdAt),
-      releasedAt: run ? copyOptionalDate(run.releasedAt) : null,
-    }
+    return { application, tokenCreatedAt: copyDate(token.createdAt) }
   }
 
   events(applicationId: string): EventRecord[] {
@@ -291,14 +278,6 @@ class Tables {
       .filter((e) => e.applicationId === applicationId)
       .sort((a, b) => a.id - b.id)
       .map(eventRecord)
-  }
-
-  passwordMail(applicationId: string): PasswordMailState {
-    const kinds: readonly EventKind[] = PASSWORD_MAIL_EVENT_KINDS
-    const events = this.events(applicationId).filter((e) =>
-      kinds.includes(e.kind)
-    ) as PasswordMailEvent[]
-    return derivePasswordMail(events)
   }
 
   history(email: string, exceptId: string): HistoryRow[] {
@@ -334,10 +313,7 @@ class Tables {
     return this.s.applications
       .filter((a) => {
         if (a.status === "unverified") return false
-        const released =
-          this.s.runs.find((r) => r.applicationId === a.id)?.releasedAt != null
-        const open =
-          isActive(a.status) || (a.status === "accepted" && !released)
+        const open = isActive(a.status)
         return closed ? !open : open
       })
       .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
@@ -510,7 +486,6 @@ class Tables {
       blockedAt: s.blockedAt,
       startedAt: s.startedAt,
       finishedAt: s.finishedAt,
-      releasedAt: s.releasedAt,
     }
     const i = this.s.runs.findIndex((r) => r.applicationId === s.applicationId)
     if (i < 0) this.s.runs.push(row)
@@ -650,6 +625,87 @@ class Tables {
     this.deleteRun(applicationId)
   }
 
+  /** Ids ordered by time then id, as the Postgres selections order them. */
+  private oldest(rows: { id: string; at: Date }[], limit: number): string[] {
+    return rows
+      .sort(
+        (a, b) =>
+          a.at.getTime() - b.at.getTime() ||
+          (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
+      )
+      .slice(0, limit)
+      .map((r) => r.id)
+  }
+
+  staleUnverified(before: Date, limit: number): string[] {
+    const rows: { id: string; at: Date }[] = []
+    for (const a of this.s.applications) {
+      if (a.status !== "unverified") continue
+      const token = this.s.tokens.find(
+        (t) => t.applicationId === a.id && t.purpose === "verify"
+      )
+      if (token && token.createdAt.getTime() <= before.getTime()) {
+        rows.push({ id: a.id, at: token.createdAt })
+      }
+    }
+    return this.oldest(rows, limit)
+  }
+
+  overdueChangeRequests(before: Date, limit: number): string[] {
+    const rows: { id: string; at: Date }[] = []
+    for (const c of this.s.changeRequests) {
+      if (c.endedAt !== null || c.dueAt.getTime() > before.getTime()) continue
+      const app = this.row(c.applicationId)
+      if (app?.status === "changes_requested") {
+        rows.push({ id: app.id, at: c.dueAt })
+      }
+    }
+    return this.oldest(rows, limit)
+  }
+
+  purgeDue(before: Date, limit: number): string[] {
+    return this.oldest(
+      this.s.applications.flatMap((a) =>
+        a.closedAt !== null &&
+        a.purgedAt === null &&
+        a.closedAt.getTime() <= before.getTime()
+          ? [{ id: a.id, at: a.closedAt }]
+          : []
+      ),
+      limit
+    )
+  }
+
+  deleteVerifyTokens(before: Date, limit: number): number {
+    const doomed = this.s.tokens
+      .filter(
+        (t) =>
+          t.purpose === "verify" &&
+          t.createdAt.getTime() <= before.getTime() &&
+          this.row(t.applicationId)?.status !== "unverified"
+      )
+      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
+      .slice(0, limit)
+    this.s.tokens = this.s.tokens.filter((t) => !doomed.includes(t))
+    return doomed.length
+  }
+
+  deleteMailLog(before: Date): number {
+    const kept = this.s.mailLog.filter((r) => r.at.getTime() > before.getTime())
+    const deleted = this.s.mailLog.length - kept.length
+    this.s.mailLog = kept
+    return deleted
+  }
+
+  awaitingReview(before: Date): number {
+    return this.s.applications.filter(
+      (a) =>
+        a.status === "pending" &&
+        a.verifiedAt !== null &&
+        a.verifiedAt.getTime() <= before.getTime()
+    ).length
+  }
+
   purge(applicationId: string) {
     this.requireRow(applicationId)
     this.s.tokens = this.s.tokens.filter(
@@ -683,7 +739,6 @@ export class InMemoryApplicationStore implements ApplicationStore {
     this.reader = {
       byToken: async (hash, purpose) => committed().byToken(hash, purpose),
       list: async ({ closed }) => committed().list(closed),
-      passwordMail: async (id) => committed().passwordMail(id),
       claimedUsernames: async (names, exceptId) =>
         committed().claimedUsernames(names, exceptId),
       history: async (email, exceptId) =>
@@ -769,7 +824,6 @@ export class InMemoryApplicationStore implements ApplicationStore {
       ),
       lockRun: live((id: string) => t.run(id)),
       claimDue: live((now: Date) => t.claimDue(now)),
-      passwordMail: live((id: string) => t.passwordMail(id)),
       save: live((c: Changed) => t.save(c)),
       saveRun: live((run: ProvisioningRun) => t.saveRun(run)),
       deleteRun: live((id: string) => t.deleteRun(id)),
@@ -828,6 +882,22 @@ export class InMemoryApplicationStore implements ApplicationStore {
       delete: live((id: string) => t.delete(id)),
       // `at` is unused: purging only clears data.
       purge: live((id: string) => t.purge(id)),
+      // Transactions run one at a time here, so no row is ever locked by
+      // another transaction and nothing is skipped.
+      staleUnverified: live((before: Date, limit: number) =>
+        t.staleUnverified(before, limit)
+      ),
+      overdueChangeRequests: live((before: Date, limit: number) =>
+        t.overdueChangeRequests(before, limit)
+      ),
+      purgeDue: live((before: Date, limit: number) =>
+        t.purgeDue(before, limit)
+      ),
+      deleteVerifyTokens: live((before: Date, limit: number) =>
+        t.deleteVerifyTokens(before, limit)
+      ),
+      deleteMailLog: live((before: Date) => t.deleteMailLog(before)),
+      awaitingReview: live((before: Date) => t.awaitingReview(before)),
     }
   }
 
